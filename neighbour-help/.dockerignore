@@ -1,0 +1,38 @@
+# Dependencies & build output
+node_modules
+.next
+
+# Environment files — never copy secrets into the image
+.env
+.env.local
+.env*.local
+.env.production
+
+# Git
+.git
+.gitignore
+
+# Docker files (no need to copy into the image itself)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Editor / OS
+.vscode
+.idea
+*.swp
+.DS_Store
+Thumbs.db
+
+# Test & coverage output
+coverage
+*.test.*
+*.spec.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docs
+README.md
+*.md
