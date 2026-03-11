@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Bell, ChevronDown, Wrench, Menu, X } from "lucide-react";
+import { useAuth } from "@/app/lib/context/AuthContext";
+import NotificationsPanel from "@/app/components/ui/NotificationsPanel";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -13,6 +15,8 @@ const navLinks = [
 export default function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB] shadow-sm">
@@ -44,7 +48,10 @@ export default function Navbar() {
           {/* Right side */}
           <div className="hidden md:flex items-center gap-3">
             {/* Notification Bell */}
-            <button className="relative w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F7F8FA] hover:text-[#111827] transition-colors">
+            <button
+              onClick={() => setNotificationsOpen(true)}
+              className="relative w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F7F8FA] hover:text-[#111827] transition-colors"
+            >
               <Bell className="w-5 h-5" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#0B74FF] rounded-full" />
             </button>
@@ -56,13 +63,19 @@ export default function Navbar() {
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-[#F7F8FA] transition-colors"
               >
                 <div className="w-8 h-8 rounded-full bg-[#0B74FF] text-white text-sm font-semibold flex items-center justify-center">
-                  U
+                  {user?.name?.charAt(0).toUpperCase() ?? "U"}
                 </div>
                 <ChevronDown className={`w-4 h-4 text-[#6B7280] transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
               </button>
 
               {dropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-[#E5E7EB] rounded-xl shadow-lg py-1 z-50">
+                <div className="absolute right-0 mt-2 w-52 bg-white border border-[#E5E7EB] rounded-xl shadow-lg py-1 z-50">
+                  {user && (
+                    <div className="px-4 py-2.5 border-b border-[#F3F4F6]">
+                      <p className="text-sm font-semibold text-[#111827] truncate">{user.name}</p>
+                      <p className="text-xs text-[#6B7280] truncate">{user.email}</p>
+                    </div>
+                  )}
                   <Link href="/profile" className="block px-4 py-2.5 text-sm text-[#111827] hover:bg-[#F7F8FA] transition-colors">
                     Profile
                   </Link>
@@ -70,9 +83,18 @@ export default function Navbar() {
                     Settings
                   </Link>
                   <div className="border-t border-[#E5E7EB] my-1" />
-                  <Link href="/login" className="block px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
-                    Sign Out
-                  </Link>
+                  {user ? (
+                    <button
+                      onClick={() => { setDropdownOpen(false); logout(); }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      Sign Out
+                    </button>
+                  ) : (
+                    <Link href="/login" className="block px-4 py-2.5 text-sm text-[#0B74FF] hover:bg-blue-50 transition-colors">
+                      Sign In
+                    </Link>
+                  )}
                 </div>
               )}
             </div>
@@ -87,6 +109,11 @@ export default function Navbar() {
           </button>
         </div>
       </div>
+
+      {/* Notifications Panel */}
+      {notificationsOpen && (
+        <NotificationsPanel onClose={() => setNotificationsOpen(false)} />
+      )}
 
       {/* Mobile Menu */}
       {mobileOpen && (
