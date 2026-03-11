@@ -1,0 +1,3 @@
+
+/deployment/.terraform
+deployment/.terraform.lock.hcl
