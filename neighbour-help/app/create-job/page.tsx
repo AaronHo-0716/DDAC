@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, ChevronLeft, Upload, AlertCircle } from "lucide-react";
+import { Check, ChevronRight, ChevronLeft, AlertCircle } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
+import ImageUploader from "../components/ui/ImageUploader";
 import type { JobCategory } from "../types";
 
 const CATEGORIES: { name: JobCategory; emoji: string; desc: string }[] = [
@@ -77,6 +78,7 @@ export default function CreateJobPage() {
   const [step, setStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   const canAdvance = [
@@ -309,18 +311,7 @@ export default function CreateJobPage() {
               <p className="text-sm text-[#6B7280] mb-5">
                 Photos help handymen give more accurate quotes (optional)
               </p>
-              <div className="border-2 border-dashed border-[#E5E7EB] rounded-2xl p-10 text-center hover:border-[#0B74FF] hover:bg-blue-50/20 transition-colors cursor-pointer">
-                <Upload className="w-9 h-9 text-[#9CA3AF] mx-auto mb-3" />
-                <p className="text-sm font-medium text-[#111827] mb-1">
-                  Drag & drop photos here
-                </p>
-                <p className="text-xs text-[#6B7280] mb-4">
-                  PNG, JPG or HEIC · up to 10 MB each · max 5 files
-                </p>
-                <PrimaryButton size="sm" variant="secondary" type="button">
-                  Browse Files
-                </PrimaryButton>
-              </div>
+              <ImageUploader files={photos} onChange={setPhotos} maxFiles={5} />
               <p className="text-xs text-[#9CA3AF] mt-3 text-center">
                 File upload will connect to Azure Blob Storage via the backend.
               </p>
@@ -349,6 +340,10 @@ export default function CreateJobPage() {
                   {
                     label: "Emergency",
                     value: form.isEmergency ? "🚨 Yes" : "No",
+                  },
+                  {
+                    label: "Photos",
+                    value: photos.length > 0 ? `${photos.length} selected` : "None",
                   },
                 ].map(({ label, value }) => (
                   <div
