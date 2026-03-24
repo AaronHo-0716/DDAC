@@ -1,4 +1,4 @@
-# NeighborHelp Backend Implementation Plan (ASP.NET Core)
+# NeighborHelp Backend Implementation Plan (ASP.NET Core .NET 8)
 
 ## 1. Goals and Scope
 
@@ -17,17 +17,18 @@ Non-goals for v1:
 
 ## 2. Recommended Stack
 
-- Framework: ASP.NET Core 9 Web API
-- Language: C# 13
+- Framework: ASP.NET Core 8 Web API
+- Language: C# 12
 - ORM: Entity Framework Core 9
-- Database: SQL Server 2022
+- Database: PostgreSQL (AWS RDS in production)
+- PostgreSQL driver/provider: Npgsql + EFCore.PG
 - Auth: JWT access token + refresh token rotation
 - Validation: FluentValidation
 - Logging: Serilog + Seq (or ELK)
 - Background jobs: Hangfire (for cleanup, digest notifications)
 - API docs: Swagger / OpenAPI
 - Caching: Redis (optional in v1, recommended in v1.1)
-- Object storage for job photos: Azure Blob Storage (or S3-compatible MinIO for local)
+- Object storage for job photos: Amazon S3 (or MinIO for local development)
 
 ## 3. Project Structure
 
@@ -236,6 +237,9 @@ Also support RFC7807 `application/problem+json` for interoperability.
 ## 8. Data Access and Migrations
 
 - EF Core Code-First migrations
+- Production database target: AWS RDS for PostgreSQL (Multi-AZ recommended for production)
+- Use separate RDS instances or schemas per environment (`dev`, `staging`, `prod`)
+- Enforce SSL/TLS in production DB connections (`Ssl Mode=Require;Trust Server Certificate=false`)
 - Add indices for common filters:
   - `Jobs(Status, Category, IsEmergency, CreatedAtUtc)`
   - `Bids(JobId, Status)`
@@ -253,24 +257,43 @@ Also support RFC7807 `application/problem+json` for interoperability.
   - `GET /health/live`
   - `GET /health/ready`
 
-## 10. Docker and Environment
+## 10. Containerization and Environment
 
 Required env vars:
 - `ASPNETCORE_URLS=http://+:5000`
-- `ConnectionStrings__DefaultConnection=Server=db,1433;Database=NeighborHelpDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True`
+- `ConnectionStrings__DefaultConnection=Host=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Ssl Mode=${DB_SSL_MODE};Trust Server Certificate=${DB_TRUST_SERVER_CERT}`
 - `Jwt__Issuer`
 - `Jwt__Audience`
 - `Jwt__SigningKey`
 - `Jwt__AccessTokenMinutes=15`
 - `Jwt__RefreshTokenDays=14`
-- `Storage__Provider=AzureBlob|S3|Local`
-- `Storage__ConnectionString` (if Azure)
-- `Storage__ContainerName=job-images`
+- `Storage__Provider=S3|Local`
+- `Storage__BucketName`
+- `Storage__ObjectPrefix=job-images` (optional)
+- `AWS__Region`
+- `AWS__AccessKeyId` (local/dev only; prefer IAM role in AWS)
+- `AWS__SecretAccessKey` (local/dev only; prefer IAM role in AWS)
 
-Docker notes:
-- Keep API on internal network with DB
-- Expose only API port to frontend container
-- Apply migration at startup with guarded retry (or separate migration job)
+Containerization notes:
+- Build and run API as a stateless .NET 8 container image (multi-stage Dockerfile)
+- Keep API container independent from database container in production (RDS is managed externally)
+- Use a local PostgreSQL container only for local development/integration testing
+- Expose only API port to frontend/reverse proxy
+- Apply migration using a startup migration gate or a separate one-off migration job in CI/CD
+- Pass secrets via AWS Secrets Manager/SSM Parameter Store (not hardcoded env files in production)
+- Add readiness/liveness probes for orchestrated deployment (ECS, EKS, or App Runner)
+
+Example local development `docker-compose` services:
+- `api` (.NET 8 Web API container)
+- `postgres` (PostgreSQL container with persistent volume)
+- `seq` (optional structured log viewer)
+
+Example production deployment topology:
+- API container(s): ECS Fargate service (or EKS deployment)
+- Database: AWS RDS PostgreSQL
+- Object storage: Amazon S3
+- Secret/config management: AWS Secrets Manager + Parameter Store
+- Ingress: Application Load Balancer + HTTPS (ACM certificate)
 
 ## 11. Development Roadmap
 
@@ -298,7 +321,7 @@ Docker notes:
 Unit tests:
 - domain rules (one accepted bid per job, ownership checks)
 
-Integration tests (with Testcontainers SQL Server):
+Integration tests (with Testcontainers PostgreSQL):
 - register/login/refresh/logout
 - create job -> submit bid -> accept bid -> notifications generated
 - forbidden access for wrong roles
