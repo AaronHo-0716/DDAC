@@ -4,7 +4,30 @@ import {
   RegisterRequest,
   User,
 } from "@/app/types";
-import { apiClient, clearTokens, setTokens } from "./client";
+import { ApiClientError, apiClient, clearTokens, setTokens } from "./client";
+import { mockAuthService } from "@/app/lib/mock/authMock";
+
+function shouldUseMockAuth(error?: unknown): boolean {
+  if (typeof window === "undefined") return false;
+
+  if (process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true") {
+    return true;
+  }
+
+  if (error instanceof TypeError || error instanceof SyntaxError) {
+    return true;
+  }
+
+  if (error instanceof ApiClientError && error.statusCode >= 500) {
+    return true;
+  }
+
+  return false;
+}
+
+function toClientError(message: string): Error {
+  return new Error(message);
+}
 
 export const authService = {
   /**
@@ -12,13 +35,27 @@ export const authService = {
    * Exchanges credentials for JWT tokens and persists them.
    */
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>(
-      "/auth/login",
-      credentials,
-      { authenticated: false }
-    );
-    setTokens(response.tokens.accessToken, response.tokens.refreshToken);
-    return response;
+    try {
+      const response = await apiClient.post<AuthResponse>(
+        "/auth/login",
+        credentials,
+        { authenticated: false }
+      );
+      setTokens(response.tokens.accessToken, response.tokens.refreshToken);
+      return response;
+    } catch (error) {
+      if (!shouldUseMockAuth(error)) throw error;
+
+      try {
+        const response = mockAuthService.login(credentials);
+        setTokens(response.tokens.accessToken, response.tokens.refreshToken);
+        return response;
+      } catch (mockError) {
+        throw toClientError(
+          mockError instanceof Error ? mockError.message : "Unable to sign in."
+        );
+      }
+    }
   },
 
   /**
@@ -26,13 +63,29 @@ export const authService = {
    * Creates a new account and returns tokens.
    */
   async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>(
-      "/auth/register",
-      data,
-      { authenticated: false }
-    );
-    setTokens(response.tokens.accessToken, response.tokens.refreshToken);
-    return response;
+    try {
+      const response = await apiClient.post<AuthResponse>(
+        "/auth/register",
+        data,
+        { authenticated: false }
+      );
+      setTokens(response.tokens.accessToken, response.tokens.refreshToken);
+      return response;
+    } catch (error) {
+      if (!shouldUseMockAuth(error)) throw error;
+
+      try {
+        const response = mockAuthService.register(data);
+        setTokens(response.tokens.accessToken, response.tokens.refreshToken);
+        return response;
+      } catch (mockError) {
+        throw toClientError(
+          mockError instanceof Error
+            ? mockError.message
+            : "Unable to create account."
+        );
+      }
+    }
   },
 
   /**
@@ -40,7 +93,12 @@ export const authService = {
    * Returns the currently authenticated user.
    */
   async getMe(): Promise<User> {
-    return apiClient.get<User>("/auth/me");
+    try {
+      return await apiClient.get<User>("/auth/me");
+    } catch (error) {
+      if (!shouldUseMockAuth(error)) throw error;
+      return mockAuthService.getMe();
+    }
   },
 
   /**
@@ -49,7 +107,15 @@ export const authService = {
    */
   async logout(): Promise<void> {
     try {
-      await apiClient.post("/auth/logout", {});
+      try {
+        await apiClient.post("/auth/logout", {});
+      } catch (error) {
+        if (shouldUseMockAuth(error)) {
+          mockAuthService.logout();
+        } else {
+          throw error;
+        }
+      }
     } finally {
       clearTokens();
     }
@@ -67,5 +133,11 @@ export const authService = {
     );
     setTokens(response.tokens.accessToken, response.tokens.refreshToken);
     return response;
+  },
+
+  resetMockData(): void {
+    if (typeof window === "undefined") return;
+    mockAuthService.reset();
+    clearTokens();
   },
 };

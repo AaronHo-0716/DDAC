@@ -90,10 +90,29 @@ async function request<T>(
   // 204 No Content – return void
   if (response.status === 204) return undefined as T;
 
-  const data = await response.json();
+  const rawText = await response.text();
+  let data: unknown = undefined;
+
+  if (rawText.length > 0) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      // Backend may return plain text/HTML for 5xx errors. Normalize as ApiClientError.
+      throw new ApiClientError({
+        statusCode: response.status,
+        message:
+          rawText.length > 140 ? `${rawText.slice(0, 140)}...` : rawText,
+      });
+    }
+  }
 
   if (!response.ok) {
-    throw new ApiClientError(data as ApiError);
+    const apiError = data as Partial<ApiError> | undefined;
+    throw new ApiClientError({
+      statusCode: apiError?.statusCode ?? response.status,
+      message: apiError?.message ?? response.statusText ?? "Request failed",
+      errors: apiError?.errors,
+    });
   }
 
   return data as T;

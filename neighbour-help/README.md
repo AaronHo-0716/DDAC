@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a Next.js project for NeighborHelp.
 
 ## Getting Started
 
@@ -19,6 +19,26 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Mock Auth Mode (No Backend Required)
+
+You can test login and sign up before the ASP.NET backend and database are ready.
+
+How it works:
+- The app tries real API auth endpoints first.
+- If backend is unavailable, auth automatically falls back to local mock auth in browser storage.
+- Mock users and session are stored temporarily in localStorage.
+
+Demo accounts:
+- Homeowner: homeowner@neighborhelp.test / Password123!
+- Handyman: handyman@neighborhelp.test / Password123!
+
+Optional setting:
+- Set NEXT_PUBLIC_USE_MOCK_AUTH=true in your local env file to always use mock auth in browser.
+
+Reset mock data:
+- While logged in, open the navbar user menu and click Reset Mock Data.
+- This clears temporary mock users/session and reseeds demo accounts.
 
 ## Learn More
 

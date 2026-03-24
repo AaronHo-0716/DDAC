@@ -49,6 +49,8 @@ export default function RegisterPage() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
       } else {
         setError("Unable to create account. Please try again.");
       }
