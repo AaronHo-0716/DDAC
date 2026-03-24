@@ -6,6 +6,7 @@ import { Check, ChevronRight, ChevronLeft, AlertCircle } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import ImageUploader from "../components/ui/ImageUploader";
 import type { JobCategory } from "../types";
+import { useRequireRole } from "../lib/hooks/useRequireRole";
 
 const CATEGORIES: { name: JobCategory; emoji: string; desc: string }[] = [
   { name: "Plumbing", emoji: "🔧", desc: "Pipes, faucets, drains, water heaters" },
@@ -75,6 +76,7 @@ function ProgressBar({ step }: { step: number }) {
 
 export default function CreateJobPage() {
   const router = useRouter();
+  const { authorized, loading } = useRequireRole("homeowner");
   const [step, setStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -87,6 +89,10 @@ export default function CreateJobPage() {
     true,
     true,
   ][step];
+
+  if (loading || !authorized) {
+    return null;
+  }
 
   const handleSubmit = async () => {
     setSubmitting(true);

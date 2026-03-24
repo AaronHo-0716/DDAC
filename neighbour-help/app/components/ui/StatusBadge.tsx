@@ -1,5 +1,13 @@
 interface StatusBadgeProps {
-  status: "open" | "in-progress" | "completed" | "emergency" | "recommended";
+  status:
+    | "open"
+    | "in-progress"
+    | "completed"
+    | "emergency"
+    | "recommended"
+    | "pending"
+    | "accepted"
+    | "rejected";
   className?: string;
 }
 
@@ -23,6 +31,18 @@ const config: Record<StatusBadgeProps["status"], { label: string; styles: string
   recommended: {
     label: "Recommended",
     styles: "bg-amber-50 text-amber-700 border border-amber-200",
+  },
+  pending: {
+    label: "Pending",
+    styles: "bg-amber-50 text-amber-700 border border-amber-200",
+  },
+  accepted: {
+    label: "Accepted",
+    styles: "bg-green-50 text-green-700 border border-green-200",
+  },
+  rejected: {
+    label: "Rejected",
+    styles: "bg-red-50 text-red-700 border border-red-200",
   },
 };
 

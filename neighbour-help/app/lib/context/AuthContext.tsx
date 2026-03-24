@@ -21,9 +21,9 @@ interface AuthContextValue {
   /** True while a login/register/logout call is in-flight */
   submitting: boolean;
   /** Login with email + password */
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest) => Promise<User>;
   /** Register a new account */
-  register: (data: RegisterRequest) => Promise<void>;
+  register: (data: RegisterRequest) => Promise<User>;
   /** Clear session */
   logout: () => Promise<void>;
   /** Clears temporary local mock auth users and session */
@@ -63,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { user } = await authService.login(credentials);
       setUser(user);
+      return user;
     } finally {
       setSubmitting(false);
     }
@@ -73,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { user } = await authService.register(data);
       setUser(user);
+      return user;
     } finally {
       setSubmitting(false);
     }

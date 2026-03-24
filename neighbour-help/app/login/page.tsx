@@ -21,8 +21,8 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     try {
-      await login({ email, password });
-      router.push("/dashboard");
+      const user = await login({ email, password });
+      router.push(user.role === "handyman" ? "/handyman" : "/dashboard");
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);

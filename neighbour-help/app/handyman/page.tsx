@@ -14,6 +14,7 @@ import PrimaryButton from "../components/ui/PrimaryButton";
 import StatusBadge from "../components/ui/StatusBadge";
 import SubmitBidModal from "../components/ui/SubmitBidModal";
 import type { Job, JobCategory } from "../types";
+import { useRequireRole } from "../lib/hooks/useRequireRole";
 
 // ─── Mock data — replace with: jobsService.getJobs({ ...filters }) ─────────
 const MOCK_USER = {
@@ -201,6 +202,7 @@ function JobFeedCard({
 }
 
 export default function HandymanPage() {
+  const { authorized, loading } = useRequireRole("handyman");
   const [categoryFilter, setCategoryFilter] = useState<JobCategory | "">("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [maxDistance, setMaxDistance] = useState(50);
@@ -216,6 +218,10 @@ export default function HandymanPage() {
 
   const activeFilterCount =
     (categoryFilter ? 1 : 0) + (emergencyOnly ? 1 : 0) + (maxDistance < 50 ? 1 : 0);
+
+  if (loading || !authorized) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">

@@ -1,8 +1,11 @@
+"use client";
+
 import Link from "next/link";
 import { Plus, Filter } from "lucide-react";
 import type { Job } from "@/app/types";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import JobCard from "@/app/components/ui/JobCard";
+import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 
 const MOCK_USER = {
   id: "u1",
@@ -60,6 +63,12 @@ const MOCK_JOBS: Job[] = [
 ];
 
 export default function MyJobsPage() {
+  const { authorized, loading } = useRequireRole("homeowner");
+
+  if (loading || !authorized) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">

@@ -10,6 +10,7 @@ import {
 import PrimaryButton from "../components/ui/PrimaryButton";
 import JobCard from "../components/ui/JobCard";
 import type { Job } from "../types";
+import { useRequireRole } from "../lib/hooks/useRequireRole";
 
 // ─── Mock data — replace with: const jobs = await jobsService.getMyJobs() ────
 const MOCK_USER = {
@@ -70,9 +71,18 @@ const MOCK_JOBS: Job[] = [
 ];
 
 export default function DashboardPage() {
+  const { authorized, loading } = useRequireRole("homeowner");
+
+  if (loading || !authorized) {
+    return null;
+  }
+
   const open = MOCK_JOBS.filter((j) => j.status === "open").length;
   const inProgress = MOCK_JOBS.filter((j) => j.status === "in-progress").length;
   const completed = MOCK_JOBS.filter((j) => j.status === "completed").length;
+  const recentJobs = [...MOCK_JOBS]
+    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+    .slice(0, 2);
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
@@ -93,10 +103,10 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Job list — 2/3 */}
+          {/* Recent jobs — 2/3 */}
           <div className="lg:col-span-2 space-y-4">
             <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-              Your Jobs
+              Recent Jobs
             </p>
             {MOCK_JOBS.length === 0 ? (
               <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
@@ -108,8 +118,17 @@ export default function DashboardPage() {
                 </Link>
               </div>
             ) : (
-              MOCK_JOBS.map((job) => <JobCard key={job.id} job={job} />)
+              recentJobs.map((job) => <JobCard key={job.id} job={job} />)
             )}
+
+            <div className="pt-2">
+              <Link
+                href="/my-jobs"
+                className="text-sm font-semibold text-[#0B74FF] hover:underline"
+              >
+                View all jobs and manage bids
+              </Link>
+            </div>
           </div>
 
           {/* Sidebar — 1/3 */}

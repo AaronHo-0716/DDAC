@@ -6,9 +6,16 @@ import { Bell, ChevronDown, Wrench, Menu, X } from "lucide-react";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import NotificationsPanel from "@/app/components/ui/NotificationsPanel";
 
-const privateNavLinks = [
+const homeownerNavLinks = [
   { label: "My Jobs", href: "/my-jobs" },
   { label: "Dashboard", href: "/dashboard" },
+  { label: "Post Job", href: "/create-job" },
+];
+
+const handymanNavLinks = [
+  { label: "Browse Jobs", href: "/handyman" },
+  { label: "My Bids", href: "/handyman/bids" },
+  { label: "Active Jobs", href: "/handyman/active-jobs" },
 ];
 
 export default function Navbar() {
@@ -16,7 +23,11 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { user, logout, resetMockData } = useAuth();
-  const navLinks = user ? privateNavLinks : [];
+  const navLinks = user
+    ? user.role === "handyman"
+      ? handymanNavLinks
+      : homeownerNavLinks
+    : [];
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB] shadow-sm">
