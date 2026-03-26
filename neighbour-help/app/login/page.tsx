@@ -22,7 +22,13 @@ export default function LoginPage() {
     setError(null);
     try {
       const user = await login({ email, password });
-      router.push(user.role === "handyman" ? "/handyman" : "/dashboard");
+      if (user.role === "handyman") {
+        router.push("/handyman");
+      } else if (user.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);
@@ -171,6 +177,7 @@ export default function LoginPage() {
         <p className="font-semibold">Mock login accounts (temporary local storage):</p>
         <p className="mt-1">Homeowner: homeowner@neighborhelp.test / Password123!</p>
         <p>Handyman: handyman@neighborhelp.test / Password123!</p>
+        <p>Admin: admin@neighborhelp.test / Password123!</p>
       </div>
     </div>
   );

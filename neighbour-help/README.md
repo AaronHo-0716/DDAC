@@ -32,6 +32,7 @@ How it works:
 Demo accounts:
 - Homeowner: homeowner@neighborhelp.test / Password123!
 - Handyman: handyman@neighborhelp.test / Password123!
+- Admin: admin@neighborhelp.test / Password123!
 
 Optional setting:
 - Set NEXT_PUBLIC_USE_MOCK_AUTH=true in your local env file to always use mock auth in browser.

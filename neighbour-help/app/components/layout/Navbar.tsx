@@ -18,6 +18,12 @@ const handymanNavLinks = [
   { label: "Active Jobs", href: "/handyman/active-jobs" },
 ];
 
+const adminNavLinks = [
+  { label: "Admin Dashboard", href: "/admin" },
+  { label: "Bid Transactions", href: "/admin/transactions/bids" },
+  { label: "Users", href: "/admin/users" },
+];
+
 export default function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -26,6 +32,8 @@ export default function Navbar() {
   const navLinks = user
     ? user.role === "handyman"
       ? handymanNavLinks
+      : user.role === "admin"
+      ? adminNavLinks
       : homeownerNavLinks
     : [];
 
