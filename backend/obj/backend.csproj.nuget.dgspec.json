@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/home/aaronyx/Documents/DDAC/backend/backend.csproj": {}
+    "C:\\Users\\user\\Documents\\GitHub\\DDAC\\backend\\backend.csproj": {}
   },
   "projects": {
-    "/home/aaronyx/Documents/DDAC/backend/backend.csproj": {
+    "C:\\Users\\user\\Documents\\GitHub\\DDAC\\backend\\backend.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/aaronyx/Documents/DDAC/backend/backend.csproj",
+        "projectUniqueName": "C:\\Users\\user\\Documents\\GitHub\\DDAC\\backend\\backend.csproj",
         "projectName": "backend",
-        "projectPath": "/home/aaronyx/Documents/DDAC/backend/backend.csproj",
-        "packagesPath": "/home/aaronyx/.nuget/packages/",
-        "outputPath": "/home/aaronyx/Documents/DDAC/backend/obj/",
+        "projectPath": "C:\\Users\\user\\Documents\\GitHub\\DDAC\\backend\\backend.csproj",
+        "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\user\\Documents\\GitHub\\DDAC\\backend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/home/aaronyx/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -32,6 +32,11 @@
           "warnAsError": [
             "NU1605"
           ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
         }
       },
       "frameworks": {
@@ -48,12 +53,6 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "downloadDependencies": [
-            {
-              "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[8.0.23, 8.0.23]"
-            }
-          ],
           "frameworkReferences": {
             "Microsoft.AspNetCore.App": {
               "privateAssets": "none"
@@ -62,7 +61,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.123/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.418/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

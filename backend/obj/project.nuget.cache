@@ -1,10 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "LodTnuITeiN/Owei/Xwi9unpoWO5QRvbD/T/5js7NQRDKjtZmQ6h+/Imkpxb9sTTO12DRaZ45xazpQw6ynzM0A==",
+  "dgSpecHash": "wUKA3k3lw9g=",
   "success": true,
-  "projectFilePath": "/home/aaronyx/Documents/DDAC/backend/backend.csproj",
-  "expectedPackageFiles": [
-    "/home/aaronyx/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.23/microsoft.aspnetcore.app.ref.8.0.23.nupkg.sha512"
-  ],
+  "projectFilePath": "C:\\Users\\user\\Documents\\GitHub\\DDAC\\backend\\backend.csproj",
+  "expectedPackageFiles": [],
   "logs": []
 }
