@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using backend.Data;
@@ -24,7 +25,7 @@ builder.Services.AddSwaggerGen();
 // Database: SQL Server
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<NeighbourHelpDbContext>(options =>
-    options.UseSqlServer(connectionString, sqlOptions =>
+    options.UseNpgsql(connectionString, sqlOptions =>
         sqlOptions.CommandTimeout(300)));
 
 // Authentication: JWT Setup
@@ -95,6 +96,23 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<NeighbourHelpDbContext>();
+        // EnsureCreated() creates the DB and all tables instantly 
+        // if they don't exist. No migrations needed.
+        context.Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred creating the DB.");
+    }
+}
 
 // Simple Health Check
 app.MapGet("/", () => "NeighborHelp API is running...");

@@ -72,7 +72,6 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         );
     }
 
-    // FIX FOR ERROR CS7036: Pass all 8 parameters to UserDto
     private UserDto MapToDto(User user) => new UserDto(
         user.Id,
         user.Name,
@@ -80,8 +79,8 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         user.Role.ToLower(),
         user.AvatarUrl,
         user.Rating,
-        user.CreatedAtUtc, // 7th param
-        user.IsActive      // 8th param
+        user.CreatedAtUtc,
+        user.IsActive
     );
 
     private string CreateJwtToken(User user)

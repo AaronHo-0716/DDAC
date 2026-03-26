@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using backend.Models.Entities; // You need this to see the User class
+using backend.Models.Entities;
 
 namespace backend.Data;
 

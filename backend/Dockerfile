@@ -2,14 +2,13 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Restore dependencies first to cache the layer
-COPY ["NeighborHelp.Api/NeighborHelp.Api.csproj", "NeighborHelp.Api/"]
-RUN dotnet restore "NeighborHelp.Api/NeighborHelp.Api.csproj"
+# Restore dependencies first - changed path to match your folder
+COPY ["backend.csproj", "./"]
+RUN dotnet restore "backend.csproj"
 
 # Copy remaining source code and build
 COPY . .
-WORKDIR "/src/NeighborHelp.Api"
-RUN dotnet publish "NeighborHelp.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "backend.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Stage 2: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
@@ -18,6 +17,5 @@ EXPOSE 8080
 
 COPY --from=build /app/publish .
 
-# Run as non-root user for security compliance
-USER $APP_UID
-ENTRYPOINT ["dotnet", "NeighborHelp.Api.dll"]
+# Important: Changed to backend.dll to match your project name
+ENTRYPOINT ["dotnet", "backend.dll"]
