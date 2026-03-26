@@ -1,8 +1,14 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, Star } from "lucide-react";
 import PrimaryButton from "../ui/PrimaryButton";
+import { useAuth } from "@/app/lib/context/AuthContext";
 
 export default function HeroSection() {
+  const { user } = useAuth();
+  const browseHref = user ? "/browse" : "/login?next=%2Fbrowse";
+
   return (
     <section className="bg-white pt-20 pb-24 px-4 sm:px-6 lg:px-8 overflow-hidden relative">
       {/* Subtle background gradient */}
@@ -35,7 +41,7 @@ export default function HeroSection() {
                   <ArrowRight className="w-4 h-4" />
                 </PrimaryButton>
               </Link>
-              <Link href="/browse">
+              <Link href={browseHref}>
                 <PrimaryButton size="lg" variant="secondary">
                   Browse Jobs
                 </PrimaryButton>

@@ -37,6 +37,16 @@ function createSeedUsers(): StoredMockUser[] {
       avatarUrl: "",
       rating: 4.8,
     },
+    {
+      id: "mock-admin-1",
+      name: "Demo Admin",
+      email: "admin@neighborhelp.test",
+      role: "admin",
+      createdAt,
+      password: "Password123!",
+      avatarUrl: "",
+      rating: undefined,
+    },
   ];
 }
 
@@ -45,6 +55,25 @@ function getDefaultStore(): MockAuthStore {
     users: createSeedUsers(),
     currentUserId: null,
   };
+}
+
+function mergeSeedUsers(existingUsers: StoredMockUser[]): StoredMockUser[] {
+  const seedUsers = createSeedUsers();
+  const byEmail = new Map<string, StoredMockUser>();
+
+  existingUsers.forEach((user) => {
+    byEmail.set(user.email.toLowerCase(), user);
+  });
+
+  // Backfill newly introduced seed accounts (for example admin user)
+  seedUsers.forEach((seed) => {
+    const key = seed.email.toLowerCase();
+    if (!byEmail.has(key)) {
+      byEmail.set(key, seed);
+    }
+  });
+
+  return Array.from(byEmail.values());
 }
 
 function readStore(): MockAuthStore {
@@ -64,7 +93,15 @@ function readStore(): MockAuthStore {
       throw new Error("Invalid mock auth store shape");
     }
 
-    return parsed;
+    const mergedStore: MockAuthStore = {
+      ...parsed,
+      users: mergeSeedUsers(parsed.users),
+    };
+
+    // Persist migration so users only pay merge cost once.
+    localStorage.setItem(MOCK_AUTH_STORE_KEY, JSON.stringify(mergedStore));
+
+    return mergedStore;
   } catch {
     const reset = getDefaultStore();
     localStorage.setItem(MOCK_AUTH_STORE_KEY, JSON.stringify(reset));
