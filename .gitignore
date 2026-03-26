@@ -2,14 +2,4 @@
 /deployment/.terraform
 deployment/.terraform.lock.hcl
 
-# .NET build folders
-backend/bin/
-backend/obj/
 
-# Optional extras
-*.user
-*.suo
-*.log
-.vs/
-
-package-lock.json
