@@ -1,76 +1,24 @@
 name: neighbourhelp
 
 services:
-  # ─── Next.js Frontend ──────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./neighbour-help
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      # Internal Docker network name — NOT http://localhost:5000.
-      # This is the only place you ever configure where the backend lives.
-      # The JS bundle never contains this value.
-      API_URL: http://backend:5000
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # ─── ASP.NET Backend ───────────────────────────────────────────────────────
-  # Replace the image/build section below with your actual ASP.NET project.
-  backend:
-    # build:
-    #   context: ./NeighborHelp.Api          # path to your .csproj folder
-    #   dockerfile: Dockerfile
-    image: mcr.microsoft.com/dotnet/aspnet:8.0   # placeholder until built
-    ports:
-      - "5000:5000"
-    environment:
-      ASPNETCORE_URLS: http://+:5000
-      ASPNETCORE_ENVIRONMENT: Development
-      # ASP.NET will pick this up via builder.Configuration["ConnectionStrings:DefaultConnection"]
-      ConnectionStrings__DefaultConnection: >-
-        Server=db,1433;Database=NeighborHelp;
-        User Id=sa;Password=${DB_PASSWORD};
-        TrustServerCertificate=True;
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # ─── SQL Server Database ───────────────────────────────────────────────────
+  # PostgreSQL only (frontend/backend are not included yet)
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: postgres:16-alpine
+    container_name: neighbourhelp-postgres
     ports:
-      - "1433:1433"          # expose only for local dev tools (e.g. Azure Data Studio)
+      - "5432:5432"
     environment:
-      ACCEPT_EULA: "Y"
-      SA_PASSWORD: ${DB_PASSWORD}  # read from .env file (never hardcoded)
-      MSSQL_PID: Developer
+      POSTGRES_DB: ${POSTGRES_DB:-neighbourhelp}
+      POSTGRES_USER: ${POSTGRES_USER:-neighbourhelp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-neighbourhelp_dev_password}
     volumes:
-      - sqldata:/var/opt/mssql  # persist data across container restarts
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD",
-          "/opt/mssql-tools18/bin/sqlcmd",
-          "-S", "localhost",
-          "-U", "sa",
-          "-P", "${DB_PASSWORD}",
-          "-Q", "SELECT 1",
-          "-No",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
 volumes:
-  sqldata:
+  pgdata:
