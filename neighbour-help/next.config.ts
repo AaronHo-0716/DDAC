@@ -1,9 +1,17 @@
 import type { NextConfig } from "next";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)));
 
 const nextConfig: NextConfig = {
   // Produces a standalone Node.js server — much smaller Docker image.
   // Copies only the necessary files (no node_modules bloat).
   output: "standalone",
+  turbopack: {
+    // Keep Turbopack resolution rooted to this app when parent folders also have lockfiles.
+    root: projectRoot,
+  },
 
   async rewrites() {
     // All client-side fetch("/api/proxy/...") calls are transparently forwarded

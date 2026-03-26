@@ -29,12 +29,25 @@ function toClientError(message: string): Error {
   return new Error(message);
 }
 
+function useMockAuthDirectly(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true"
+  );
+}
+
 export const authService = {
   /**
    * POST /api/auth/login
    * Exchanges credentials for JWT tokens and persists them.
    */
   async login(credentials: LoginRequest): Promise<AuthResponse> {
+    if (useMockAuthDirectly()) {
+      const response = mockAuthService.login(credentials);
+      setTokens(response.tokens.accessToken, response.tokens.refreshToken);
+      return response;
+    }
+
     try {
       const response = await apiClient.post<AuthResponse>(
         "/auth/login",
@@ -63,6 +76,12 @@ export const authService = {
    * Creates a new account and returns tokens.
    */
   async register(data: RegisterRequest): Promise<AuthResponse> {
+    if (useMockAuthDirectly()) {
+      const response = mockAuthService.register(data);
+      setTokens(response.tokens.accessToken, response.tokens.refreshToken);
+      return response;
+    }
+
     try {
       const response = await apiClient.post<AuthResponse>(
         "/auth/register",
@@ -93,6 +112,10 @@ export const authService = {
    * Returns the currently authenticated user.
    */
   async getMe(): Promise<User> {
+    if (useMockAuthDirectly()) {
+      return mockAuthService.getMe();
+    }
+
     try {
       return await apiClient.get<User>("/auth/me");
     } catch (error) {
@@ -106,6 +129,12 @@ export const authService = {
    * Invalidates the refresh token server-side then clears local storage.
    */
   async logout(): Promise<void> {
+    if (useMockAuthDirectly()) {
+      mockAuthService.logout();
+      clearTokens();
+      return;
+    }
+
     try {
       try {
         await apiClient.post("/auth/logout", {});

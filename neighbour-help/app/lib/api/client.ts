@@ -70,7 +70,7 @@ async function request<T>(
   path: string,
   { authenticated = true, headers = {}, ...options }: RequestOptions = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}/api${path}`;
+  const url = `${API_BASE_URL}${path}`;
 
   const resolvedHeaders: Record<string, string> = {
     "Content-Type": "application/json",
