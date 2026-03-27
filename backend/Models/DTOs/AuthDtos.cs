@@ -16,7 +16,7 @@ public record UserDto(
 public record TokenDto(
     string AccessToken,
     string RefreshToken,
-    int ExpiresIn  // Added: token expiration time in seconds
+    int ExpiresIn
 );
 
 // The root response for Login/Register/Refresh

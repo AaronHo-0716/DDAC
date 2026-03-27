@@ -20,7 +20,7 @@ CREATE TABLE users (
   email VARCHAR(320) NOT NULL,
   password_hash TEXT NOT NULL,
   role VARCHAR(20) NOT NULL,
-  account_status VARCHAR(20) NOT NULL DEFAULT 'active',
+  account_status BOOLEAN NOT NULL DEFAULT TRUE,
   must_reset_password BOOLEAN NOT NULL DEFAULT FALSE,
   avatar_url TEXT,
   rating NUMERIC(3,2),

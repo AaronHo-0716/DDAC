@@ -4,22 +4,51 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using backend.Data;
 using backend.Services;
-using backend.Models.DTOs;
-using backend.Models.Entities;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 1. SERVICE REGISTRATION (Must be BEFORE builder.Build) ---
 
-// Controllers & JSON Formatting (Ensures camelCase for Frontend)
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// MOVED AND MERGED: Swagger Configuration with JWT Support
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "NeighborHelp API", Version = "v1" });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter your JWT token: Bearer {your token}"
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+});
 
 // Database: PostgreSQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -46,7 +75,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// CORS: Merged into one single policy for Next.js
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("NextJsPolicy", policy =>
@@ -54,14 +83,15 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:3000")
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials(); // Required if you decide to use cookies later
+              .AllowCredentials();
     });
 });
 
 // Dependency Injection
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>(); // Ensure this class exists
 
-// Backend Error Handling (ProblemDetails) - Customizing to match your frontend client.ts
+// Error Handling
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -77,18 +107,16 @@ var app = builder.Build();
 
 // --- 3. MIDDLEWARE PIPELINE (Must be AFTER builder.Build) ---
 
-// Use ProblemDetails middleware for better error responses
-app.UseStatusCodePages();
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+app.UseStatusCodePages();
 app.UseHttpsRedirection();
 
-// IMPORTANT: CORS must be called BEFORE UseAuthentication
+// IMPORTANT: CORS must be BEFORE Authentication
 app.UseCors("NextJsPolicy");
 
 app.UseAuthentication();
@@ -96,7 +124,22 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Simple Health Check
+// Database initialization
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<NeighbourHelpDbContext>();
+        context.Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred creating the DB.");
+    }
+}
+
 app.MapGet("/", () => "NeighborHelp API is running...");
 
 app.Run();
