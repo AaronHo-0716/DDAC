@@ -3,51 +3,91 @@ using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
 using System.Security.Claims;
-using backend.Models;
-using backend.Data;
+using System.Net;
 
 [ApiController]
 [Route("api/auth")]
 public class AuthController(IAuthService authService) : ControllerBase
 {
-    private readonly NeighbourHelpDbContext _context;
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {
-        var result = await authService.RegisterAsync(request);
-        return Ok(result);
+        try
+        {
+            var result = await authService.Register(request);
+            return Ok(result);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Catches 400 (Bad Request) or 409 (Conflict) from the service
+            return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            // Catches unexpected server crashes
+            return StatusCode(500, new { message = "An internal server error occurred.", details = ex.Message });
+        }
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        var result = await authService.LoginAsync(request);
-        return Ok(result);
+        try
+        {
+            var result = await authService.Login(request);
+            return Ok(result);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Catches 401 (Unauthorized) or 400 (Bad Request)
+            return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "An internal server error occurred.", details = ex.Message });
+        }
     }
 
     [Authorize]
     [HttpGet("me")]
     public async Task<ActionResult<UserDto>> GetMe()
     {
-        // Get user ID from the JWT claims
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await authService.GetUserByIdAsync(Guid.Parse(userId!));
-        return Ok(user);
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var user = await authService.GetUserById(Guid.Parse(userId));
+            return Ok(user);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "An error occurred while fetching your profile." });
+        }
     }
 
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request)
     {
-        var result = await authService.RefreshTokenAsync(request.RefreshToken);
-        return Ok(result);
+        try
+        {
+            var result = await authService.RefreshToken(request.RefreshToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [Authorize]
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        // For JWT, logout is mostly handled by the frontend clearing tokens,
-        // but we return 200 OK as expected by your frontend.
         return Ok();
     }
 }
