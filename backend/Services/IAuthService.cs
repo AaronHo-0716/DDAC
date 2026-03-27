@@ -1,5 +1,5 @@
 using backend.Data;
-using backend.Models;
+using backend.Models.Entities;
 using backend.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -32,9 +32,13 @@ public class AuthService : IAuthService
     {
         var user = await _context.users.FirstOrDefaultAsync(u => u.email == request.Email);
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.password_hash))
-            throw new HttpRequestException("Invalid email or password", null, System.Net.HttpStatusCode.Unauthorized);
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.password_hash)){
+                        Console.Out.WriteLine($"Invalid email {request.Email} or password");
 
+            throw new HttpRequestException("Invalid email or password", null, System.Net.HttpStatusCode.Unauthorized);
+        }
+        Console.WriteLine($"User {user.email} logged in successfully");
+        
         return GenerateAuthResponse(user);
     }
 
@@ -49,6 +53,7 @@ public class AuthService : IAuthService
             name = request.Name,
             email = request.Email,
             password_hash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            role = request.Role,
             created_at_utc = DateTime.UtcNow,
             updated_at_utc = DateTime.UtcNow,
             must_reset_password = false
@@ -72,19 +77,22 @@ public class AuthService : IAuthService
         // For v1 MVP, we aren't validating the old refresh token against a DB yet.
         // We just return a new set of tokens for the demo to work.
         // In a real app, you would verify the token from a 'RefreshTokens' table.
+        const int tokenExpirationSeconds = 86400; // 24 hours
         return await Task.FromResult(new AuthResponse(
             new UserDto(Guid.Empty, "System", "refresher", "user", null, null, DateTime.UtcNow, true),
-            new TokenDto("new_access_token", Guid.NewGuid().ToString())
+            new TokenDto("new_access_token", Guid.NewGuid().ToString(), tokenExpirationSeconds)
         ));
     }
 
     private AuthResponse GenerateAuthResponse(user user)
     {
+        const int tokenExpirationSeconds = 86400; // 24 hours
         return new AuthResponse(
             User: MapToDto(user),
             Tokens: new TokenDto(
                 AccessToken: CreateJwtToken(user),
-                RefreshToken: Guid.NewGuid().ToString()
+                RefreshToken: Guid.NewGuid().ToString(),
+                ExpiresIn: tokenExpirationSeconds
             )
         );
     }
@@ -93,7 +101,7 @@ public class AuthService : IAuthService
         user.id,
         user.name,
         user.email,
-        "user",
+        user.role,  // Changed: use actual role from user
         user.avatar_url,
         user.rating,
         user.created_at_utc,
@@ -106,7 +114,7 @@ public class AuthService : IAuthService
         {
             new(ClaimTypes.NameIdentifier, user.id.ToString()),
             new(ClaimTypes.Email, user.email),
-            new(ClaimTypes.Role, "user")
+            new(ClaimTypes.Role, user.role)  // Changed: use actual role from user
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));

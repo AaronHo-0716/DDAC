@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace backend.Models;
+namespace backend.Models.Entities;
 
 public partial class user
 {
@@ -12,6 +12,10 @@ public partial class user
     public string email { get; set; } = null!;
 
     public string password_hash { get; set; } = null!;
+
+    public string role { get; set; } = null!;
+
+    public string account_status { get; set; } = null!;
 
     public bool must_reset_password { get; set; }
 

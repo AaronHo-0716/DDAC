@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
-using backend.Models;
+using backend.Models.Entities;
 
 namespace backend.Data;
 
@@ -34,18 +34,7 @@ public partial class NeighbourHelpDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder
-            .HasPostgresEnum("account_status", new[] { "active", "blocked" })
-            .HasPostgresEnum("admin_action_type", new[] { "block_user", "unblock_user", "approve_handyman", "reject_handyman", "force_reject_bid", "lock_bid", "unlock_bid", "flag_bid", "unflag_bid", "assign_emergency_job" })
-            .HasPostgresEnum("admin_target_type", new[] { "user", "job", "bid", "verification" })
-            .HasPostgresEnum("bid_status", new[] { "pending", "accepted", "rejected" })
-            .HasPostgresEnum("bid_tx_event_type", new[] { "created", "updated", "accepted", "rejected", "retracted", "force_rejected", "locked", "unlocked", "flagged", "unflagged" })
-            .HasPostgresEnum("handyman_verification_status", new[] { "pending", "approved", "rejected" })
-            .HasPostgresEnum("job_category", new[] { "plumbing", "electrical", "carpentry", "appliance_repair", "general_maintenance" })
-            .HasPostgresEnum("job_status", new[] { "open", "in_progress", "completed" })
-            .HasPostgresEnum("notification_type", new[] { "bid_received", "bid_accepted", "handyman_arriving", "job_completed" })
-            .HasPostgresEnum("user_role", new[] { "homeowner", "handyman", "admin" })
-            .HasPostgresExtension("pgcrypto");
+        modelBuilder.HasPostgresExtension("pgcrypto");
 
         modelBuilder.Entity<admin_action>(entity =>
         {
@@ -53,11 +42,15 @@ public partial class NeighbourHelpDbContext : DbContext
 
             entity.HasIndex(e => new { e.admin_user_id, e.created_at_utc }, "ix_admin_actions_actor_created").IsDescending(false, true);
 
+            entity.HasIndex(e => new { e.target_type, e.target_id, e.created_at_utc }, "ix_admin_actions_target").IsDescending(false, false, true);
+
             entity.Property(e => e.id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.action_type).HasMaxLength(50);
             entity.Property(e => e.created_at_utc).HasDefaultValueSql("now()");
             entity.Property(e => e.payload)
                 .HasDefaultValueSql("'{}'::jsonb")
                 .HasColumnType("jsonb");
+            entity.Property(e => e.target_type).HasMaxLength(50);
 
             entity.HasOne(d => d.admin_user).WithMany(p => p.admin_actions)
                 .HasForeignKey(d => d.admin_user_id)
@@ -69,16 +62,23 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.HasKey(e => e.id).HasName("bids_pkey");
 
+            entity.HasIndex(e => new { e.handyman_user_id, e.status, e.created_at_utc }, "ix_bids_handyman_status_created").IsDescending(false, false, true);
+
+            entity.HasIndex(e => new { e.job_id, e.status, e.created_at_utc }, "ix_bids_job_status_created").IsDescending(false, false, true);
+
             entity.HasIndex(e => new { e.job_id, e.handyman_user_id }, "uq_bids_job_handyman").IsUnique();
 
             entity.HasIndex(e => e.job_id, "uq_bids_one_accepted_per_job")
                 .IsUnique()
-                .HasFilter("(status = 'accepted'::bid_status)");
+                .HasFilter("((status)::text = 'accepted'::text)");
 
             entity.Property(e => e.id).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.created_at_utc).HasDefaultValueSql("now()");
             entity.Property(e => e.is_recommended).HasDefaultValue(false);
             entity.Property(e => e.price).HasPrecision(10, 2);
+            entity.Property(e => e.status)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'pending'::character varying");
             entity.Property(e => e.updated_at_utc).HasDefaultValueSql("now()");
 
             entity.HasOne(d => d.handyman_user).WithMany(p => p.bids)
@@ -114,6 +114,8 @@ public partial class NeighbourHelpDbContext : DbContext
 
             entity.HasIndex(e => new { e.bid_id, e.created_at_utc }, "ix_bid_tx_bid_created").IsDescending(false, true);
 
+            entity.HasIndex(e => new { e.event_type, e.created_at_utc }, "ix_bid_tx_event_type_created").IsDescending(false, true);
+
             entity.HasIndex(e => new { e.job_id, e.created_at_utc }, "ix_bid_tx_job_created").IsDescending(false, true);
 
             entity.Property(e => e.id).HasDefaultValueSql("gen_random_uuid()");
@@ -121,6 +123,7 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.event_metadata)
                 .HasDefaultValueSql("'{}'::jsonb")
                 .HasColumnType("jsonb");
+            entity.Property(e => e.event_type).HasMaxLength(50);
 
             entity.HasOne(d => d.bid).WithMany(p => p.bid_transactions)
                 .HasForeignKey(d => d.bid_id)
@@ -149,10 +152,15 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.HasKey(e => e.id).HasName("handyman_verifications_pkey");
 
+            entity.HasIndex(e => new { e.status, e.created_at_utc }, "ix_verifications_status_created").IsDescending(false, true);
+
             entity.HasIndex(e => e.user_id, "uq_handyman_verifications_user").IsUnique();
 
             entity.Property(e => e.id).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.created_at_utc).HasDefaultValueSql("now()");
+            entity.Property(e => e.status)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'pending'::character varying");
             entity.Property(e => e.updated_at_utc).HasDefaultValueSql("now()");
 
             entity.HasOne(d => d.reviewed_by_user).WithMany(p => p.handyman_verificationreviewed_by_users)
@@ -170,13 +178,19 @@ public partial class NeighbourHelpDbContext : DbContext
 
             entity.HasIndex(e => new { e.posted_by_user_id, e.created_at_utc }, "ix_jobs_posted_by").IsDescending(false, true);
 
+            entity.HasIndex(e => new { e.status, e.category, e.is_emergency, e.created_at_utc }, "ix_jobs_status_category_emergency_created").IsDescending(false, false, false, true);
+
             entity.Property(e => e.id).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.budget).HasPrecision(10, 2);
+            entity.Property(e => e.category).HasMaxLength(50);
             entity.Property(e => e.created_at_utc).HasDefaultValueSql("now()");
             entity.Property(e => e.is_emergency).HasDefaultValue(false);
             entity.Property(e => e.latitude).HasPrecision(9, 6);
             entity.Property(e => e.location_text).HasMaxLength(255);
             entity.Property(e => e.longitude).HasPrecision(9, 6);
+            entity.Property(e => e.status)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'open'::character varying");
             entity.Property(e => e.title).HasMaxLength(180);
             entity.Property(e => e.updated_at_utc).HasDefaultValueSql("now()");
 
@@ -208,6 +222,7 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.id).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.created_at_utc).HasDefaultValueSql("now()");
             entity.Property(e => e.is_read).HasDefaultValue(false);
+            entity.Property(e => e.type).HasMaxLength(50);
 
             entity.HasOne(d => d.related_job).WithMany(p => p.notifications)
                 .HasForeignKey(d => d.related_job_id)
@@ -242,14 +257,20 @@ public partial class NeighbourHelpDbContext : DbContext
 
             entity.HasIndex(e => e.created_at_utc, "ix_users_created").IsDescending();
 
+            entity.HasIndex(e => new { e.role, e.account_status }, "ix_users_role_status");
+
             entity.HasIndex(e => e.email, "uq_users_email").IsUnique();
 
             entity.Property(e => e.id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.account_status)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'active'::character varying");
             entity.Property(e => e.created_at_utc).HasDefaultValueSql("now()");
             entity.Property(e => e.email).HasMaxLength(320);
             entity.Property(e => e.must_reset_password).HasDefaultValue(false);
             entity.Property(e => e.name).HasMaxLength(120);
             entity.Property(e => e.rating).HasPrecision(3, 2);
+            entity.Property(e => e.role).HasMaxLength(20);
             entity.Property(e => e.updated_at_utc).HasDefaultValueSql("now()");
 
             entity.HasOne(d => d.blocked_by_user).WithMany(p => p.Inverseblocked_by_user)

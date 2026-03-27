@@ -1,22 +1,17 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto; -- for gen_random_uuid()
 
-CREATE TYPE user_role AS ENUM ('homeowner', 'handyman', 'admin');
-CREATE TYPE account_status AS ENUM ('active', 'blocked');
-CREATE TYPE handyman_verification_status AS ENUM ('pending', 'approved', 'rejected');
-CREATE TYPE job_category AS ENUM ('plumbing', 'electrical', 'carpentry', 'appliance_repair', 'general_maintenance');
-CREATE TYPE job_status AS ENUM ('open', 'in_progress', 'completed');
-CREATE TYPE bid_status AS ENUM ('pending', 'accepted', 'rejected');
-CREATE TYPE notification_type AS ENUM ('bid_received', 'bid_accepted', 'handyman_arriving', 'job_completed');
-CREATE TYPE bid_tx_event_type AS ENUM (
-  'created', 'updated', 'accepted', 'rejected', 'retracted',
-  'force_rejected', 'locked', 'unlocked', 'flagged', 'unflagged'
-);
-CREATE TYPE admin_action_type AS ENUM (
-  'block_user', 'unblock_user', 'approve_handyman', 'reject_handyman',
-  'force_reject_bid', 'lock_bid', 'unlock_bid', 'flag_bid', 'unflag_bid',
-  'assign_emergency_job'
-);
-CREATE TYPE admin_target_type AS ENUM ('user', 'job', 'bid', 'verification');
+-- Replaced enum types with VARCHAR for simplicity
+-- Previous enums:
+-- user_role: 'homeowner', 'handyman', 'admin'
+-- account_status: 'active', 'blocked'
+-- handyman_verification_status: 'pending', 'approved', 'rejected'
+-- job_category: 'plumbing', 'electrical', 'carpentry', 'appliance_repair', 'general_maintenance'
+-- job_status: 'open', 'in_progress', 'completed'
+-- bid_status: 'pending', 'accepted', 'rejected'
+-- notification_type: 'bid_received', 'bid_accepted', 'handyman_arriving', 'job_completed'
+-- bid_tx_event_type: 'created', 'updated', 'accepted', 'rejected', 'retracted', 'force_rejected', 'locked', 'unlocked', 'flagged', 'unflagged'
+-- admin_action_type: 'block_user', 'unblock_user', 'approve_handyman', 'reject_handyman', 'force_reject_bid', 'lock_bid', 'unlock_bid', 'flag_bid', 'unflag_bid', 'assign_emergency_job'
+-- admin_target_type: 'user', 'job', 'bid', 'verification'
 
 
 CREATE TABLE users (
@@ -24,8 +19,8 @@ CREATE TABLE users (
   name VARCHAR(120) NOT NULL,
   email VARCHAR(320) NOT NULL,
   password_hash TEXT NOT NULL,
-  role user_role NOT NULL,
-  account_status account_status NOT NULL DEFAULT 'active',
+  role VARCHAR(20) NOT NULL,
+  account_status VARCHAR(20) NOT NULL DEFAULT 'active',
   must_reset_password BOOLEAN NOT NULL DEFAULT FALSE,
   avatar_url TEXT,
   rating NUMERIC(3,2),
@@ -59,12 +54,12 @@ CREATE TABLE jobs (
   posted_by_user_id UUID NOT NULL REFERENCES users(id),
   title VARCHAR(180) NOT NULL,
   description TEXT NOT NULL,
-  category job_category NOT NULL,
+  category VARCHAR(50) NOT NULL,
   location_text VARCHAR(255) NOT NULL,
   latitude NUMERIC(9,6),
   longitude NUMERIC(9,6),
   budget NUMERIC(10,2),
-  status job_status NOT NULL DEFAULT 'open',
+  status VARCHAR(20) NOT NULL DEFAULT 'open',
   is_emergency BOOLEAN NOT NULL DEFAULT FALSE,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -87,7 +82,7 @@ CREATE TABLE bids (
   price NUMERIC(10,2) NOT NULL,
   estimated_arrival_utc TIMESTAMPTZ NOT NULL,
   message TEXT NOT NULL,
-  status bid_status NOT NULL DEFAULT 'pending',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
   is_recommended BOOLEAN NOT NULL DEFAULT FALSE,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -106,7 +101,7 @@ CREATE UNIQUE INDEX uq_bids_one_accepted_per_job
 CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type notification_type NOT NULL,
+  type VARCHAR(50) NOT NULL,
   message TEXT NOT NULL,
   related_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
   is_read BOOLEAN NOT NULL DEFAULT FALSE,
@@ -116,7 +111,7 @@ CREATE TABLE notifications (
 CREATE TABLE handyman_verifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status handyman_verification_status NOT NULL DEFAULT 'pending',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
   reviewed_by_user_id UUID REFERENCES users(id),
   reviewed_at_utc TIMESTAMPTZ,
   notes TEXT,
@@ -131,7 +126,7 @@ CREATE TABLE bid_transactions (
   job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   handyman_user_id UUID NOT NULL REFERENCES users(id),
   homeowner_user_id UUID NOT NULL REFERENCES users(id),
-  event_type bid_tx_event_type NOT NULL,
+  event_type VARCHAR(50) NOT NULL,
   event_by_user_id UUID REFERENCES users(id),
   event_reason TEXT,
   event_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -148,8 +143,8 @@ CREATE TABLE bid_locks (
 CREATE TABLE admin_actions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_user_id UUID NOT NULL REFERENCES users(id),
-  action_type admin_action_type NOT NULL,
-  target_type admin_target_type NOT NULL,
+  action_type VARCHAR(50) NOT NULL,
+  target_type VARCHAR(50) NOT NULL,
   target_id UUID NOT NULL,
   reason TEXT,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,

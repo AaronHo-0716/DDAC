@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace backend.Models;
+namespace backend.Models.Entities;
 
 public partial class bid_transaction
 {
@@ -14,6 +14,8 @@ public partial class bid_transaction
     public Guid handyman_user_id { get; set; }
 
     public Guid homeowner_user_id { get; set; }
+
+    public string event_type { get; set; } = null!;
 
     public Guid? event_by_user_id { get; set; }
 

@@ -1,13 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace backend.Models;
+namespace backend.Models.Entities;
 
 public partial class notification
 {
     public Guid id { get; set; }
 
     public Guid user_id { get; set; }
+
+    public string type { get; set; } = null!;
 
     public string message { get; set; } = null!;
 

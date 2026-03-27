@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace backend.Models;
+namespace backend.Models.Entities;
 
 public partial class bid
 {
@@ -16,6 +16,8 @@ public partial class bid
     public DateTime estimated_arrival_utc { get; set; }
 
     public string message { get; set; } = null!;
+
+    public string status { get; set; } = null!;
 
     public bool is_recommended { get; set; }
 

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace backend.Models;
+namespace backend.Models.Entities;
 
 public partial class job
 {
@@ -13,6 +13,8 @@ public partial class job
 
     public string description { get; set; } = null!;
 
+    public string category { get; set; } = null!;
+
     public string location_text { get; set; } = null!;
 
     public decimal? latitude { get; set; }
@@ -20,6 +22,8 @@ public partial class job
     public decimal? longitude { get; set; }
 
     public decimal? budget { get; set; }
+
+    public string status { get; set; } = null!;
 
     public bool is_emergency { get; set; }
 

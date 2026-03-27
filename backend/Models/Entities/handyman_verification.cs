@@ -1,13 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace backend.Models;
+namespace backend.Models.Entities;
 
 public partial class handyman_verification
 {
     public Guid id { get; set; }
 
     public Guid user_id { get; set; }
+
+    public string status { get; set; } = null!;
 
     public Guid? reviewed_by_user_id { get; set; }
 

@@ -15,7 +15,8 @@ public record UserDto(
 // The "tokens" object in frontend types
 public record TokenDto(
     string AccessToken,
-    string RefreshToken
+    string RefreshToken,
+    int ExpiresIn  // Added: token expiration time in seconds
 );
 
 // The root response for Login/Register/Refresh
