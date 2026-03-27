@@ -1,8 +1,12 @@
 import {
   AuthResponse,
+  ChangePasswordRequest,
   LoginRequest,
   RegisterRequest,
+  UpdateProfileRequest,
+  UpdateUserSettingsRequest,
   User,
+  UserSettings,
 } from "@/app/types";
 import { ApiClientError, apiClient, clearTokens, setTokens } from "./client";
 import { mockAuthService } from "@/app/lib/mock/authMock";
@@ -121,6 +125,75 @@ export const authService = {
     } catch (error) {
       if (!shouldUseMockAuth(error)) throw error;
       return mockAuthService.getMe();
+    }
+  },
+
+  /**
+   * PATCH /api/account/profile
+   * Updates editable profile fields for current user.
+   */
+  async updateProfile(data: UpdateProfileRequest): Promise<User> {
+    if (useMockAuthDirectly()) {
+      return mockAuthService.updateProfile(data);
+    }
+
+    try {
+      return await apiClient.patch<User>("/account/profile", data);
+    } catch (error) {
+      if (!shouldUseMockAuth(error)) throw error;
+      return mockAuthService.updateProfile(data);
+    }
+  },
+
+  /**
+   * POST /api/account/change-password
+   * Changes password for currently authenticated user.
+   */
+  async changePassword(data: ChangePasswordRequest): Promise<void> {
+    if (useMockAuthDirectly()) {
+      mockAuthService.changePassword(data);
+      return;
+    }
+
+    try {
+      await apiClient.post<void>("/account/change-password", data);
+    } catch (error) {
+      if (!shouldUseMockAuth(error)) throw error;
+      mockAuthService.changePassword(data);
+    }
+  },
+
+  /**
+   * GET /api/account/settings
+   * Returns settings for currently authenticated user.
+   */
+  async getSettings(): Promise<UserSettings> {
+    if (useMockAuthDirectly()) {
+      return mockAuthService.getSettings();
+    }
+
+    try {
+      return await apiClient.get<UserSettings>("/account/settings");
+    } catch (error) {
+      if (!shouldUseMockAuth(error)) throw error;
+      return mockAuthService.getSettings();
+    }
+  },
+
+  /**
+   * PATCH /api/account/settings
+   * Updates user settings.
+   */
+  async updateSettings(data: UpdateUserSettingsRequest): Promise<UserSettings> {
+    if (useMockAuthDirectly()) {
+      return mockAuthService.updateSettings(data);
+    }
+
+    try {
+      return await apiClient.patch<UserSettings>("/account/settings", data);
+    } catch (error) {
+      if (!shouldUseMockAuth(error)) throw error;
+      return mockAuthService.updateSettings(data);
     }
   },
 

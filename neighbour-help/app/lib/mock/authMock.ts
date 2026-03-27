@@ -1,4 +1,14 @@
-import type { AuthResponse, LoginRequest, RegisterRequest, User } from "@/app/types";
+import type {
+  AuthResponse,
+  ChangePasswordRequest,
+  JobCategory,
+  LoginRequest,
+  RegisterRequest,
+  UpdateProfileRequest,
+  UpdateUserSettingsRequest,
+  User,
+  UserSettings,
+} from "@/app/types";
 
 interface StoredMockUser extends User {
   password: string;
@@ -7,6 +17,7 @@ interface StoredMockUser extends User {
 interface MockAuthStore {
   users: StoredMockUser[];
   currentUserId: string | null;
+  settingsByUserId: Record<string, UserSettings>;
 }
 
 const MOCK_AUTH_STORE_KEY = "nh_mock_auth_store";
@@ -51,10 +62,56 @@ function createSeedUsers(): StoredMockUser[] {
 }
 
 function getDefaultStore(): MockAuthStore {
+  const users = createSeedUsers();
+
   return {
-    users: createSeedUsers(),
+    users,
     currentUserId: null,
+    settingsByUserId: users.reduce<Record<string, UserSettings>>((acc, user) => {
+      acc[user.id] = createDefaultSettings(user.role);
+      return acc;
+    }, {}),
   };
+}
+
+function createDefaultSettings(role: User["role"]): UserSettings {
+  const base: UserSettings = {
+    notifications: {
+      emailBidUpdates: true,
+      emailJobUpdates: true,
+      productAnnouncements: false,
+    },
+    privacy: {
+      showProfileToPublic: role === "handyman",
+      sharePreciseLocation: false,
+    },
+  };
+
+  if (role === "homeowner") {
+    base.homeowner = {
+      defaultEmergency: false,
+      preferredContactMethod: "email",
+    };
+  }
+
+  if (role === "handyman") {
+    base.handyman = {
+      serviceRadiusKm: 10,
+      acceptingNewJobs: true,
+      categories: ["General Maintenance"],
+    };
+  }
+
+  return base;
+}
+
+function mergeCategories(categories: JobCategory[] | undefined): JobCategory[] | undefined {
+  if (!categories) return undefined;
+
+  const unique = Array.from(new Set(categories));
+  if (unique.length === 0) return ["General Maintenance"];
+
+  return unique;
 }
 
 function mergeSeedUsers(existingUsers: StoredMockUser[]): StoredMockUser[] {
@@ -89,14 +146,26 @@ function readStore(): MockAuthStore {
   try {
     const parsed = JSON.parse(raw) as MockAuthStore;
 
-    if (!Array.isArray(parsed.users) || typeof parsed.currentUserId === "undefined") {
+    if (
+      !Array.isArray(parsed.users) ||
+      typeof parsed.currentUserId === "undefined" ||
+      typeof parsed.settingsByUserId !== "object"
+    ) {
       throw new Error("Invalid mock auth store shape");
     }
 
+    const mergedUsers = mergeSeedUsers(parsed.users);
     const mergedStore: MockAuthStore = {
       ...parsed,
-      users: mergeSeedUsers(parsed.users),
+      users: mergedUsers,
+      settingsByUserId: { ...parsed.settingsByUserId },
     };
+
+    mergedUsers.forEach((user) => {
+      if (!mergedStore.settingsByUserId[user.id]) {
+        mergedStore.settingsByUserId[user.id] = createDefaultSettings(user.role);
+      }
+    });
 
     // Persist migration so users only pay merge cost once.
     localStorage.setItem(MOCK_AUTH_STORE_KEY, JSON.stringify(mergedStore));
@@ -172,6 +241,7 @@ export const mockAuthService = {
 
     store.users.push(newUser);
     store.currentUserId = newUser.id;
+  store.settingsByUserId[newUser.id] = createDefaultSettings(newUser.role);
     writeStore(store);
 
     return {
@@ -199,6 +269,130 @@ export const mockAuthService = {
     const store = readStore();
     store.currentUserId = null;
     writeStore(store);
+  },
+
+  updateProfile(data: UpdateProfileRequest): User {
+    const store = readStore();
+
+    if (!store.currentUserId) {
+      throw new Error("Not authenticated.");
+    }
+
+    const index = store.users.findIndex((user) => user.id === store.currentUserId);
+    if (index < 0) {
+      throw new Error("Session not found.");
+    }
+
+    const currentUser = store.users[index];
+    const nextName = typeof data.name === "string" ? data.name.trim() : currentUser.name;
+
+    if (nextName.length === 0) {
+      throw new Error("Name cannot be empty.");
+    }
+
+    const updated: StoredMockUser = {
+      ...currentUser,
+      name: nextName,
+      avatarUrl:
+        typeof data.avatarUrl === "string" ? data.avatarUrl.trim() : currentUser.avatarUrl,
+    };
+
+    store.users[index] = updated;
+    writeStore(store);
+
+    return toPublicUser(updated);
+  },
+
+  changePassword(data: ChangePasswordRequest): void {
+    const store = readStore();
+
+    if (!store.currentUserId) {
+      throw new Error("Not authenticated.");
+    }
+
+    const index = store.users.findIndex((user) => user.id === store.currentUserId);
+    if (index < 0) {
+      throw new Error("Session not found.");
+    }
+
+    const currentUser = store.users[index];
+    if (currentUser.password !== data.currentPassword) {
+      throw new Error("Current password is incorrect.");
+    }
+
+    if (data.newPassword.length < 8) {
+      throw new Error("New password must be at least 8 characters.");
+    }
+
+    store.users[index] = {
+      ...currentUser,
+      password: data.newPassword,
+    };
+
+    writeStore(store);
+  },
+
+  getSettings(): UserSettings {
+    const store = readStore();
+
+    if (!store.currentUserId) {
+      throw new Error("Not authenticated.");
+    }
+
+    const currentUser = store.users.find((user) => user.id === store.currentUserId);
+    if (!currentUser) {
+      throw new Error("Session not found.");
+    }
+
+    return (
+      store.settingsByUserId[currentUser.id] ?? createDefaultSettings(currentUser.role)
+    );
+  },
+
+  updateSettings(data: UpdateUserSettingsRequest): UserSettings {
+    const store = readStore();
+
+    if (!store.currentUserId) {
+      throw new Error("Not authenticated.");
+    }
+
+    const currentUser = store.users.find((user) => user.id === store.currentUserId);
+    if (!currentUser) {
+      throw new Error("Session not found.");
+    }
+
+    const current =
+      store.settingsByUserId[currentUser.id] ?? createDefaultSettings(currentUser.role);
+
+    const next: UserSettings = {
+      ...current,
+      notifications: {
+        ...current.notifications,
+        ...(data.notifications ?? {}),
+      },
+      privacy: {
+        ...current.privacy,
+        ...(data.privacy ?? {}),
+      },
+      homeowner: current.homeowner
+        ? {
+            ...current.homeowner,
+            ...(data.homeowner ?? {}),
+          }
+        : undefined,
+      handyman: current.handyman
+        ? {
+            ...current.handyman,
+            ...(data.handyman ?? {}),
+            categories: mergeCategories(data.handyman?.categories) ?? current.handyman.categories,
+          }
+        : undefined,
+    };
+
+    store.settingsByUserId[currentUser.id] = next;
+    writeStore(store);
+
+    return next;
   },
 
   reset(): void {

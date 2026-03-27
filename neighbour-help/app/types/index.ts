@@ -35,6 +35,54 @@ export interface AuthResponse {
   tokens: AuthTokens;
 }
 
+// ─── Account Profile & Settings ─────────────────────────────────────────────
+
+export interface UpdateProfileRequest {
+  name?: string;
+  avatarUrl?: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface NotificationSettings {
+  emailBidUpdates: boolean;
+  emailJobUpdates: boolean;
+  productAnnouncements: boolean;
+}
+
+export interface PrivacySettings {
+  showProfileToPublic: boolean;
+  sharePreciseLocation: boolean;
+}
+
+export interface HomeownerSettings {
+  defaultEmergency: boolean;
+  preferredContactMethod: "email" | "phone";
+}
+
+export interface HandymanSettings {
+  serviceRadiusKm: number;
+  acceptingNewJobs: boolean;
+  categories: JobCategory[];
+}
+
+export interface UserSettings {
+  notifications: NotificationSettings;
+  privacy: PrivacySettings;
+  homeowner?: HomeownerSettings;
+  handyman?: HandymanSettings;
+}
+
+export interface UpdateUserSettingsRequest {
+  notifications?: Partial<NotificationSettings>;
+  privacy?: Partial<PrivacySettings>;
+  homeowner?: Partial<HomeownerSettings>;
+  handyman?: Partial<HandymanSettings>;
+}
+
 // ─── Jobs ────────────────────────────────────────────────────────────────────
 
 export type JobCategory =
