@@ -1,10 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, ChevronDown, Wrench, Menu, X } from "lucide-react";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import NotificationsPanel from "@/app/components/ui/NotificationsPanel";
+import type { Notification } from "@/app/types";
+
+const NOTIFICATIONS_STORAGE_KEY = "nh_mock_notifications";
+
+function getUnreadCount(): number {
+  if (typeof window === "undefined") return 0;
+
+  const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+  if (!raw) return 0;
+
+  try {
+    const parsed = JSON.parse(raw) as Notification[];
+    if (!Array.isArray(parsed)) return 0;
+    return parsed.filter((n) => !n.read).length;
+  } catch {
+    return 0;
+  }
+}
 
 const homeownerNavLinks = [
   { label: "My Jobs", href: "/my-jobs" },
@@ -28,6 +46,7 @@ export default function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { user, logout, resetMockData } = useAuth();
   const navLinks = user
     ? user.role === "handyman"
@@ -36,6 +55,24 @@ export default function Navbar() {
       ? adminNavLinks
       : homeownerNavLinks
     : [];
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const refreshUnread = () => {
+      setUnreadCount(getUnreadCount());
+    };
+
+    refreshUnread();
+    window.addEventListener("nh_notifications_updated", refreshUnread);
+
+    return () => {
+      window.removeEventListener("nh_notifications_updated", refreshUnread);
+    };
+  }, [user]);
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB] shadow-sm">
@@ -74,7 +111,9 @@ export default function Navbar() {
                   className="relative w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F7F8FA] hover:text-[#111827] transition-colors"
                 >
                   <Bell className="w-5 h-5" />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#0B74FF] rounded-full" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#0B74FF] rounded-full" />
+                  )}
                 </button>
 
                 {/* Avatar Dropdown */}
