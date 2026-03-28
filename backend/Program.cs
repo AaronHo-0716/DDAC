@@ -124,21 +124,21 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Database initialization
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
-    {
-        var context = services.GetRequiredService<NeighbourHelpDbContext>();
-        context.Database.EnsureCreated();
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred creating the DB.");
-    }
-}
+// // Database initialization
+// using (var scope = app.Services.CreateScope())
+// {
+//     var services = scope.ServiceProvider;
+//     try
+//     {
+//         var context = services.GetRequiredService<NeighbourHelpDbContext>();
+//         context.Database.EnsureCreated();
+//     }
+//     catch (Exception ex)
+//     {
+//         var logger = services.GetRequiredService<ILogger<Program>>();
+//         logger.LogError(ex, "An error occurred creating the DB.");
+//     }
+// }
 
 app.MapGet("/", () => "NeighborHelp API is running...");
 
