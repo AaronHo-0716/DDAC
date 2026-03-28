@@ -27,17 +27,27 @@ public partial class NeighbourHelpDbContext : DbContext
     {
         modelBuilder.HasPostgresExtension("pgcrypto");
 
-        // --- 1. USER ---
+        // --- 1. USER ENTITY (Fixed Column Mappings) ---
         modelBuilder.Entity<user>(entity =>
         {
-            entity.ToTable("users"); // FORCES LOWERCASE
+            entity.ToTable("users");
             entity.HasKey(e => e.Id).HasName("users_pkey");
+
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Name).HasColumnName("name");
             entity.Property(e => e.Email).HasColumnName("email");
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
             entity.Property(e => e.Role).HasColumnName("role");
             entity.Property(e => e.IsActive).HasColumnName("account_status").HasDefaultValue(true);
+
+            // THESE TWO LINES FIX THE "AvatarUrl does not exist" ERROR:
+            entity.Property(e => e.AvatarUrl).HasColumnName("avatar_url");
+            entity.Property(e => e.Rating).HasColumnName("rating").HasPrecision(3, 2);
+
+            entity.Property(e => e.must_reset_password).HasColumnName("must_reset_password");
+            entity.Property(e => e.blocked_reason).HasColumnName("blocked_reason");
+            entity.Property(e => e.blocked_at_utc).HasColumnName("blocked_at_utc");
+            entity.Property(e => e.blocked_by_user_id).HasColumnName("blocked_by_user_id");
             entity.Property(e => e.CreatedAtUtc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
             entity.Property(e => e.updated_at_utc).HasColumnName("updated_at_utc").HasDefaultValueSql("now()");
 
@@ -91,7 +101,7 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.HasOne(d => d.event_by_user).WithMany(p => p.bid_transactionevent_by_users).HasForeignKey(d => d.event_by_user_id);
         });
 
-        // --- 7. OTHERS ---
+        // --- 7. OTHERS (Ensuring lowercase tables) ---
         modelBuilder.Entity<notification>(entity => { entity.ToTable("notifications"); entity.HasOne(d => d.user).WithMany(p => p.notifications).HasForeignKey(d => d.user_id); });
         modelBuilder.Entity<refresh_token>(entity => { entity.ToTable("refresh_tokens"); entity.HasOne(d => d.user).WithMany(p => p.refresh_tokens).HasForeignKey(d => d.user_id); });
         modelBuilder.Entity<admin_action>(entity => { entity.ToTable("admin_actions"); entity.HasOne(d => d.admin_user).WithMany(p => p.admin_actions).HasForeignKey(d => d.admin_user_id); });
