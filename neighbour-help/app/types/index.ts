@@ -153,6 +153,7 @@ export interface ApiError {
 
 export interface PaginatedResponse<T> {
   data: T[];
+  jobs: T[]; // Alias for "data" to match your API response
   total: number;
   page: number;
   pageSize: number;

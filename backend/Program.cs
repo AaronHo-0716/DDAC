@@ -90,6 +90,8 @@ builder.Services.AddCors(options =>
 // Dependency Injection
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>(); // Ensure this class exists
+// Register job service
+builder.Services.AddScoped<IJobService, JobService>();
 
 // Error Handling
 builder.Services.AddProblemDetails(options =>

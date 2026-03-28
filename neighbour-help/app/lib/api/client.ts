@@ -19,7 +19,7 @@ import { ApiError } from "@/app/types";
 const API_BASE_URL =
   typeof window === "undefined"
     ? // Server-side: call the backend directly (internal Docker network or localhost)
-      `${process.env.API_URL ?? "http://localhost:5000"}/api`
+      `${process.env.API_URL ?? "http://localhost:5073"}/api`
     : // Client-side: relative path, proxied by Next.js rewrites — no URL baked in
       "/api/proxy";
 
@@ -68,7 +68,7 @@ export class ApiClientError extends Error {
 
 async function request<T>(
   path: string,
-  { authenticated = true, headers = {}, ...options }: RequestOptions = {}
+  { authenticated = true, headers = {}, ...options }: RequestOptions = {},
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
 
@@ -100,8 +100,7 @@ async function request<T>(
       // Backend may return plain text/HTML for 5xx errors. Normalize as ApiClientError.
       throw new ApiClientError({
         statusCode: response.status,
-        message:
-          rawText.length > 140 ? `${rawText.slice(0, 140)}...` : rawText,
+        message: rawText.length > 140 ? `${rawText.slice(0, 140)}...` : rawText,
       });
     }
   }
