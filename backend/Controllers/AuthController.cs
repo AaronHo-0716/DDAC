@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
 using System.Security.Claims;
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 
 [ApiController]
 [Route("api/auth")]
@@ -17,14 +18,18 @@ public class AuthController(IAuthService authService) : ControllerBase
             var result = await authService.Register(request);
             return Ok(result);
         }
+        catch (DbUpdateException)
+        {
+            // Specifically catches Unique Constraint violations (e.g., duplicate Email) 
+            // occurring due to simultaneous registration attempts.
+            return Conflict(new { message = "A user with this email already exists." });
+        }
         catch (HttpRequestException ex)
         {
-            // Catches 400 (Bad Request) or 409 (Conflict) from the service
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            // Catches unexpected server crashes
             return StatusCode(500, new { message = "An internal server error occurred.", details = ex.Message });
         }
     }
@@ -39,7 +44,6 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
         catch (HttpRequestException ex)
         {
-            // Catches 401 (Unauthorized) or 400 (Bad Request)
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
         catch (Exception ex)
@@ -77,6 +81,11 @@ public class AuthController(IAuthService authService) : ControllerBase
         {
             var result = await authService.RefreshToken(request.RefreshToken);
             return Ok(result);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Handles cases where a refresh token is exchanged twice in exact parallel
+            return Conflict(new { message = "Refresh token is currently being processed. Please try again." });
         }
         catch (Exception ex)
         {
