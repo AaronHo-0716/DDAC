@@ -13,6 +13,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import SubmitBidModal from "../../components/ui/SubmitBidModal";
 import BidCard from "../../components/ui/BidCard";
 import type { Job, Bid } from "../../types";
+import { useAuth } from "@/app/lib/context/AuthContext";
 
 // ─── Mock data — replace with: jobsService.getJobById(id) / bidsService.getBidsForJob(id) ─
 const MOCK_USER = {
@@ -87,12 +88,19 @@ export default function JobDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { user } = useAuth();
   const [showBidModal, setShowBidModal] = useState(false);
   const [bids, setBids] = useState<Bid[]>(MOCK_BIDS);
 
   // TODO: const job = await jobsService.getJobById(id)
   const job = MOCK_JOB;
   void id; // used once backend is wired
+
+  const canSubmitBid =
+    job.status === "open" &&
+    !!user &&
+    user.role === "handyman" &&
+    job.postedBy.id !== user.id;
 
   const handleAcceptBid = (bidId: string) => {
     // TODO: bidsService.acceptBid(bidId)
@@ -193,7 +201,7 @@ export default function JobDetailPage({
             </div>
 
             {/* CTA for handymen */}
-            {job.status === "open" && (
+            {canSubmitBid && (
               <div className="bg-[#0B74FF] rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
                 <div className="text-white">
                   <p className="font-semibold">Are you a handyman?</p>
@@ -235,7 +243,7 @@ export default function JobDetailPage({
         </div>
       </div>
 
-      {showBidModal && (
+      {showBidModal && canSubmitBid && (
         <SubmitBidModal
           jobId={job.id}
           onClose={() => setShowBidModal(false)}

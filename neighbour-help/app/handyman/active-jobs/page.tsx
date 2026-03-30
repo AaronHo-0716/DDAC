@@ -7,62 +7,6 @@ import StatusBadge from "@/app/components/ui/StatusBadge";
 import type { Job } from "@/app/types";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 
-const HOMEOWNER = {
-  id: "u1",
-  name: "Alice Tan",
-  email: "alice@example.com",
-  role: "homeowner" as const,
-  createdAt: "2026-01-01T00:00:00Z",
-};
-
-const MY_ACTIVE_JOBS: Job[] = [
-  {
-    id: "11",
-    title: "Ceiling fan installation",
-    description: "Install one fan in master bedroom.",
-    category: "Electrical",
-    location: "Damansara, Petaling Jaya",
-    budget: 220,
-    imageUrls: [],
-    status: "in-progress",
-    isEmergency: false,
-    postedBy: HOMEOWNER,
-    createdAt: "2026-03-10T15:30:00Z",
-    updatedAt: "2026-03-24T09:10:00Z",
-    bidCount: 3,
-  },
-  {
-    id: "19",
-    title: "Bathroom sink pipe replacement",
-    description: "Replace corroded under-sink pipe section.",
-    category: "Plumbing",
-    location: "Mont Kiara, Kuala Lumpur",
-    budget: 300,
-    imageUrls: [],
-    status: "in-progress",
-    isEmergency: false,
-    postedBy: HOMEOWNER,
-    createdAt: "2026-03-21T09:20:00Z",
-    updatedAt: "2026-03-24T08:45:00Z",
-    bidCount: 2,
-  },
-  {
-    id: "12",
-    title: "Kitchen cabinet door alignment",
-    description: "Two cabinet doors are misaligned.",
-    category: "Carpentry",
-    location: "Subang Jaya",
-    budget: 80,
-    imageUrls: [],
-    status: "completed",
-    isEmergency: false,
-    postedBy: HOMEOWNER,
-    createdAt: "2026-03-10T10:00:00Z",
-    updatedAt: "2026-03-23T14:20:00Z",
-    bidCount: 2,
-  },
-];
-
 function SectionCard({
   title,
   icon,
@@ -116,12 +60,13 @@ function SectionCard({
 
 export default function HandymanActiveJobsPage() {
   const { authorized, loading } = useRequireRole("handyman");
+  const jobs: Job[] = [];
 
   if (loading || !authorized) return null;
 
-  const accepted = MY_ACTIVE_JOBS.filter((job) => job.status === "open");
-  const inProgress = MY_ACTIVE_JOBS.filter((job) => job.status === "in-progress");
-  const completed = MY_ACTIVE_JOBS.filter((job) => job.status === "completed");
+  const accepted = jobs.filter((job) => job.status === "open");
+  const inProgress = jobs.filter((job) => job.status === "in-progress");
+  const completed = jobs.filter((job) => job.status === "completed");
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">

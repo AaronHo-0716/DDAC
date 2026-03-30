@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  MapPin,
   Clock,
   ChevronRight,
   Star,
@@ -15,101 +14,8 @@ import StatusBadge from "../components/ui/StatusBadge";
 import SubmitBidModal from "../components/ui/SubmitBidModal";
 import type { Job, JobCategory } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
-
-// ─── Mock data — replace with: jobsService.getJobs({ ...filters }) ─────────
-const MOCK_USER = {
-  id: "u2",
-  name: "Bob Chen",
-  email: "bob@example.com",
-  role: "homeowner" as const,
-  createdAt: "2026-01-01T00:00:00Z",
-};
-
-const MOCK_FEED: (Job & { distanceKm: number })[] = [
-  {
-    id: "10",
-    title: "Water heater not working",
-    description:
-      "Electric water heater stopped heating. Checked circuit breaker — it's fine. Suspect the heating element needs replacement.",
-    category: "Plumbing",
-    location: "Bangsar, Kuala Lumpur",
-    budget: 250,
-    imageUrls: [],
-    status: "open",
-    isEmergency: true,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-11T07:00:00Z",
-    updatedAt: "2026-03-11T07:00:00Z",
-    bidCount: 1,
-    distanceKm: 2.3,
-  },
-  {
-    id: "11",
-    title: "Ceiling fan installation",
-    description:
-      "Need a new ceiling fan installed in the master bedroom. Fan and mounting bracket already purchased, just need the wiring and mounting done.",
-    category: "Electrical",
-    location: "Damansara, Petaling Jaya",
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-10T15:30:00Z",
-    updatedAt: "2026-03-10T15:30:00Z",
-    bidCount: 3,
-    distanceKm: 5.1,
-  },
-  {
-    id: "12",
-    title: "Kitchen cabinet door alignment",
-    description:
-      "Two cabinet doors are misaligned after a recent renovation. They don't close properly. Simple hinge adjustment should fix it.",
-    category: "Carpentry",
-    location: "Subang Jaya",
-    budget: 80,
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-10T10:00:00Z",
-    updatedAt: "2026-03-10T10:00:00Z",
-    bidCount: 0,
-    distanceKm: 8.7,
-  },
-  {
-    id: "13",
-    title: "Washing machine not spinning",
-    description:
-      "Samsung front loader drum stopped spinning mid-cycle. Error code E4 showing on display. Have error code manual but need a technician.",
-    category: "Appliance Repair",
-    location: "Cheras, Kuala Lumpur",
-    budget: 180,
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-09T20:00:00Z",
-    updatedAt: "2026-03-09T20:00:00Z",
-    bidCount: 2,
-    distanceKm: 11.2,
-  },
-  {
-    id: "14",
-    title: "House painting — living room",
-    description:
-      "Need the living room walls repainted. Area is approx 40 sq meters. Will supply paint. Looking for a clean, professional finish.",
-    category: "General Maintenance",
-    location: "Ampang, Kuala Lumpur",
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-09T09:00:00Z",
-    updatedAt: "2026-03-09T09:00:00Z",
-    bidCount: 5,
-    distanceKm: 14.8,
-  },
-];
+import { jobsService } from "../lib/api/jobs";
+import { useAuth } from "../lib/context/AuthContext";
 
 const ALL_CATEGORIES: JobCategory[] = [
   "Plumbing",
@@ -138,9 +44,11 @@ function timeAgo(iso: string) {
 
 function JobFeedCard({
   job,
+  canBid,
   onBid,
 }: {
-  job: (typeof MOCK_FEED)[0];
+  job: Job;
+  canBid: boolean;
   onBid: (id: string) => void;
 }) {
   return (
@@ -159,10 +67,6 @@ function JobFeedCard({
           <div className="flex items-center gap-3 text-xs text-[#6B7280] flex-wrap">
             <span className="px-2 py-0.5 bg-[#F7F8FA] rounded-full font-medium">
               {job.category}
-            </span>
-            <span className="flex items-center gap-1">
-              <MapPin className="w-3 h-3" />
-              {job.distanceKm} km away
             </span>
             <span className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
@@ -192,6 +96,7 @@ function JobFeedCard({
           size="sm"
           variant="primary"
           onClick={() => onBid(job.id)}
+          disabled={!canBid}
           className="flex-1"
         >
           <Star className="w-3.5 h-3.5" /> Submit Bid
@@ -203,21 +108,50 @@ function JobFeedCard({
 
 export default function HandymanPage() {
   const { authorized, loading } = useRequireRole("handyman");
+  const { user } = useAuth();
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<JobCategory | "">("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
-  const [maxDistance, setMaxDistance] = useState(50);
   const [bidJobId, setBidJobId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  const filtered = MOCK_FEED.filter((job) => {
-    if (categoryFilter && job.category !== categoryFilter) return false;
-    if (emergencyOnly && !job.isEmergency) return false;
-    if (job.distanceKm > maxDistance) return false;
-    return true;
-  });
+  useEffect(() => {
+    if (!authorized) return;
+
+    let ignore = false;
+
+    const fetchJobs = async () => {
+      setJobsLoading(true);
+      try {
+        const response = await jobsService.getJobs({ status: "open" });
+        if (!ignore) setJobs(response.data ?? []);
+      } catch {
+        if (!ignore) setJobs([]);
+      } finally {
+        if (!ignore) setJobsLoading(false);
+      }
+    };
+
+    fetchJobs();
+
+    return () => {
+      ignore = true;
+    };
+  }, [authorized]);
+
+  const filtered = useMemo(
+    () =>
+      jobs.filter((job) => {
+        if (categoryFilter && job.category !== categoryFilter) return false;
+        if (emergencyOnly && !job.isEmergency) return false;
+        return true;
+      }),
+    [categoryFilter, emergencyOnly, jobs]
+  );
 
   const activeFilterCount =
-    (categoryFilter ? 1 : 0) + (emergencyOnly ? 1 : 0) + (maxDistance < 50 ? 1 : 0);
+    (categoryFilter ? 1 : 0) + (emergencyOnly ? 1 : 0);
 
   if (loading || !authorized) {
     return null;
@@ -233,8 +167,7 @@ export default function HandymanPage() {
               Jobs Near You
             </h1>
             <p className="text-sm text-[#6B7280] mt-0.5">
-              {filtered.length} open job{filtered.length !== 1 ? "s" : ""} in
-              your area
+              {filtered.length} open job{filtered.length !== 1 ? "s" : ""}
             </p>
           </div>
           <button
@@ -290,21 +223,6 @@ export default function HandymanPage() {
               </div>
             </div>
 
-            {/* Distance */}
-            <div>
-              <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-2">
-                Max distance: {maxDistance} km
-              </p>
-              <input
-                type="range"
-                min={1}
-                max={50}
-                value={maxDistance}
-                onChange={(e) => setMaxDistance(Number(e.target.value))}
-                className="w-full accent-[#0B74FF]"
-              />
-            </div>
-
             {/* Emergency toggle */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -332,7 +250,6 @@ export default function HandymanPage() {
                 onClick={() => {
                   setCategoryFilter("");
                   setEmergencyOnly(false);
-                  setMaxDistance(50);
                 }}
                 className="text-xs text-[#6B7280] hover:text-[#111827] underline"
               >
@@ -343,7 +260,11 @@ export default function HandymanPage() {
         )}
 
         {/* Feed */}
-        {filtered.length === 0 ? (
+        {jobsLoading ? (
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+            <p className="text-[#6B7280] text-sm">Loading jobs...</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
             <p className="text-[#6B7280] text-sm">
               No jobs match your current filters.
@@ -352,7 +273,6 @@ export default function HandymanPage() {
               onClick={() => {
                 setCategoryFilter("");
                 setEmergencyOnly(false);
-                setMaxDistance(50);
               }}
               className="text-[#0B74FF] text-sm font-medium mt-2 hover:underline"
             >
@@ -365,6 +285,7 @@ export default function HandymanPage() {
               <JobFeedCard
                 key={job.id}
                 job={job}
+                canBid={!!user && job.postedBy.id !== user.id}
                 onBid={(id) => setBidJobId(id)}
               />
             ))}
