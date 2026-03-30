@@ -25,18 +25,6 @@ public partial class NeighbourHelpDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-
-        base.OnModelCreating(modelBuilder);
-
-        // This line is the MAGIC fix for PostgreSQL concurrency.
-        // It uses the hidden system column 'xmin' to detect race conditions.
-        modelBuilder.Entity<User>()
-            .UseXminAsConcurrencyToken();
-
-        // Ensure table names and property mappings are correct if you use snake_case in DB
-        modelBuilder.Entity<User>().ToTable("users");
-
-
         modelBuilder.HasPostgresExtension("pgcrypto");
 
         // --- 1. USER ENTITY (Fixed Column Mappings) ---
