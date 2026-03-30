@@ -9,63 +9,6 @@ import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import { useCallback, useEffect, useState } from "react";
 import { jobsService } from "../lib/api/jobs";
 
-const MOCK_USER = {
-  id: "u1",
-  name: "Alice Tan",
-  email: "alice@example.com",
-  role: "homeowner" as const,
-  createdAt: "2026-01-01T00:00:00Z",
-};
-
-const MOCK_JOBS: Job[] = [
-  {
-    id: "201",
-    title: "Leaky kitchen faucet",
-    description:
-      "Persistent dripping from the faucet handle and occasional low pressure.",
-    category: "Plumbing",
-    location: "Kuala Lumpur",
-    budget: 150,
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-15T10:00:00Z",
-    updatedAt: "2026-03-15T10:00:00Z",
-    bidCount: 4,
-  },
-  {
-    id: "202",
-    title: "Ceiling fan installation",
-    description:
-      "Install one fan in master bedroom. Existing wiring point available.",
-    category: "Electrical",
-    location: "Petaling Jaya",
-    budget: 220,
-    imageUrls: [],
-    status: "in-progress",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-13T08:20:00Z",
-    updatedAt: "2026-03-16T09:00:00Z",
-    bidCount: 3,
-  },
-  {
-    id: "203",
-    title: "Cabinet hinge replacement",
-    description: "Replace 3 rusted cabinet hinges and align doors properly.",
-    category: "Carpentry",
-    location: "Shah Alam",
-    imageUrls: [],
-    status: "completed",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-08T09:00:00Z",
-    updatedAt: "2026-03-11T14:30:00Z",
-    bidCount: 5,
-  },
-];
-
 export default function MyJobsPage() {
   // 1. Check authorization
   const { authorized, loading: authLoading } = useRequireRole("homeowner");
@@ -108,6 +51,8 @@ export default function MyJobsPage() {
   }, [authorized, fetchUserJobs]);
 
   // If auth check finished and user isn't a homeowner
+  if (authLoading) return null;
+
   if (!authorized) {
     return (
       <div className="p-8 text-center">

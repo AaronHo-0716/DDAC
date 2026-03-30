@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Bell,
@@ -11,76 +12,45 @@ import PrimaryButton from "../components/ui/PrimaryButton";
 import JobCard from "../components/ui/JobCard";
 import type { Job } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
-
-// ─── Mock data — replace with: const jobs = await jobsService.getMyJobs() ────
-const MOCK_USER = {
-  id: "u1",
-  name: "Alice Tan",
-  email: "alice@example.com",
-  role: "homeowner" as const,
-  createdAt: "2026-01-01T00:00:00Z",
-};
-
-const MOCK_JOBS: Job[] = [
-  {
-    id: "1",
-    title: "Leaky kitchen faucet",
-    description:
-      "My kitchen faucet has been dripping for a week. Looking for a plumber to fix it quickly.",
-    category: "Plumbing",
-    location: "Kuala Lumpur",
-    budget: 150,
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-09T10:00:00Z",
-    updatedAt: "2026-03-09T10:00:00Z",
-    bidCount: 4,
-  },
-  {
-    id: "2",
-    title: "Broken electrical outlet in bedroom",
-    description:
-      "One outlet stopped working after a power surge. Needs urgent inspection.",
-    category: "Electrical",
-    location: "Petaling Jaya",
-    budget: 200,
-    imageUrls: [],
-    status: "in-progress",
-    isEmergency: true,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-08T14:00:00Z",
-    updatedAt: "2026-03-09T08:00:00Z",
-    bidCount: 2,
-  },
-  {
-    id: "3",
-    title: "Cabinet door hinge replacement",
-    description: "Three kitchen cabinet doors need their hinges replaced.",
-    category: "Carpentry",
-    location: "Shah Alam",
-    imageUrls: [],
-    status: "completed",
-    isEmergency: false,
-    postedBy: MOCK_USER,
-    createdAt: "2026-03-05T09:00:00Z",
-    updatedAt: "2026-03-07T11:00:00Z",
-    bidCount: 5,
-  },
-];
+import { jobsService } from "../lib/api/jobs";
 
 export default function DashboardPage() {
   const { authorized, loading } = useRequireRole("homeowner");
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authorized) return;
+
+    let ignore = false;
+
+    const fetchJobs = async () => {
+      setJobsLoading(true);
+      try {
+        const response = await jobsService.getMyJobs();
+        if (!ignore) setJobs(response.data ?? []);
+      } catch {
+        if (!ignore) setJobs([]);
+      } finally {
+        if (!ignore) setJobsLoading(false);
+      }
+    };
+
+    fetchJobs();
+
+    return () => {
+      ignore = true;
+    };
+  }, [authorized]);
 
   if (loading || !authorized) {
     return null;
   }
 
-  const open = MOCK_JOBS.filter((j) => j.status === "open").length;
-  const inProgress = MOCK_JOBS.filter((j) => j.status === "in-progress").length;
-  const completed = MOCK_JOBS.filter((j) => j.status === "completed").length;
-  const recentJobs = [...MOCK_JOBS]
+  const open = jobs.filter((j) => j.status === "open").length;
+  const inProgress = jobs.filter((j) => j.status === "in-progress").length;
+  const completed = jobs.filter((j) => j.status === "completed").length;
+  const recentJobs = [...jobs]
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 2);
 
@@ -92,7 +62,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-[#111827]">My Dashboard</h1>
             <p className="text-sm text-[#6B7280] mt-0.5">
-              {open + inProgress} active · {MOCK_JOBS.length} total jobs
+              {open + inProgress} active · {jobs.length} total jobs
             </p>
           </div>
           <Link href="/create-job">
@@ -108,7 +78,11 @@ export default function DashboardPage() {
             <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
               Recent Jobs
             </p>
-            {MOCK_JOBS.length === 0 ? (
+            {jobsLoading ? (
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+                <p className="text-[#6B7280]">Loading your jobs...</p>
+              </div>
+            ) : jobs.length === 0 ? (
               <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
                 <p className="text-[#6B7280] mb-4">
                   You haven&apos;t posted any jobs yet.
