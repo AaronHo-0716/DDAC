@@ -2,6 +2,9 @@ using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace backend.Services;
 
@@ -9,20 +12,23 @@ public class UserService(NeighbourHelpDbContext context) : IUserService
 {
     public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
     {
-        // 1. Start with the IQueryable
-        var query = context.Users.AsNoTracking(); // AsNoTracking is faster for searches
+        // 1. Start with the IQueryable. 
+        // Changed context.Users to context.users to match your DbContext definition
+        var query = context.users.AsNoTracking();
 
         // 2. Filter by Name (Partial Match)
         if (!string.IsNullOrWhiteSpace(request.Name))
         {
             var nameLower = request.Name.ToLower().Trim();
+            // Using PascalCase 'Name' to match your entity property
             query = query.Where(u => u.Name.ToLower().Contains(nameLower));
         }
 
-        // 3. Filter by Email/User (Partial Match)
+        // 3. Filter by Email (Partial Match)
         if (!string.IsNullOrWhiteSpace(request.Email))
         {
             var emailLower = request.Email.ToLower().Trim();
+            // Using PascalCase 'Email' to match your entity property
             query = query.Where(u => u.Email.ToLower().Contains(emailLower));
         }
 
@@ -36,14 +42,16 @@ public class UserService(NeighbourHelpDbContext context) : IUserService
         // 5. Filter by Active Status
         if (request.IsActive.HasValue)
         {
+            // Using PascalCase 'IsActive' to match your entity property
             query = query.Where(u => u.IsActive == request.IsActive.Value);
         }
 
         // 6. Execute the query
-        var users = await query.ToListAsync();
+        var usersList = await query.ToListAsync();
 
         // 7. Map to DTO
-        return users.Select(u => new UserDto(
+        // Ensure property names match exactly with what is defined in the 'user' entity class
+        return usersList.Select(u => new UserDto(
             u.Id,
             u.Name,
             u.Email,

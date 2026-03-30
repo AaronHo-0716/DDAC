@@ -26,6 +26,8 @@ interface AuthContextValue {
   register: (data: RegisterRequest) => Promise<User>;
   /** Clear session */
   logout: () => Promise<void>;
+  /** Re-fetch current user from backend/mock and update context state */
+  refreshUser: () => Promise<User | null>;
   /** Clears temporary local mock auth users and session */
   resetMockData: () => void;
 }
@@ -90,6 +92,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    const token = getAccessToken();
+    if (!token) {
+      setUser(null);
+      return null;
+    }
+
+    try {
+      const refreshed = await authService.getMe();
+      setUser(refreshed);
+      return refreshed;
+    } catch {
+      clearTokens();
+      setUser(null);
+      return null;
+    }
+  }, []);
+
   const resetMockData = useCallback(() => {
     authService.resetMockData();
     setUser(null);
@@ -97,7 +117,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, submitting, login, register, logout, resetMockData }}
+      value={{
+        user,
+        loading,
+        submitting,
+        login,
+        register,
+        logout,
+        refreshUser,
+        resetMockData,
+      }}
     >
       {children}
     </AuthContext.Provider>

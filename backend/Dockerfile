@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Restore dependencies first - changed path to match your folder
+# Restore dependencies first to cache the layer
 COPY ["backend.csproj", "./"]
 RUN dotnet restore "backend.csproj"
 
@@ -17,5 +17,6 @@ EXPOSE 8080
 
 COPY --from=build /app/publish .
 
-# Important: Changed to backend.dll to match your project name
+# Run as non-root user for security compliance
+USER $APP_UID
 ENTRYPOINT ["dotnet", "backend.dll"]

@@ -7,13 +7,34 @@ import PrimaryButton from "../components/ui/PrimaryButton";
 import ImageUploader from "../components/ui/ImageUploader";
 import type { JobCategory } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
+import { jobsService } from "../lib/api/jobs";
 
 const CATEGORIES: { name: JobCategory; emoji: string; desc: string }[] = [
-  { name: "Plumbing", emoji: "🔧", desc: "Pipes, faucets, drains, water heaters" },
-  { name: "Electrical", emoji: "⚡", desc: "Wiring, outlets, switches, fuse box" },
-  { name: "Carpentry", emoji: "🪚", desc: "Doors, cabinets, shelves, furniture" },
-  { name: "Appliance Repair", emoji: "🔌", desc: "Washer, dryer, AC, refrigerator" },
-  { name: "General Maintenance", emoji: "🏠", desc: "Painting, cleaning, odd jobs" },
+  {
+    name: "Plumbing",
+    emoji: "🔧",
+    desc: "Pipes, faucets, drains, water heaters",
+  },
+  {
+    name: "Electrical",
+    emoji: "⚡",
+    desc: "Wiring, outlets, switches, fuse box",
+  },
+  {
+    name: "Carpentry",
+    emoji: "🪚",
+    desc: "Doors, cabinets, shelves, furniture",
+  },
+  {
+    name: "Appliance Repair",
+    emoji: "🔌",
+    desc: "Washer, dryer, AC, refrigerator",
+  },
+  {
+    name: "General Maintenance",
+    emoji: "🏠",
+    desc: "Painting, cleaning, odd jobs",
+  },
 ];
 
 const STEPS = ["Category", "Details", "Photos", "Review"];
@@ -47,17 +68,15 @@ function ProgressBar({ step }: { step: number }) {
                 i < step
                   ? "bg-[#0B74FF] text-white"
                   : i === step
-                  ? "bg-[#0B74FF] text-white ring-4 ring-blue-100"
-                  : "bg-[#E5E7EB] text-[#9CA3AF]"
-              }`}
-            >
+                    ? "bg-[#0B74FF] text-white ring-4 ring-blue-100"
+                    : "bg-[#E5E7EB] text-[#9CA3AF]"
+              }`}>
               {i < step ? <Check className="w-4 h-4" /> : i + 1}
             </div>
             <span
               className={`text-xs mt-1 font-medium whitespace-nowrap ${
                 i <= step ? "text-[#0B74FF]" : "text-[#9CA3AF]"
-              }`}
-            >
+              }`}>
               {label}
             </span>
           </div>
@@ -96,10 +115,26 @@ export default function CreateJobPage() {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    // TODO: replace with jobsService.createJob({ ...form, budget: form.budget ? Number(form.budget) : undefined })
-    await new Promise((r) => setTimeout(r, 1000));
-    setSubmitting(false);
-    setSubmitted(true);
+    try {
+      await jobsService.createJob({
+        title: form.title,
+        description: form.description,
+        category: form.category as JobCategory,
+        location: form.location,
+        budget: form.budget ? Number(form.budget) : undefined,
+        isEmergency: form.isEmergency,
+        imageUrls: [],
+      });
+      setSubmitting(false);
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitting(false);
+      alert(
+        `Failed to post job: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
   };
 
   if (submitted) {
@@ -111,14 +146,14 @@ export default function CreateJobPage() {
           </div>
           <h2 className="text-xl font-bold text-[#111827] mb-2">Job Posted!</h2>
           <p className="text-[#6B7280] text-sm mb-6">
-            Your job is live. Handymen in your area will start sending bids shortly.
+            Your job is live. Handymen in your area will start sending bids
+            shortly.
           </p>
           <div className="flex gap-3">
             <PrimaryButton
               variant="secondary"
               fullWidth
-              onClick={() => router.push("/dashboard")}
-            >
+              onClick={() => router.push("/dashboard")}>
               Back to Dashboard
             </PrimaryButton>
             <PrimaryButton
@@ -127,8 +162,7 @@ export default function CreateJobPage() {
                 setSubmitted(false);
                 setStep(0);
                 setForm(EMPTY_FORM);
-              }}
-            >
+              }}>
               Post Another
             </PrimaryButton>
           </div>
@@ -170,8 +204,7 @@ export default function CreateJobPage() {
                       form.category === cat.name
                         ? "border-[#0B74FF] bg-blue-50"
                         : "border-[#E5E7EB] hover:border-blue-200 hover:bg-[#F7F8FA]"
-                    }`}
-                  >
+                    }`}>
                     <span className="text-2xl">{cat.emoji}</span>
                     <div className="flex-1">
                       <p
@@ -179,8 +212,7 @@ export default function CreateJobPage() {
                           form.category === cat.name
                             ? "text-[#0B74FF]"
                             : "text-[#111827]"
-                        }`}
-                      >
+                        }`}>
                         {cat.name}
                       </p>
                       <p className="text-xs text-[#6B7280]">{cat.desc}</p>
@@ -212,7 +244,9 @@ export default function CreateJobPage() {
                     type="text"
                     placeholder="e.g. Fix leaky kitchen faucet"
                     value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, title: e.target.value })
+                    }
                     className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF] focus:border-transparent"
                   />
                 </div>
@@ -277,15 +311,13 @@ export default function CreateJobPage() {
                     form.isEmergency
                       ? "border-red-400 bg-red-50"
                       : "border-[#E5E7EB] hover:border-red-200"
-                  }`}
-                >
+                  }`}>
                   <div
                     className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                       form.isEmergency
                         ? "bg-red-500 border-red-500"
                         : "border-[#D1D5DB]"
-                    }`}
-                  >
+                    }`}>
                     {form.isEmergency && (
                       <Check className="w-3 h-3 text-white" />
                     )}
@@ -294,8 +326,7 @@ export default function CreateJobPage() {
                     <p
                       className={`text-sm font-medium flex items-center gap-1.5 ${
                         form.isEmergency ? "text-red-600" : "text-[#111827]"
-                      }`}
-                    >
+                      }`}>
                       <AlertCircle className="w-4 h-4" />
                       Emergency job
                     </p>
@@ -349,13 +380,13 @@ export default function CreateJobPage() {
                   },
                   {
                     label: "Photos",
-                    value: photos.length > 0 ? `${photos.length} selected` : "None",
+                    value:
+                      photos.length > 0 ? `${photos.length} selected` : "None",
                   },
                 ].map(({ label, value }) => (
                   <div
                     key={label}
-                    className="flex flex-col sm:flex-row sm:items-start gap-1 py-3"
-                  >
+                    className="flex flex-col sm:flex-row sm:items-start gap-1 py-3">
                     <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide sm:w-28 flex-shrink-0 mt-0.5">
                       {label}
                     </span>
@@ -374,8 +405,7 @@ export default function CreateJobPage() {
           {step > 0 ? (
             <PrimaryButton
               variant="secondary"
-              onClick={() => setStep(step - 1)}
-            >
+              onClick={() => setStep(step - 1)}>
               <ChevronLeft className="w-4 h-4" /> Back
             </PrimaryButton>
           ) : (
@@ -383,7 +413,9 @@ export default function CreateJobPage() {
           )}
 
           {step < STEPS.length - 1 ? (
-            <PrimaryButton disabled={!canAdvance} onClick={() => setStep(step + 1)}>
+            <PrimaryButton
+              disabled={!canAdvance}
+              onClick={() => setStep(step + 1)}>
               Continue <ChevronRight className="w-4 h-4" />
             </PrimaryButton>
           ) : (
@@ -393,8 +425,7 @@ export default function CreateJobPage() {
                   <svg
                     className="animate-spin w-4 h-4"
                     viewBox="0 0 24 24"
-                    fill="none"
-                  >
+                    fill="none">
                     <circle
                       className="opacity-25"
                       cx="12"

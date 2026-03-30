@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { X, DollarSign, CheckCircle, Truck, Star, Bell } from "lucide-react";
+import Link from "next/link";
+import { Bell, CheckCircle, ChevronLeft, DollarSign, Star, Truck } from "lucide-react";
 import type { Notification, NotificationEventType } from "@/app/types";
+import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import {
   ensureStoredNotifications,
-  readStoredNotifications,
   writeStoredNotifications,
 } from "@/app/lib/mock/notificationsMock";
 
@@ -45,19 +45,12 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-interface NotificationsPanelProps {
-  onClose: () => void;
-}
-
-export default function NotificationsPanel({
-  onClose,
-}: NotificationsPanelProps) {
-  const router = useRouter();
+export default function NotificationsPage() {
+  const { authorized, loading } = useRequireRole(["homeowner", "handyman", "admin"]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
-    const stored = ensureStoredNotifications();
-    setNotifications(stored);
+    setNotifications(ensureStoredNotifications());
   }, []);
 
   const unreadCount = useMemo(
@@ -75,64 +68,45 @@ export default function NotificationsPanel({
 
   const markAllAsRead = useCallback(() => {
     setNotifications((prev) => {
-      if (prev.every((n) => n.read)) return prev;
       const next = prev.map((n) => ({ ...n, read: true }));
       writeStoredNotifications(next);
       return next;
     });
   }, []);
 
-  const handleViewAllNotifications = useCallback(() => {
-    onClose();
-    router.push("/notifications");
-  }, [onClose, router]);
+  if (loading || !authorized) {
+    return null;
+  }
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/25 z-40 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
-
-      {/* Slide-out panel */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-sm bg-white border-l border-[#E5E7EB] shadow-xl z-50 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
-          <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-[#111827]" />
-            <h2 className="text-base font-bold text-[#111827]">
-              Notifications
-            </h2>
-            {unreadCount > 0 && (
-              <span className="bg-[#0B74FF] text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {unreadCount}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="text-xs text-[#0B74FF] hover:underline font-medium"
-              >
-                Mark all read
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F7F8FA] hover:text-[#111827] transition-colors"
+    <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+          <div>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1 text-sm text-[#6B7280] hover:text-[#111827] mb-2"
             >
-              <X className="w-4 h-4" />
-            </button>
+              <ChevronLeft className="w-4 h-4" /> Back
+            </Link>
+            <h1 className="text-2xl font-bold text-[#111827]">All Notifications</h1>
+            <p className="text-sm text-[#6B7280] mt-1">{unreadCount} unread</p>
           </div>
+
+          {unreadCount > 0 && (
+            <button
+              onClick={markAllAsRead}
+              className="text-sm font-medium text-[#0B74FF] hover:underline"
+            >
+              Mark all read
+            </button>
+          )}
         </div>
 
-        {/* Notification list */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="bg-white border border-[#E5E7EB] rounded-2xl overflow-hidden">
           {notifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-[#9CA3AF] gap-3">
-              <Bell className="w-10 h-10" />
+            <div className="p-12 text-center text-[#9CA3AF]">
+              <Bell className="w-9 h-9 mx-auto mb-3" />
               <p className="text-sm">No notifications yet</p>
             </div>
           ) : (
@@ -147,30 +121,23 @@ export default function NotificationsPanel({
                       !notif.read ? "bg-blue-50/40" : ""
                     }`}
                   >
-                    {/* Icon */}
                     <div
                       className={`w-9 h-9 ${cfg.bg} ${cfg.color} rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5`}
                     >
                       {cfg.icon}
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <p
                         className={`text-sm leading-snug ${
-                          notif.read
-                            ? "text-[#374151]"
-                            : "text-[#111827] font-medium"
+                          notif.read ? "text-[#374151]" : "text-[#111827] font-medium"
                         }`}
                       >
                         {notif.message}
                       </p>
-                      <p className="text-xs text-[#9CA3AF] mt-1">
-                        {timeAgo(notif.createdAt)}
-                      </p>
+                      <p className="text-xs text-[#9CA3AF] mt-1">{timeAgo(notif.createdAt)}</p>
                     </div>
 
-                    {/* Unread dot */}
                     {!notif.read && (
                       <div className="w-2 h-2 rounded-full bg-[#0B74FF] flex-shrink-0 mt-2" />
                     )}
@@ -180,17 +147,7 @@ export default function NotificationsPanel({
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-[#E5E7EB]">
-          <button
-            onClick={handleViewAllNotifications}
-            className="w-full text-center text-sm text-[#0B74FF] hover:underline font-medium py-1"
-          >
-            View all notifications
-          </button>
-        </div>
       </div>
-    </>
+    </div>
   );
 }

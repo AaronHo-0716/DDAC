@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
     // to the ASP.NET backend. The browser never needs to know the backend URL.
     // API_URL is a server-side-only env var (no NEXT_PUBLIC_ prefix), so it can
     // be injected at container start time via docker-compose / K8s secrets.
-    const backendUrl = process.env.API_URL ?? "http://localhost:5000";
+    const backendUrl = process.env.API_URL ?? "http://localhost:5073";
     return [
       {
         source: "/api/proxy/:path*",
