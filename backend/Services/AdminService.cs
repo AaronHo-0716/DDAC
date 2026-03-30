@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace backend.Services;
 
-public class UserService(NeighbourHelpDbContext context) : IUserService
+public class AdminService(NeighbourHelpDbContext context) : IAdminService
 {
     public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
     {
