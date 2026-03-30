@@ -3,33 +3,33 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class bid
+public partial class Bid
 {
-    public Guid id { get; set; }
+    public Guid Id { get; set; }
 
-    public Guid job_id { get; set; }
+    public Guid Job_Id { get; set; }
 
-    public Guid handyman_user_id { get; set; }
+    public Guid Handyman_User_Id { get; set; }
 
-    public decimal price { get; set; }
+    public decimal Price { get; set; }
 
-    public DateTime estimated_arrival_utc { get; set; }
+    public DateTime Estimated_Arrival_Utc { get; set; }
 
-    public string message { get; set; } = null!;
+    public string Message { get; set; } = null!;
 
-    public string status { get; set; } = null!;
+    public string Status { get; set; } = null!;
 
-    public bool is_recommended { get; set; }
+    public bool Is_Recommended { get; set; }
 
-    public DateTime created_at_utc { get; set; }
+    public DateTime Created_At_Utc { get; set; }
 
-    public DateTime updated_at_utc { get; set; }
+    public DateTime Updated_At_Utc { get; set; }
 
-    public virtual bid_lock? bid_lock { get; set; }
+    public virtual Bid_Lock? Bid_Lock { get; set; }
 
-    public virtual ICollection<bid_transaction> bid_transactions { get; set; } = new List<bid_transaction>();
+    public virtual ICollection<Bid_Transaction> Bid_Transactions { get; set; } = new List<Bid_Transaction>();
 
-    public virtual user handyman_user { get; set; } = null!;
+    public virtual User Handyman_User { get; set; } = null!;
 
-    public virtual job job { get; set; } = null!;
+    public virtual Job Job { get; set; } = null!;
 }

@@ -3,23 +3,23 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class admin_action
+public partial class Admin_Action
 {
-    public Guid id { get; set; }
+    public Guid Id { get; set; }
 
-    public Guid admin_user_id { get; set; }
+    public Guid Admin_User_Id { get; set; }
 
-    public string action_type { get; set; } = null!;
+    public string Action_Type { get; set; } = null!;
 
-    public string target_type { get; set; } = null!;
+    public string Target_Type { get; set; } = null!;
 
-    public Guid target_id { get; set; }
+    public Guid Target_Id { get; set; }
 
-    public string? reason { get; set; }
+    public string? Reason { get; set; }
 
-    public string payload { get; set; } = null!;
+    public string Payload { get; set; } = null!;
 
-    public DateTime created_at_utc { get; set; }
+    public DateTime Created_At_Utc { get; set; }
 
-    public virtual user admin_user { get; set; } = null!;
+    public virtual User Admin_User { get; set; } = null!;
 }

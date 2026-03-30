@@ -3,19 +3,19 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class job_image
+public partial class Job_Image
 {
-    public Guid id { get; set; }
+    public Guid Id { get; set; }
 
-    public Guid job_id { get; set; }
+    public Guid Job_Id { get; set; }
 
-    public string image_url { get; set; } = null!;
+    public string Image_Url { get; set; } = null!;
 
-    public string object_key { get; set; } = null!;
+    public string Object_Key { get; set; } = null!;
 
-    public int sort_order { get; set; }
+    public int Sort_Order { get; set; }
 
-    public DateTime created_at_utc { get; set; }
+    public DateTime Created_At_Utc { get; set; }
 
-    public virtual job job { get; set; } = null!;
+    public virtual Job Job { get; set; } = null!;
 }

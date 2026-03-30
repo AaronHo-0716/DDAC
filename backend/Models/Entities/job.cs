@@ -3,41 +3,41 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class job
+public partial class Job
 {
-    public Guid id { get; set; }
+    public Guid Id { get; set; }
 
-    public Guid posted_by_user_id { get; set; }
+    public Guid Posted_By_User_Id { get; set; }
 
-    public string title { get; set; } = null!;
+    public string Title { get; set; } = null!;
 
-    public string description { get; set; } = null!;
+    public string Description { get; set; } = null!;
 
-    public string category { get; set; } = null!;
+    public string Category { get; set; } = null!;
 
-    public string location_text { get; set; } = null!;
+    public string Location_Text { get; set; } = null!;
 
-    public decimal? latitude { get; set; }
+    public decimal? Latitude { get; set; }
 
-    public decimal? longitude { get; set; }
+    public decimal? Longitude { get; set; }
 
-    public decimal? budget { get; set; }
+    public decimal? Budget { get; set; }
 
-    public string status { get; set; } = null!;
+    public string Status { get; set; } = null!;
 
-    public bool is_emergency { get; set; }
+    public bool Is_Emergency { get; set; }
 
-    public DateTime created_at_utc { get; set; }
+    public DateTime Created_At_Utc { get; set; }
 
-    public DateTime updated_at_utc { get; set; }
+    public DateTime Updated_At_Utc { get; set; }
 
-    public virtual bid? bid { get; set; }
+    public virtual Bid? Bid { get; set; }
 
-    public virtual ICollection<bid_transaction> bid_transactions { get; set; } = new List<bid_transaction>();
+    public virtual ICollection<Bid_Transaction> Bid_Transactions { get; set; } = new List<Bid_Transaction>();
 
-    public virtual ICollection<job_image> job_images { get; set; } = new List<job_image>();
+    public virtual ICollection<Job_Image> Job_Images { get; set; } = new List<Job_Image>();
 
-    public virtual ICollection<notification> notifications { get; set; } = new List<notification>();
+    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
-    public virtual user posted_by_user { get; set; } = null!;
+    public virtual User Posted_By_User { get; set; } = null!;
 }

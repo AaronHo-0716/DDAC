@@ -19,7 +19,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
             throw new HttpRequestException("Email and password are required.", null, HttpStatusCode.BadRequest);
 
-        var user = await context.users
+        var user = await context.Users
             .FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
@@ -47,11 +47,11 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
 
         // 4. Duplicate email check
         var emailLower = request.Email.ToLower().Trim();
-        if (await context.users.AnyAsync(u => u.Email == emailLower))
+        if (await context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("Email already exists.", null, HttpStatusCode.Conflict);
 
         // 5. Create new user
-        var newUser = new user
+        var newUser = new User
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
@@ -61,7 +61,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
             IsActive = true
         };
 
-        context.users.Add(newUser);
+        context.Users.Add(newUser);
         await context.SaveChangesAsync();
 
         return GenerateAuthResponse(newUser);
@@ -69,7 +69,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
 
     public async Task<UserDto> GetUserById(Guid userId)
     {
-        var user = await context.users.FindAsync(userId);
+        var user = await context.Users.FindAsync(userId);
         if (user == null) throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
         return MapToDto(user);
     }
@@ -84,7 +84,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         ));
     }
 
-    private AuthResponse GenerateAuthResponse(user user)
+    private AuthResponse GenerateAuthResponse(User user)
     {
         var (token, expiresIn) = CreateJwtToken(user);
         return new AuthResponse(
@@ -93,11 +93,11 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         );
     }
 
-    private static UserDto MapToDto(user user) => new(
+    private static UserDto MapToDto(User user) => new(
         user.Id, user.Name, user.Email, user.Role, user.AvatarUrl, user.Rating, user.CreatedAtUtc, user.IsActive
     );
 
-    private (string Token, int ExpiresIn) CreateJwtToken(user user)
+    private (string Token, int ExpiresIn) CreateJwtToken(User user)
     {
         var expiryMinutes = config.GetValue<int>("Jwt:ExpiryInMinutes", 1440);
         var expiration = DateTime.UtcNow.AddMinutes(expiryMinutes);

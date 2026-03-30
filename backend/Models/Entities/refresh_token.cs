@@ -3,25 +3,25 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class refresh_token
+public partial class Refresh_Token
 {
-    public Guid id { get; set; }
+    public Guid Id { get; set; }
 
-    public Guid user_id { get; set; }
+    public Guid User_Id { get; set; }
 
-    public string token_hash { get; set; } = null!;
+    public string Token_Hash { get; set; } = null!;
 
-    public DateTime expires_at_utc { get; set; }
+    public DateTime Expires_At_Utc { get; set; }
 
-    public DateTime? revoked_at_utc { get; set; }
+    public DateTime? Revoked_At_Utc { get; set; }
 
-    public string? replaced_by_token_hash { get; set; }
+    public string? Replaced_By_Token_Hash { get; set; }
 
-    public string? user_agent { get; set; }
+    public string? User_Agent { get; set; }
 
-    public string? ip_address { get; set; }
+    public string? Ip_Address { get; set; }
 
-    public DateTime created_at_utc { get; set; }
+    public DateTime Created_At_Utc { get; set; }
 
-    public virtual user user { get; set; } = null!;
+    public virtual User User { get; set; } = null!;
 }
