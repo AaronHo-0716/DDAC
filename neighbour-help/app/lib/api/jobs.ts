@@ -1,4 +1,4 @@
-import { CreateJobRequest, Job, PaginatedResponse } from "@/app/types";
+import { CreateJobRequest, Job, JobListResponse } from "@/app/types";
 import { apiClient } from "./client";
 
 export interface JobsQueryParams {
@@ -16,21 +16,21 @@ export const jobsService = {
    * GET /api/jobs
    * Fetch paginated list of jobs (handyman feed / browse).
    */
-  async getJobs(params: JobsQueryParams = {}): Promise<PaginatedResponse<Job>> {
+  async getJobs(params: JobsQueryParams = {}): Promise<JobListResponse> {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null) query.set(k, String(v));
     });
     const qs = query.toString();
-    return apiClient.get<PaginatedResponse<Job>>(`/jobs${qs ? `?${qs}` : ""}`);
+    return apiClient.get<JobListResponse>(`/jobs${qs ? `?${qs}` : ""}`);
   },
 
   /**
    * GET /api/jobs/my
    * Fetch jobs posted by the currently authenticated homeowner.
    */
-  async getMyJobs(): Promise<PaginatedResponse<Job>> {
-    return apiClient.get<PaginatedResponse<Job>>("/jobs/my");
+  async getMyJobs(): Promise<JobListResponse> {
+    return apiClient.get<JobListResponse>("/jobs/my");
   },
 
   /**
