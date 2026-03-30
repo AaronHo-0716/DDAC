@@ -8,14 +8,14 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/users")]
 [Authorize(Roles = "admin")]
-public class UserController(IUserService userService) : ControllerBase
+public class AdminController(IAdminService adminService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers([FromQuery] UserSearchRequest request)
     {
         try
         {
-            var users = await userService.GetAllUsers(request);
+            var users = await adminService.GetAllUsers(request);
             return Ok(users);
         }
         catch (Exception ex)

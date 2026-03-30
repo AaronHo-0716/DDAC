@@ -8,6 +8,7 @@ namespace backend.Controllers;
 
 [ApiController]
 [Route("api/jobs")]
+[Authorize(Roles = "admin, handyman, houseowner")]
 public class JobController(IJobService jobService) : ControllerBase
 {
     /// <summary>
