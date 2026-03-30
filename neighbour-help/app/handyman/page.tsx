@@ -5,17 +5,14 @@ import Link from "next/link";
 import {
   Clock,
   ChevronRight,
-  Star,
   Filter,
   Zap,
 } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import StatusBadge from "../components/ui/StatusBadge";
-import SubmitBidModal from "../components/ui/SubmitBidModal";
 import type { Job, JobCategory } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
 import { jobsService } from "../lib/api/jobs";
-import { useAuth } from "../lib/context/AuthContext";
 
 const ALL_CATEGORIES: JobCategory[] = [
   "Plumbing",
@@ -44,12 +41,8 @@ function timeAgo(iso: string) {
 
 function JobFeedCard({
   job,
-  canBid,
-  onBid,
 }: {
   job: Job;
-  canBid: boolean;
-  onBid: (id: string) => void;
 }) {
   return (
     <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
@@ -92,15 +85,6 @@ function JobFeedCard({
             View Details <ChevronRight className="w-3.5 h-3.5" />
           </PrimaryButton>
         </Link>
-        <PrimaryButton
-          size="sm"
-          variant="primary"
-          onClick={() => onBid(job.id)}
-          disabled={!canBid}
-          className="flex-1"
-        >
-          <Star className="w-3.5 h-3.5" /> Submit Bid
-        </PrimaryButton>
       </div>
     </div>
   );
@@ -108,12 +92,10 @@ function JobFeedCard({
 
 export default function HandymanPage() {
   const { authorized, loading } = useRequireRole("handyman");
-  const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<JobCategory | "">("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
-  const [bidJobId, setBidJobId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
@@ -125,7 +107,7 @@ export default function HandymanPage() {
       setJobsLoading(true);
       try {
         const response = await jobsService.getJobs({ status: "open" });
-        if (!ignore) setJobs(response.data ?? []);
+        if (!ignore) setJobs(response.jobs ?? []);
       } catch {
         if (!ignore) setJobs([]);
       } finally {
@@ -282,24 +264,11 @@ export default function HandymanPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {filtered.map((job) => (
-              <JobFeedCard
-                key={job.id}
-                job={job}
-                canBid={!!user && job.postedBy.id !== user.id}
-                onBid={(id) => setBidJobId(id)}
-              />
+              <JobFeedCard key={job.id} job={job} />
             ))}
           </div>
         )}
       </div>
-
-      {bidJobId && (
-        <SubmitBidModal
-          jobId={bidJobId}
-          onClose={() => setBidJobId(null)}
-          onSuccess={() => setBidJobId(null)}
-        />
-      )}
     </div>
   );
 }

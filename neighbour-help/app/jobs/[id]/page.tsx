@@ -1,255 +1,346 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  MapPin,
-  Calendar,
-  DollarSign,
-} from "lucide-react";
-import PrimaryButton from "../../components/ui/PrimaryButton";
-import StatusBadge from "../../components/ui/StatusBadge";
-import SubmitBidModal from "../../components/ui/SubmitBidModal";
-import BidCard from "../../components/ui/BidCard";
-import type { Job, Bid } from "../../types";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Trash2, X } from "lucide-react";
+import type { Job, JobCategory } from "@/app/types";
+import { jobsService } from "@/app/lib/api/jobs";
 import { useAuth } from "@/app/lib/context/AuthContext";
+import PrimaryButton from "@/app/components/ui/PrimaryButton";
+import StatusBadge from "@/app/components/ui/StatusBadge";
 
-// ─── Mock data — replace with: jobsService.getJobById(id) / bidsService.getBidsForJob(id) ─
-const MOCK_USER = {
-  id: "u1",
-  name: "Alice Tan",
-  email: "alice@example.com",
-  role: "homeowner" as const,
-  createdAt: "2026-01-01T00:00:00Z",
-};
-
-const MOCK_JOB: Job = {
-  id: "1",
-  title: "Leaky kitchen faucet",
-  description:
-    "My kitchen faucet has been dripping continuously for about a week causing water wastage and annoying noise. The drip appears to come from the base of the tap handle. I've tried tightening it myself but the issue persists. Looking for an experienced plumber to diagnose and fix it properly using quality parts.",
-  category: "Plumbing",
-  location: "Taman Desa, Kuala Lumpur",
-  budget: 150,
-  imageUrls: [],
-  status: "open",
-  isEmergency: false,
-  postedBy: MOCK_USER,
-  createdAt: "2026-03-09T10:00:00Z",
-  updatedAt: "2026-03-09T10:00:00Z",
-  bidCount: 2,
-};
-
-const MOCK_BIDS: Bid[] = [
-  {
-    id: "b1",
-    jobId: "1",
-    handyman: {
-      id: "h1",
-      name: "Mike Rahman",
-      email: "mike@example.com",
-      role: "handyman",
-      rating: 4.9,
-      createdAt: "2025-01-01T00:00:00Z",
-    },
-    price: 95,
-    estimatedArrival: "2026-03-12T09:00:00Z",
-    message:
-      "I can fix this quickly! I have all the parts needed. Been doing plumbing for 8 years with 200+ happy customers.",
-    status: "pending",
-    isRecommended: true,
-    createdAt: "2026-03-09T12:00:00Z",
-  },
-  {
-    id: "b2",
-    jobId: "1",
-    handyman: {
-      id: "h2",
-      name: "David Lim",
-      email: "david@example.com",
-      role: "handyman",
-      rating: 4.7,
-      createdAt: "2025-06-01T00:00:00Z",
-    },
-    price: 120,
-    estimatedArrival: "2026-03-12T14:00:00Z",
-    message:
-      "Experienced plumber, 6 years. Will do a thorough inspection and fix properly. Price includes all parts.",
-    status: "pending",
-    isRecommended: false,
-    createdAt: "2026-03-09T14:00:00Z",
-  },
+const ALL_CATEGORIES: JobCategory[] = [
+  "Plumbing",
+  "Electrical",
+  "Carpentry",
+  "Appliance Repair",
+  "General Maintenance",
 ];
 
-export default function JobDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
-  const { user } = useAuth();
-  const [showBidModal, setShowBidModal] = useState(false);
-  const [bids, setBids] = useState<Bid[]>(MOCK_BIDS);
+interface EditForm {
+  title: string;
+  description: string;
+  category: JobCategory;
+  location: string;
+  budget: string;
+  isEmergency: boolean;
+}
 
-  // TODO: const job = await jobsService.getJobById(id)
-  const job = MOCK_JOB;
-  void id; // used once backend is wired
-
-  const canSubmitBid =
-    job.status === "open" &&
-    !!user &&
-    user.role === "handyman" &&
-    job.postedBy.id !== user.id;
-
-  const handleAcceptBid = (bidId: string) => {
-    // TODO: bidsService.acceptBid(bidId)
-    setBids((prev) =>
-      prev.map((b) =>
-        b.id === bidId ? { ...b, status: "accepted" } : { ...b, status: "rejected" }
-      )
-    );
+function toEditForm(job: Job): EditForm {
+  return {
+    title: job.title,
+    description: job.description,
+    category: job.category,
+    location: job.location,
+    budget: typeof job.budget === "number" ? String(job.budget) : "",
+    isEmergency: job.isEmergency,
   };
+}
+
+export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const { user } = useAuth();
+
+  const [job, setJob] = useState<Job | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [form, setForm] = useState<EditForm | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadJob = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await jobsService.getJobById(id);
+        if (!ignore) {
+          setJob(data);
+          setForm(toEditForm(data));
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError(err instanceof Error ? err.message : "Unable to load job.");
+          setJob(null);
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+
+    loadJob();
+
+    return () => {
+      ignore = true;
+    };
+  }, [id]);
+
+  const isOwner = useMemo(() => {
+    if (!job || !user) return false;
+    return user.role === "homeowner" && user.id === job.postedBy.id;
+  }, [job, user]);
+
+  const canEdit = !!job && isOwner;
+
+  const hasChanges = useMemo(() => {
+    if (!job || !form) return false;
+
+    return (
+      form.title.trim() !== job.title ||
+      form.description.trim() !== job.description ||
+      form.category !== job.category ||
+      form.location.trim() !== job.location ||
+      form.budget.trim() !== (typeof job.budget === "number" ? String(job.budget) : "") ||
+      form.isEmergency !== job.isEmergency
+    );
+  }, [form, job]);
+
+  const handleSave = async () => {
+    if (!job || !form || !hasChanges) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const updated = await jobsService.updateJob(job.id, {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        category: form.category,
+        location: form.location.trim(),
+        budget: form.budget.trim() ? Number(form.budget) : undefined,
+        isEmergency: form.isEmergency,
+      });
+      setJob(updated);
+      setForm(toEditForm(updated));
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update job.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!job) return;
+
+    const confirmed = window.confirm("Delete this job? This action cannot be undone.");
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      await jobsService.deleteJob(job.id);
+      router.push("/my-jobs");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete job.");
+      setDeleting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
+          <p className="text-sm text-[#6B7280]">Loading job...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
+          <Link
+            href="/my-jobs"
+            className="inline-flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-6"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Link>
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
+            <p className="text-sm text-red-700">{error ?? "Job not found."}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const backHref = user?.role === "handyman" ? "/handyman" : "/my-jobs";
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-4xl mx-auto space-y-5">
         <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-6 transition-colors"
+          href={backHref}
+          className="inline-flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827]"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          <ArrowLeft className="w-4 h-4" /> Back
         </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── Main content  2/3 ── */}
-          <div className="lg:col-span-2 space-y-5">
-            {/* Job header */}
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-              <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 bg-blue-50 text-[#0B74FF] text-xs font-semibold rounded-full">
-                    {job.category}
-                  </span>
-                  {job.isEmergency && <StatusBadge status="emergency" />}
-                  <StatusBadge status={job.status} />
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-[#6B7280]">
-                  <Calendar className="w-3.5 h-3.5" />
-                  Posted{" "}
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <StatusBadge status={job.status} />
+              {job.isEmergency && <StatusBadge status="emergency" />}
+              <span className="px-2 py-0.5 bg-[#F7F8FA] rounded-full text-xs font-medium text-[#374151]">
+                {job.category}
+              </span>
+            </div>
+
+            {canEdit && !editing && (
+              <div className="flex items-center gap-2">
+                <PrimaryButton size="sm" variant="secondary" onClick={() => setEditing(true)}>
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </PrimaryButton>
+                <PrimaryButton
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Deleting..." : "Delete"}
+                </PrimaryButton>
+              </div>
+            )}
+          </div>
+
+          {!editing ? (
+            <>
+              <h1 className="text-2xl font-bold text-[#111827] mb-3">{job.title}</h1>
+
+              <div className="flex items-center gap-4 text-sm text-[#6B7280] flex-wrap mb-4">
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4" /> {job.location}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4" />
                   {new Date(job.createdAt).toLocaleDateString("en-MY", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
                   })}
-                </div>
-              </div>
-              <h1 className="text-2xl font-bold text-[#111827] mb-3">
-                {job.title}
-              </h1>
-              <div className="flex items-center gap-5 text-sm text-[#6B7280] flex-wrap">
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4" />
-                  {job.location}
                 </span>
-                {job.budget && (
-                  <span className="flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4" />
-                    Budget: RM {job.budget}
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4" /> Budget: RM {job.budget ?? "-"}
+                </span>
               </div>
-            </div>
 
-            {/* Image gallery */}
-            {job.imageUrls.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-                <p className="text-sm font-semibold text-[#111827] mb-3">
-                  Photos
-                </p>
-                <div className="bg-[#F7F8FA] rounded-xl h-40 flex items-center justify-center text-sm text-[#9CA3AF]">
-                  No photos uploaded for this job
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-                <p className="text-sm font-semibold text-[#111827] mb-3">
-                  Photos
-                </p>
-                <div className="grid grid-cols-3 gap-3">
-                  {job.imageUrls.map((url, i) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={i}
-                      src={url}
-                      alt={`Job photo ${i + 1}`}
-                      className="rounded-xl h-32 w-full object-cover"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Description */}
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-              <p className="text-sm font-semibold text-[#111827] mb-3">
-                Description
-              </p>
-              <p className="text-[#374151] text-sm leading-relaxed">
-                {job.description}
-              </p>
-            </div>
-
-            {/* CTA for handymen */}
-            {canSubmitBid && (
-              <div className="bg-[#0B74FF] rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
-                <div className="text-white">
-                  <p className="font-semibold">Are you a handyman?</p>
-                  <p className="text-blue-100 text-sm">
-                    Submit your bid and win this job
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowBidModal(true)}
-                  className="bg-white text-[#0B74FF] font-semibold text-sm px-5 py-2.5 rounded-xl hover:bg-blue-50 transition-colors flex-shrink-0"
-                >
-                  Submit Bid
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Bids sidebar 1/3 ── */}
-          <div>
-            <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-3">
-              {bids.length} Bid{bids.length !== 1 ? "s" : ""} Received
-            </p>
-            <div className="space-y-3">
-              {bids.map((bid) => (
-                <BidCard
-                  key={bid.id}
-                  bid={bid}
-                  onAccept={handleAcceptBid}
-                  onMessage={() => {}}
+              <p className="text-sm text-[#374151] leading-relaxed whitespace-pre-wrap">{job.description}</p>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#111827] mb-1.5">Title</label>
+                <input
+                  value={form?.title ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => (prev ? { ...prev, title: e.target.value } : prev))
+                  }
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
                 />
-              ))}
-              {bids.length === 0 && (
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 text-center text-sm text-[#6B7280]">
-                  No bids yet. Share your job to get more visibility.
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#111827] mb-1.5">Description</label>
+                <textarea
+                  rows={5}
+                  value={form?.description ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => (prev ? { ...prev, description: e.target.value } : prev))
+                  }
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF] resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#111827] mb-1.5">Category</label>
+                  <select
+                    value={form?.category ?? "Plumbing"}
+                    onChange={(e) =>
+                      setForm((prev) =>
+                        prev ? { ...prev, category: e.target.value as JobCategory } : prev
+                      )
+                    }
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                  >
+                    {ALL_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-sm font-medium text-[#111827] mb-1.5">Budget (RM)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form?.budget ?? ""}
+                    onChange={(e) =>
+                      setForm((prev) => (prev ? { ...prev, budget: e.target.value } : prev))
+                    }
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#111827] mb-1.5">Location</label>
+                <input
+                  value={form?.location ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => (prev ? { ...prev, location: e.target.value } : prev))
+                  }
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                />
+              </div>
+
+              <label className="inline-flex items-center gap-2 text-sm text-[#111827]">
+                <input
+                  type="checkbox"
+                  checked={form?.isEmergency ?? false}
+                  onChange={(e) =>
+                    setForm((prev) => (prev ? { ...prev, isEmergency: e.target.checked } : prev))
+                  }
+                />
+                Emergency job
+              </label>
+
+              <div className="flex items-center gap-2 pt-1">
+                <PrimaryButton onClick={handleSave} disabled={!hasChanges || saving}>
+                  <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save"}
+                </PrimaryButton>
+                <PrimaryButton
+                  variant="secondary"
+                  onClick={() => {
+                    setForm(toEditForm(job));
+                    setEditing(false);
+                  }}
+                  disabled={saving}
+                >
+                  <X className="w-4 h-4" /> Cancel
+                </PrimaryButton>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
-
-      {showBidModal && canSubmitBid && (
-        <SubmitBidModal
-          jobId={job.id}
-          onClose={() => setShowBidModal(false)}
-          onSuccess={() => setShowBidModal(false)}
-        />
-      )}
     </div>
   );
 }

@@ -28,7 +28,7 @@ export default function DashboardPage() {
       setJobsLoading(true);
       try {
         const response = await jobsService.getMyJobs();
-        if (!ignore) setJobs(response.data ?? []);
+        if (!ignore) setJobs(response.jobs ?? []);
       } catch {
         if (!ignore) setJobs([]);
       } finally {

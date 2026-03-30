@@ -10,6 +10,7 @@ export interface User {
   avatarUrl?: string;
   rating?: number;
   createdAt: string;
+  isActive?: boolean;
 }
 
 export interface AuthTokens {
@@ -153,11 +154,17 @@ export interface ApiError {
 
 export interface PaginatedResponse<T> {
   data: T[];
-  jobs: T[]; // Alias for "data" to match your API response
   total: number;
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+export interface JobListResponse {
+  jobs: Job[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────
