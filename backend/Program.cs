@@ -145,6 +145,3 @@ app.MapControllers();
 app.MapGet("/", () => "NeighborHelp API is running...");
 
 app.Run();
-
-// CRITICAL FOR TESTING: This makes the Program class visible to the Test Project
-public partial class Program { }

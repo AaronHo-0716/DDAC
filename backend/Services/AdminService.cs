@@ -12,35 +12,44 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
 {
     public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
     {
-        // Use AsNoTracking for read-only operations to improve performance 
-        // and avoid unnecessary locking/tracking.
+        // 1. Start with the IQueryable. 
         var query = context.Users.AsNoTracking();
 
+        // 2. Filter by Name (Partial Match)
         if (!string.IsNullOrWhiteSpace(request.Name))
         {
             var nameLower = request.Name.ToLower().Trim();
+            // Using PascalCase 'Name' to match your entity property
             query = query.Where(u => u.Name.ToLower().Contains(nameLower));
         }
 
+        // 3. Filter by Email (Partial Match)
         if (!string.IsNullOrWhiteSpace(request.Email))
         {
             var emailLower = request.Email.ToLower().Trim();
+            // Using PascalCase 'Email' to match your entity property
             query = query.Where(u => u.Email.ToLower().Contains(emailLower));
         }
 
+        // 4. Filter by Role (STRICT match)
         if (request.Role.HasValue)
         {
             var targetRole = request.Role.Value.ToString().ToLower();
             query = query.Where(u => u.Role == targetRole);
         }
 
+        // 5. Filter by Active Status
         if (request.IsActive.HasValue)
         {
+            // Using PascalCase 'IsActive' to match your entity property
             query = query.Where(u => u.IsActive == request.IsActive.Value);
         }
 
+        // 6. Execute the query
         var usersList = await query.ToListAsync();
 
+        // 7. Map to DTO
+        // Ensure property names match exactly with what is defined in the 'user' entity class
         return usersList.Select(u => new UserDto(
             u.Id,
             u.Name,
@@ -51,41 +60,5 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
             u.CreatedAtUtc,
             u.IsActive
         ));
-    }
-
-    /// <summary>
-    /// Example of a write operation using Transactions and Concurrency checks
-    /// to avoid race conditions when updating user status.
-    /// </summary>
-    public async Task<bool> UpdateUserStatus(Guid userId, bool isActive)
-    {
-        // Use an explicit transaction if multiple steps are involved
-        using var transaction = await context.Database.BeginTransactionAsync();
-
-        try
-        {
-            var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user == null) return false;
-
-            user.IsActive = isActive;
-
-            // SaveChangesAsync will throw a DbUpdateConcurrencyException if the 
-            // record was changed by someone else between our 'Fetch' and 'Save'.
-            await context.SaveChangesAsync();
-
-            await transaction.CommitAsync();
-            return true;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            // Roll back the transaction if a race condition is detected
-            await transaction.RollbackAsync();
-            throw;
-        }
-        catch (Exception)
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
     }
 }
