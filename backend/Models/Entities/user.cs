@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations; // REQUIRED for [Key] and [Timestamp]
+using System.ComponentModel.DataAnnotations.Schema; // Useful for additional DB mapping
 
 namespace backend.Models.Entities;
 
 public partial class User
 {
+    [Key]
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
