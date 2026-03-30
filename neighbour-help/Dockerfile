@@ -1,34 +1,40 @@
-# Stage 1: Dependencies
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+# syntax=docker/dockerfile:1
 
-# Stage 2: Builder
-FROM node:20-alpine AS builder
+FROM node:20-alpine AS base
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Stage 1: install dependencies
+FROM base AS deps
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+# Stage 2: build Next.js app
+FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Disable Next.js telemetry
-ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Stage 3: Runner
+# Stage 3: minimal runtime image
 FROM node:20-alpine AS runner
 WORKDIR /app
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Runtime backend target for Next.js rewrites.
+# Override this in docker-compose/Kubernetes as needed.
+ENV API_URL=http://localhost:5073
+
+RUN addgroup --system --gid 1001 nodejs \
+	&& adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
-# Automatically leverage output traces to reduce image size
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 EXPOSE 3000
-ENV PORT=3000
 
 CMD ["node", "server.js"]

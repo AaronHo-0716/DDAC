@@ -1,25 +1,19 @@
-name: neighbourhelp
+name: neighbourhelp-frontend
 
 services:
-  # PostgreSQL only (frontend/backend are not included yet)
-  db:
-    image: postgres:16-alpine
-    container_name: neighbourhelp-postgres
+  frontend:
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: neighbour-help-frontend:latest
+    container_name: neighbour-help-frontend
     ports:
-      - "5432:5432"
+      - "3000:3000"
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-neighbourhelp}
-      POSTGRES_USER: ${POSTGRES_USER:-neighbourhelp_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-neighbourhelp_dev_password}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      # For server-side requests/rewrite destination resolution.
+      # Use backend service DNS name when both run on the same Docker network.
+      API_URL: ${API_URL:-http://backend:5000}
+      NODE_ENV: production
+      PORT: 3000
     restart: unless-stopped
-
-volumes:
-  pgdata:
