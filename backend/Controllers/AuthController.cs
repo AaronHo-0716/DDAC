@@ -7,7 +7,6 @@ using System.Net;
 
 [ApiController]
 [Route("api/auth")]
-[Authorize(Roles = "admin,handyman,homeowner")]
 public class AuthController(IAuthService authService) : ControllerBase
 {
     [HttpPost("register")]
