@@ -3,35 +3,35 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class bid_transaction
+public partial class Bid_Transaction
 {
-    public Guid id { get; set; }
+    public Guid Id { get; set; }
 
-    public Guid bid_id { get; set; }
+    public Guid Bid_Id { get; set; }
 
-    public Guid job_id { get; set; }
+    public Guid Job_Id { get; set; }
 
-    public Guid handyman_user_id { get; set; }
+    public Guid Handyman_User_Id { get; set; }
 
-    public Guid homeowner_user_id { get; set; }
+    public Guid Homeowner_User_Id { get; set; }
 
-    public string event_type { get; set; } = null!;
+    public string Event_Type { get; set; } = null!;
 
-    public Guid? event_by_user_id { get; set; }
+    public Guid? Event_By_User_Id { get; set; }
 
-    public string? event_reason { get; set; }
+    public string? Event_Reason { get; set; }
 
-    public string event_metadata { get; set; } = null!;
+    public string Event_Metadata { get; set; } = null!;
 
-    public DateTime created_at_utc { get; set; }
+    public DateTime Created_At_Utc { get; set; }
 
-    public virtual bid bid { get; set; } = null!;
+    public virtual Bid Bid { get; set; } = null!;
 
-    public virtual user? event_by_user { get; set; }
+    public virtual User? Event_By_User { get; set; }
 
-    public virtual user handyman_user { get; set; } = null!;
+    public virtual User Handyman_User { get; set; } = null!;
 
-    public virtual user homeowner_user { get; set; } = null!;
+    public virtual User Homeowner_User { get; set; } = null!;
 
-    public virtual job job { get; set; } = null!;
+    public virtual Job Job { get; set; } = null!;
 }

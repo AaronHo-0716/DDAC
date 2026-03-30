@@ -3,23 +3,23 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class notification
+public partial class Notification
 {
-    public Guid id { get; set; }
+    public Guid Id { get; set; }
 
-    public Guid user_id { get; set; }
+    public Guid User_Id { get; set; }
 
-    public string type { get; set; } = null!;
+    public string Type { get; set; } = null!;
 
-    public string message { get; set; } = null!;
+    public string Message { get; set; } = null!;
 
-    public Guid? related_job_id { get; set; }
+    public Guid? Related_Job_Id { get; set; }
 
-    public bool is_read { get; set; }
+    public bool Is_Read { get; set; }
 
-    public DateTime created_at_utc { get; set; }
+    public DateTime Created_At_Utc { get; set; }
 
-    public virtual job? related_job { get; set; }
+    public virtual Job? Related_Job { get; set; }
 
-    public virtual user user { get; set; } = null!;
+    public virtual User User { get; set; } = null!;
 }

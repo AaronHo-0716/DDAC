@@ -13,8 +13,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
     public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
     {
         // 1. Start with the IQueryable. 
-        // Changed context.Users to context.users to match your DbContext definition
-        var query = context.users.AsNoTracking();
+        var query = context.Users.AsNoTracking();
 
         // 2. Filter by Name (Partial Match)
         if (!string.IsNullOrWhiteSpace(request.Name))

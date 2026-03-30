@@ -52,43 +52,43 @@ public class JobService : IJobService
 
     public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId, string userRole)
     {
-        var query = _context.jobs.AsQueryable();
+        var query = _context.Jobs.AsQueryable();
 
         // Apply role-based visibility rules
         if (userRole == "handyman")
         {
             // Handyman can only see open jobs
-            query = query.Where(j => j.status == "open");
+            query = query.Where(j => j.Status == "open");
         }
         else if (userRole == "homeowner")
         {
             // Homeowner can see all open jobs (for discovery) and their own jobs
-            query = query.Where(j => j.status == "open" || j.posted_by_user_id == userId);
+            query = query.Where(j => j.Status == "open" || j.Posted_By_User_Id == userId);
         }
         // Admin can see all jobs (no filter)
 
         // Apply filters
         if (!string.IsNullOrEmpty(filter.Category))
         {
-            query = query.Where(j => j.category == filter.Category);
+            query = query.Where(j => j.Category == filter.Category);
         }
 
         if (!string.IsNullOrEmpty(filter.Status))
         {
-            query = query.Where(j => j.status == filter.Status);
+            query = query.Where(j => j.Status == filter.Status);
         }
 
         if (!string.IsNullOrEmpty(filter.Search))
         {
             query = query.Where(j => 
-                j.title.Contains(filter.Search) || 
-                j.description.Contains(filter.Search) ||
-                j.location_text.Contains(filter.Search));
+                j.Title.Contains(filter.Search) || 
+                j.Description.Contains(filter.Search) ||
+                j.Location_Text.Contains(filter.Search));
         }
 
         if (filter.IsEmergency.HasValue)
         {
-            query = query.Where(j => j.is_emergency == filter.IsEmergency.Value);
+            query = query.Where(j => j.Is_Emergency == filter.IsEmergency.Value);
         }
 
         // Distance filter (if latitude/longitude available)
@@ -98,7 +98,7 @@ public class JobService : IJobService
             // For now, we'll just apply basic distance logic if coordinates are available.
             var maxDistance = filter.MaxDistanceKm.Value;
             query = query.Where(j => 
-                j.latitude != null && j.longitude != null);
+                j.Latitude != null && j.Longitude != null);
         }
 
         // Get total count
@@ -106,9 +106,9 @@ public class JobService : IJobService
 
         // Apply pagination
         var jobs = await query
-            .Include(j => j.posted_by_user)
-            .Include(j => j.job_images)
-            .OrderByDescending(j => j.created_at_utc)
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .OrderByDescending(j => j.Created_At_Utc)
             .Skip((filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize)
             .ToListAsync();
@@ -126,16 +126,16 @@ public class JobService : IJobService
 
     public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 10)
     {
-        var query = _context.jobs
-            .Where(j => j.posted_by_user_id == userId);
+        var query = _context.Jobs
+            .Where(j => j.Posted_By_User_Id == userId);
 
         var totalCount = await query.CountAsync();
 
         var jobs = await query
-            .Include(j => j.posted_by_user)
-            .Include(j => j.job_images)
-            .Include(j => j.bid)
-            .OrderByDescending(j => j.created_at_utc)
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .Include(j => j.Bid)
+            .OrderByDescending(j => j.Created_At_Utc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -147,21 +147,21 @@ public class JobService : IJobService
 
     public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId, string userRole)
     {
-        var job = await _context.jobs
-            .Include(j => j.posted_by_user)
-            .Include(j => j.job_images)
-            .FirstOrDefaultAsync(j => j.id == jobId);
+        var job = await _context.Jobs
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .FirstOrDefaultAsync(j => j.Id == jobId);
 
         if (job == null)
             return null;
 
         // Apply visibility rules
-        if (userRole == "handyman" && job.status != "open")
+        if (userRole == "handyman" && job.Status != "open")
         {
             return null; // Handyman can only see open jobs
         }
 
-        if (userRole == "homeowner" && job.status != "open" && job.posted_by_user_id != userId)
+        if (userRole == "homeowner" && job.Status != "open" && job.Posted_By_User_Id != userId)
         {
             return null; // Homeowner can only see open jobs or their own
         }
@@ -181,64 +181,64 @@ public class JobService : IJobService
         if (request.Budget.HasValue && request.Budget < 0)
             throw new ArgumentException("Budget cannot be negative");
 
-        var newJob = new job
+        var newJob = new Job
         {
-            id = Guid.NewGuid(),
-            posted_by_user_id = userId,
-            title = request.Title,
-            description = request.Description,
-            category = request.Category,
-            location_text = request.Location,
-            latitude = request.Latitude,
-            longitude = request.Longitude,
-            budget = request.Budget,
-            status = "open",
-            is_emergency = request.IsEmergency,
-            created_at_utc = DateTime.UtcNow,
-            updated_at_utc = DateTime.UtcNow
+            Id = Guid.NewGuid(),
+            Posted_By_User_Id = userId,
+            Title = request.Title,
+            Description = request.Description,
+            Category = request.Category,
+            Location_Text = request.Location,
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
+            Budget = request.Budget,
+            Status = "open",
+            Is_Emergency = request.IsEmergency,
+            Created_At_Utc = DateTime.UtcNow,
+            Updated_At_Utc = DateTime.UtcNow
         };
 
-        _context.jobs.Add(newJob);
+        _context.Jobs.Add(newJob);
 
         // Add job images if provided
         if (request.ImageUrls != null && request.ImageUrls.Count > 0)
         {
-            var images = request.ImageUrls.Select((url, index) => new job_image
+            var images = request.ImageUrls.Select((url, index) => new Job_Image
             {
-                id = Guid.NewGuid(),
-                job_id = newJob.id,
-                image_url = url,
-                object_key = $"job-{newJob.id}/image-{index}",
-                sort_order = index,
-                created_at_utc = DateTime.UtcNow
+                Id = Guid.NewGuid(),
+                Job_Id = newJob.Id,
+                Image_Url = url,
+                Object_Key = $"job-{newJob.Id}/image-{index}",
+                Sort_Order = index,
+                Created_At_Utc = DateTime.UtcNow
             }).ToList();
 
-            _context.job_images.AddRange(images);
+            _context.Job_Images.AddRange(images);
         }
 
         await _context.SaveChangesAsync();
 
         // Fetch the job with related data
-        var createdJob = await _context.jobs
-            .Include(j => j.posted_by_user)
-            .Include(j => j.job_images)
-            .FirstAsync(j => j.id == newJob.id);
+        var createdJob = await _context.Jobs
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .FirstAsync(j => j.Id == newJob.Id);
 
         return MapToDto(createdJob);
     }
 
     public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId, string userRole)
     {
-        var job = await _context.jobs
-            .Include(j => j.posted_by_user)
-            .Include(j => j.job_images)
-            .FirstOrDefaultAsync(j => j.id == jobId);
+        var job = await _context.Jobs
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .FirstOrDefaultAsync(j => j.Id == jobId);
 
         if (job == null)
             throw new KeyNotFoundException($"Job with id {jobId} not found");
 
         // Authorization: only owner (homeowner) or admin can update
-        if (userRole != "admin" && job.posted_by_user_id != userId)
+        if (userRole != "admin" && job.Posted_By_User_Id != userId)
             throw new UnauthorizedAccessException("You can only update your own jobs");
 
         // Validate input
@@ -249,75 +249,75 @@ public class JobService : IJobService
         if (request.Budget.HasValue && request.Budget < 0)
             throw new ArgumentException("Budget cannot be negative");
 
-        job.title = request.Title;
-        job.description = request.Description;
-        job.category = request.Category;
-        job.location_text = request.Location;
-        job.latitude = request.Latitude;
-        job.longitude = request.Longitude;
-        job.budget = request.Budget;
-        job.is_emergency = request.IsEmergency;
-        job.updated_at_utc = DateTime.UtcNow;
+        job.Title = request.Title;
+        job.Description = request.Description;
+        job.Category = request.Category;
+        job.Location_Text = request.Location;
+        job.Latitude = request.Latitude;
+        job.Longitude = request.Longitude;
+        job.Budget = request.Budget;
+        job.Is_Emergency = request.IsEmergency;
+        job.Updated_At_Utc = DateTime.UtcNow;
 
-        _context.jobs.Update(job);
+        _context.Jobs.Update(job);
         await _context.SaveChangesAsync();
 
         // Fetch updated job with related data
-        var updatedJob = await _context.jobs
-            .Include(j => j.posted_by_user)
-            .Include(j => j.job_images)
-            .FirstAsync(j => j.id == jobId);
+        var updatedJob = await _context.Jobs
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .FirstAsync(j => j.Id == jobId);
 
         return MapToDto(updatedJob);
     }
 
     public async Task DeleteJobAsync(Guid jobId, Guid userId, string userRole)
     {
-        var job = await _context.jobs.FirstOrDefaultAsync(j => j.id == jobId);
+        var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId);
 
         if (job == null)
             throw new KeyNotFoundException($"Job with id {jobId} not found");
 
         // Authorization: only owner (homeowner) or admin can delete
-        if (userRole != "admin" && job.posted_by_user_id != userId)
+        if (userRole != "admin" && job.Posted_By_User_Id != userId)
             throw new UnauthorizedAccessException("You can only delete your own jobs");
 
-        _context.jobs.Remove(job);
+        _context.Jobs.Remove(job);
         await _context.SaveChangesAsync();
     }
 
     /// <summary>
     /// Helper method to map job entity to DTO, including bid count.
     /// </summary>
-    private JobDto MapToDto(job job)
+    private JobDto MapToDto(Job job)
     {
-        var bidCount = _context.bids.Count(b => b.job_id == job.id);
+        var bidCount = _context.Bids.Count(b => b.Job_Id == job.Id);
         
         return new JobDto(
-            Id: job.id,
-            Title: job.title,
-            Description: job.description,
-            Category: job.category,
-            Location: job.location_text,
-            Latitude: job.latitude,
-            Longitude: job.longitude,
-            Budget: job.budget,
-            Status: job.status,
-            IsEmergency: job.is_emergency,
+            Id: job.Id,
+            Title: job.Title,
+            Description: job.Description,
+            Category: job.Category,
+            Location: job.Location_Text,
+            Latitude: job.Latitude,
+            Longitude: job.Longitude,
+            Budget: job.Budget,
+            Status: job.Status,
+            IsEmergency: job.Is_Emergency,
             PostedBy: new UserDto(
-                Id: job.posted_by_user.Id,
-                Name: job.posted_by_user.Name,
-                Email: job.posted_by_user.Email,
-                Role: job.posted_by_user.Role,
-                AvatarUrl: job.posted_by_user.AvatarUrl,
-                Rating: job.posted_by_user.Rating,
-                CreatedAt: job.posted_by_user.CreatedAtUtc,
+                Id: job.Posted_By_User.Id,
+                Name: job.Posted_By_User.Name,
+                Email: job.Posted_By_User.Email,
+                Role: job.Posted_By_User.Role,
+                AvatarUrl: job.Posted_By_User.AvatarUrl,
+                Rating: job.Posted_By_User.Rating,
+                CreatedAt: job.Posted_By_User.CreatedAtUtc,
                 IsActive: true
             ),
-            CreatedAt: job.created_at_utc,
-            UpdatedAt: job.updated_at_utc,
+            CreatedAt: job.Created_At_Utc,
+            UpdatedAt: job.Updated_At_Utc,
             BidCount: bidCount,
-            ImageUrls: job.job_images.OrderBy(img => img.sort_order).Select(img => img.image_url).ToList()
+            ImageUrls: job.Job_Images.OrderBy(img => img.Sort_Order).Select(img => img.Image_Url).ToList()
         );
     }
 }

@@ -3,17 +3,17 @@ using System.Collections.Generic;
 
 namespace backend.Models.Entities;
 
-public partial class bid_lock
+public partial class Bid_Lock
 {
-    public Guid bid_id { get; set; }
+    public Guid Bid_Id { get; set; }
 
-    public Guid locked_by_user_id { get; set; }
+    public Guid Locked_By_User_Id { get; set; }
 
-    public string? locked_reason { get; set; }
+    public string? Locked_Reason { get; set; }
 
-    public DateTime locked_at_utc { get; set; }
+    public DateTime Locked_At_Utc { get; set; }
 
-    public virtual bid bid { get; set; } = null!;
+    public virtual Bid Bid { get; set; } = null!;
 
-    public virtual user locked_by_user { get; set; } = null!;
+    public virtual User Locked_By_User { get; set; } = null!;
 }
