@@ -9,13 +9,13 @@ terraform {
 
 # --- Variables & Validation ---
 variable "aws_region" {
-  description = "The AWS region to deploy the infrastructure (Learner Lab constraint)"
+  description = "We deploy to Malaysia region (ap-southeast-5)"
   type        = string
-  default     = "us-east-1"
-  
+  default     = "ap-southeast-5"
+
   validation {
-    condition     = contains(["us-east-1", "us-west-2"], var.aws_region)
-    error_message = "Deployment rejected. AWS Academy Learner Lab restricts operations strictly to 'us-east-1' or 'us-west-2'."
+    condition     = contains(["ap-southeast-5", "ap-southeast-1"], var.aws_region)
+    error_message = "Deployment errored."
   }
 }
 
@@ -42,12 +42,12 @@ resource "aws_vpc" "app_vpc" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
-  tags = { Name = "App-VPC" }
+  tags                 = { Name = "App-VPC" }
 }
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.app_vpc.id
-  tags = { Name = "App-IGW" }
+  tags   = { Name = "App-IGW" }
 }
 
 resource "aws_subnet" "public_dmz" {
@@ -55,21 +55,21 @@ resource "aws_subnet" "public_dmz" {
   cidr_block              = "10.0.1.0/24"
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
-  tags = { Name = "App-Public-DMZ" }
+  tags                    = { Name = "App-Public-DMZ" }
 }
 
 resource "aws_subnet" "private_app" {
   vpc_id            = aws_vpc.app_vpc.id
   cidr_block        = "10.0.2.0/24"
   availability_zone = data.aws_availability_zones.available.names[0]
-  tags = { Name = "App-Private-Tier" }
+  tags              = { Name = "App-Private-Tier" }
 }
 
 resource "aws_subnet" "private_data" {
   vpc_id            = aws_vpc.app_vpc.id
   cidr_block        = "10.0.3.0/24"
   availability_zone = data.aws_availability_zones.available.names[1] # Spans to second AZ for RDS
-  tags = { Name = "App-Data-Tier" }
+  tags              = { Name = "App-Data-Tier" }
 }
 
 # --- Routing ---
@@ -169,15 +169,46 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
+# Provision IAM Infrastructure
+# Create the IAM Role for the EC2 instances
+resource "aws_iam_role" "ec2_ssm_role" {
+  name = "ec2-ssm-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Attach the AWS managed policy for SSM Core functionality
+resource "aws_iam_role_policy_attachment" "ssm_core_attachment" {
+  role       = aws_iam_role.ec2_ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# Create the Instance Profile wrapper
+resource "aws_iam_instance_profile" "ec2_ssm_profile" {
+  name = "ec2-ssm-profile"
+  role = aws_iam_role.ec2_ssm_role.name
+}
+
 # --- Compute: Combined Proxy + NAT Instance (Public DMZ) ---
 resource "aws_instance" "caddy_nat_instance" {
   ami                  = data.aws_ami.amazon_linux_2023.id
   instance_type        = "t3.micro"
   subnet_id            = aws_subnet.public_dmz.id
-  iam_instance_profile = "LabInstanceProfile" 
-  
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
+
   vpc_security_group_ids = [aws_security_group.public_sg.id]
-  source_dest_check      = false 
+  source_dest_check      = false
 
   user_data = <<-EOF
               #!/bin/bash
@@ -196,10 +227,10 @@ resource "aws_instance" "caddy_nat_instance" {
 # --- Compute: App Tier (Private Subnet) ---
 resource "aws_instance" "app_instance" {
   ami                  = data.aws_ami.amazon_linux_2023.id
-  instance_type        = "t3.large" 
+  instance_type        = "t3.large"
   subnet_id            = aws_subnet.private_app.id
-  iam_instance_profile = "LabInstanceProfile"
-  
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
+
   vpc_security_group_ids = [aws_security_group.app_sg.id]
 
   user_data = <<-EOF
@@ -208,7 +239,7 @@ resource "aws_instance" "app_instance" {
               dnf install -y docker
               systemctl start docker
               systemctl enable docker
-              usermod -aG docker ssm-user 
+              usermod -aG docker ssm-user
               EOF
 
   tags = { Name = "App-Backend-Tier" }
@@ -217,20 +248,20 @@ resource "aws_instance" "app_instance" {
 # --- Database: PostgreSQL RDS ---
 resource "aws_db_subnet_group" "rds_subnet_group" {
   name       = "app-db-subnet-group"
-  subnet_ids = [aws_subnet.private_app.id, aws_subnet.private_data.id] 
+  subnet_ids = [aws_subnet.private_app.id, aws_subnet.private_data.id]
 }
 
 resource "aws_db_instance" "postgres" {
   identifier             = "app-db"
   engine                 = "postgres"
-  engine_version         = "16.1"
+  engine_version         = "16"
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
   storage_type           = "gp2"
   username               = "dbadmin"
-  password               = "SuperSecretPassword123!" 
+  password               = "SuperSecretPassword123!"
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
-  skip_final_snapshot    = true 
-  multi_az               = false 
+  skip_final_snapshot    = true
+  multi_az               = false
 }

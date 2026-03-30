@@ -3,3 +3,6 @@
 deployment/.terraform.lock.hcl
 
 
+deployment/.terraform.tfstate.lock.info
+deployment/terraform.tfstate
+deployment/terraform.tfstate.backup
