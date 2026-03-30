@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Wrench, ArrowRight, Mail, Lock } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import { useAuth } from "../lib/context/AuthContext";
 import { ApiClientError } from "../lib/api/client";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, submitting } = useAuth();
@@ -187,5 +187,13 @@ export default function LoginPage() {
         <p>Admin: admin@neighborhelp.test / Password123!</p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

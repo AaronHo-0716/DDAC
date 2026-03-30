@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { UserPlus, Wrench, Home, ArrowRight, Eye, EyeOff } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
@@ -10,7 +10,7 @@ import { ApiClientError } from "../lib/api/client";
 import { useAuth } from "../lib/context/AuthContext";
 import type { UserRole } from "../types";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { register, submitting } = useAuth();
@@ -205,5 +205,13 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   );
 }
