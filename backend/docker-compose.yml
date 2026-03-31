@@ -12,11 +12,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
   api:
     build: .
     container_name: neighbourhelp-api
     ports:
-      - "5073:8080"
+      - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       # Use 'db' as the host to connect to the container above
@@ -26,5 +27,6 @@ services:
       - Jwt__Audience=NeighborHelpFrontend
     depends_on:
       - db
+
 volumes:
   postgres_data:
