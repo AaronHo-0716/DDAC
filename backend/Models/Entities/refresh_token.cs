@@ -5,9 +5,9 @@ namespace backend.Models.Entities;
 
 public partial class Refresh_Token
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
-    public int User_Id { get; set; }
+    public Guid User_Id { get; set; }
 
     public string Token_Hash { get; set; } = null!;
 

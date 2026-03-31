@@ -5,9 +5,9 @@ namespace backend.Models.Entities;
 
 public partial class Job_Image
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
-    public int Job_Id { get; set; }
+    public Guid Job_Id { get; set; }
 
     public string Image_Url { get; set; } = null!;
 

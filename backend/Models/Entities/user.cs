@@ -5,7 +5,7 @@ namespace backend.Models.Entities;
 
 public partial class User
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
@@ -16,7 +16,7 @@ public partial class User
     public decimal? Rating { get; set; }
     public string? Blocked_Reason { get; set; }
     public DateTime? Blocked_At_Utc { get; set; }
-    public int? Blocked_By_User_Id { get; set; }
+    public Guid? Blocked_By_User_Id { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime Updated_At_Utc { get; set; } = DateTime.UtcNow;
 

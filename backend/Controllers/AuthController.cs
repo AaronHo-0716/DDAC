@@ -57,7 +57,7 @@ public class AuthController(IAuthService authService) : ControllerBase
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-            var user = await authService.GetUserById(int.Parse(userId));
+            var user = await authService.GetUserById(Guid.Parse(userId));
             return Ok(user);
         }
         catch (HttpRequestException ex)
