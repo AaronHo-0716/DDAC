@@ -25,15 +25,13 @@ public partial class NeighbourHelpDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.HasPostgresExtension("pgcrypto");
-
         // --- 1. USER ENTITY (Fixed Column Mappings) ---
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("users");
             entity.HasKey(e => e.Id).HasName("users_pkey");
 
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.Name).HasColumnName("name");
             entity.Property(e => e.Email).HasColumnName("email");
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
@@ -60,7 +58,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("jobs");
             entity.HasKey(e => e.Id).HasName("jobs_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.Posted_By_User_Id).HasColumnName("posted_by_user_id");
             entity.Property(e => e.Title).HasColumnName("title");
             entity.Property(e => e.Description).HasColumnName("description");
@@ -81,7 +79,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("bids");
             entity.HasKey(e => e.Id).HasName("bids_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.Job_Id).HasColumnName("job_id");
             entity.Property(e => e.Handyman_User_Id).HasColumnName("handyman_user_id");
             entity.Property(e => e.Price).HasColumnName("price");
@@ -100,7 +98,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("handyman_verifications");
             entity.HasKey(e => e.Id).HasName("handyman_verifications_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.User_Id).HasColumnName("user_id");
             entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.Reviewed_By_User_Id).HasColumnName("reviewed_by_user_id");
@@ -130,7 +128,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("bid_transactions");
             entity.HasKey(e => e.Id).HasName("bid_transactions_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.Bid_Id).HasColumnName("bid_id");
             entity.Property(e => e.Job_Id).HasColumnName("job_id");
             entity.Property(e => e.Handyman_User_Id).HasColumnName("handyman_user_id");
@@ -150,7 +148,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("notifications");
             entity.HasKey(e => e.Id).HasName("notifications_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.User_Id).HasColumnName("user_id");
             entity.Property(e => e.Type).HasColumnName("type");
             entity.Property(e => e.Message).HasColumnName("message");
@@ -165,7 +163,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("refresh_tokens");
             entity.HasKey(e => e.Id).HasName("refresh_tokens_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.User_Id).HasColumnName("user_id");
             entity.Property(e => e.Token_Hash).HasColumnName("token_hash");
             entity.Property(e => e.Expires_At_Utc).HasColumnName("expires_at_utc");
@@ -182,7 +180,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("admin_actions");
             entity.HasKey(e => e.Id).HasName("admin_actions_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.Admin_User_Id).HasColumnName("admin_user_id");
             entity.Property(e => e.Action_Type).HasColumnName("action_type");
             entity.Property(e => e.Target_Type).HasColumnName("target_type");
@@ -198,7 +196,7 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("job_images");
             entity.HasKey(e => e.Id).HasName("job_images_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.Job_Id).HasColumnName("job_id");
             entity.Property(e => e.Image_Url).HasColumnName("image_url");
             entity.Property(e => e.Object_Key).HasColumnName("object_key");

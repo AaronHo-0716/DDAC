@@ -2,7 +2,7 @@ namespace backend.Models.DTOs;
 
 // The "User" object in frontend types
 public record UserDto(
-    Guid Id,
+    int Id,
     string Name,
     string Email,
     string Role, // "homeowner", "handyman", or "admin"

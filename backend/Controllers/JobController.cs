@@ -67,7 +67,7 @@ public class JobController(IJobService jobService) : ControllerBase
     /// Retrieve a single job by ID.
     /// </summary>
     [HttpGet("{id}")]
-    public async Task<ActionResult<JobDto>> GetJobById(Guid id)
+    public async Task<ActionResult<JobDto>> GetJobById(int id)
     {
         var userId = GetUserIdFromClaims();
         var userRole = GetUserRoleFromClaims();
@@ -112,7 +112,7 @@ public class JobController(IJobService jobService) : ControllerBase
     /// </summary>
     [Authorize]
     [HttpPut("{id}")]
-    public async Task<ActionResult<JobDto>> UpdateJob(Guid id, [FromBody] UpdateJobRequest request)
+    public async Task<ActionResult<JobDto>> UpdateJob(int id, [FromBody] UpdateJobRequest request)
     {
         try
         {
@@ -149,7 +149,7 @@ public class JobController(IJobService jobService) : ControllerBase
     /// </summary>
     [Authorize]
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteJob(Guid id)
+    public async Task<IActionResult> DeleteJob(int id)
     {
         try
         {
@@ -179,10 +179,10 @@ public class JobController(IJobService jobService) : ControllerBase
     /// <summary>
     /// Helper method to extract user ID from JWT claims.
     /// </summary>
-    private Guid? GetUserIdFromClaims()
+    private int? GetUserIdFromClaims()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (Guid.TryParse(userIdClaim, out var userId))
+        if (int.TryParse(userIdClaim, out var userId))
             return userId;
 
         return null;

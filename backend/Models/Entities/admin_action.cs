@@ -5,15 +5,15 @@ namespace backend.Models.Entities;
 
 public partial class Admin_Action
 {
-    public Guid Id { get; set; }
+    public int Id { get; set; }
 
-    public Guid Admin_User_Id { get; set; }
+    public int Admin_User_Id { get; set; }
 
     public string Action_Type { get; set; } = null!;
 
     public string Target_Type { get; set; } = null!;
 
-    public Guid Target_Id { get; set; }
+    public int Target_Id { get; set; }
 
     public string? Reason { get; set; }
 

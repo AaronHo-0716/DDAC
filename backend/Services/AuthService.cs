@@ -53,7 +53,6 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         // 5. Create new user
         var newUser = new User
         {
-            Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Email = emailLower,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
@@ -67,7 +66,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         return GenerateAuthResponse(newUser);
     }
 
-    public async Task<UserDto> GetUserById(Guid userId)
+    public async Task<UserDto> GetUserById(int userId)
     {
         var user = await context.Users.FindAsync(userId);
         if (user == null) throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
@@ -77,7 +76,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
     public async Task<AuthResponse> RefreshToken(string token)
     {
         // Mocking refresh logic
-        var userDto = new UserDto(Guid.Empty, "System", "ref@example.com", "user", null, null, DateTime.UtcNow, true);
+        var userDto = new UserDto(0, "System", "ref@example.com", "user", null, null, DateTime.UtcNow, true);
         return await Task.FromResult(new AuthResponse(
             User: userDto,
             Tokens: new TokenDto("new_access_token", Guid.NewGuid().ToString(), 86400)

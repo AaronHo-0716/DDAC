@@ -11,33 +11,33 @@ public interface IJobService
     /// Get all jobs with filters and pagination.
     /// Handyman can see open jobs, Admin can see all jobs.
     /// </summary>
-    Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId, string userRole);
+    Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, int? userId, string userRole);
 
     /// <summary>
     /// Get jobs posted by the current user (homeowner only).
     /// </summary>
-    Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 10);
+    Task<JobListResponse> GetMyJobsAsync(int userId, int page = 1, int pageSize = 10);
 
     /// <summary>
     /// Get a single job by ID.
     /// Handyman can only see open jobs, Admin can see all.
     /// </summary>
-    Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId, string userRole);
+    Task<JobDto?> GetJobByIdAsync(int jobId, int? userId, string userRole);
 
     /// <summary>
     /// Create a new job (homeowner only).
     /// </summary>
-    Task<JobDto> CreateJobAsync(CreateJobRequest request, Guid userId);
+    Task<JobDto> CreateJobAsync(CreateJobRequest request, int userId);
 
     /// <summary>
     /// Update a job (homeowner owner only or admin).
     /// </summary>
-    Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId, string userRole);
+    Task<JobDto> UpdateJobAsync(int jobId, UpdateJobRequest request, int userId, string userRole);
 
     /// <summary>
     /// Delete a job (homeowner owner only or admin).
     /// </summary>
-    Task DeleteJobAsync(Guid jobId, Guid userId, string userRole);
+    Task DeleteJobAsync(int jobId, int userId, string userRole);
 }
 
 public class JobService : IJobService
@@ -50,7 +50,7 @@ public class JobService : IJobService
         _context = context;
     }
 
-    public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId, string userRole)
+    public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, int? userId, string userRole)
     {
         var query = _context.Jobs.AsQueryable();
 
@@ -124,7 +124,7 @@ public class JobService : IJobService
         );
     }
 
-    public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 10)
+    public async Task<JobListResponse> GetMyJobsAsync(int userId, int page = 1, int pageSize = 10)
     {
         var query = _context.Jobs
             .Where(j => j.Posted_By_User_Id == userId);
@@ -145,7 +145,7 @@ public class JobService : IJobService
         return new JobListResponse(jobDtos, page, pageSize, totalCount);
     }
 
-    public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId, string userRole)
+    public async Task<JobDto?> GetJobByIdAsync(int jobId, int? userId, string userRole)
     {
         var job = await _context.Jobs
             .Include(j => j.Posted_By_User)
@@ -171,7 +171,7 @@ public class JobService : IJobService
         return MapToDto(job);
     }
 
-    public async Task<JobDto> CreateJobAsync(CreateJobRequest request, Guid userId)
+    public async Task<JobDto> CreateJobAsync(CreateJobRequest request, int userId)
     {
         // Validate input
         if (string.IsNullOrWhiteSpace(request.Title))
@@ -183,7 +183,6 @@ public class JobService : IJobService
 
         var newJob = new Job
         {
-            Id = Guid.NewGuid(),
             Posted_By_User_Id = userId,
             Title = request.Title,
             Description = request.Description,
@@ -205,7 +204,6 @@ public class JobService : IJobService
         {
             var images = request.ImageUrls.Select((url, index) => new Job_Image
             {
-                Id = Guid.NewGuid(),
                 Job_Id = newJob.Id,
                 Image_Url = url,
                 Object_Key = $"job-{newJob.Id}/image-{index}",
@@ -227,7 +225,7 @@ public class JobService : IJobService
         return MapToDto(createdJob);
     }
 
-    public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId, string userRole)
+    public async Task<JobDto> UpdateJobAsync(int jobId, UpdateJobRequest request, int userId, string userRole)
     {
         var job = await _context.Jobs
             .Include(j => j.Posted_By_User)
@@ -271,7 +269,7 @@ public class JobService : IJobService
         return MapToDto(updatedJob);
     }
 
-    public async Task DeleteJobAsync(Guid jobId, Guid userId, string userRole)
+    public async Task DeleteJobAsync(int jobId, int userId, string userRole)
     {
         var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId);
 

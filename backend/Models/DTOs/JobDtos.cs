@@ -4,7 +4,7 @@ namespace backend.Models.DTOs;
 
 // Job response DTO
 public record JobDto(
-    Guid Id,
+    int Id,
     string Title,
     string Description,
     string Category,

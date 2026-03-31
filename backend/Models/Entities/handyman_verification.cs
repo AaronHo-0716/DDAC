@@ -5,13 +5,13 @@ namespace backend.Models.Entities;
 
 public partial class Handyman_Verification
 {
-    public Guid Id { get; set; }
+    public int Id { get; set; }
 
-    public Guid User_Id { get; set; }
+    public int User_Id { get; set; }
 
     public string Status { get; set; } = null!;
 
-    public Guid? Reviewed_By_User_Id { get; set; }
+    public int? Reviewed_By_User_Id { get; set; }
 
     public DateTime? Reviewed_At_Utc { get; set; }
 
