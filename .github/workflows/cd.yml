@@ -85,7 +85,7 @@ jobs:
 
       - name: Deploy Containers via AWS SSM
         run: |
-          # Send the command and capture the Command ID
+          # 1. Send the command and capture the Command ID
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=App-Backend-Tier" \
@@ -110,17 +110,27 @@ jobs:
 
           echo "Sent SSM Command: $COMMAND_ID. Waiting for completion..."
 
-          # Wait for the command to reach a terminal state (Success, Failed, etc.)
-          aws ssm wait command-executed --command-id "$COMMAND_ID"
+          # 2. Poll for the command status
+          while true; do
+            # Get the aggregate status of the command across all targets
+            STATUS=$(aws ssm list-commands --command-id "$COMMAND_ID" --query "Commands[0].Status" --output text)
 
-          # Check if the command actually succeeded
-          STATUS=$(aws ssm list-command-invocations --command-id "$COMMAND_ID" --details --query "CommandInvocations[0].Status" --output text)
+            if [ "$STATUS" == "Success" ]; then
+              echo "Deployment successful!"
+              break
+            elif [ "$STATUS" == "Failed" ] || [ "$STATUS" == "Cancelled" ] || [ "$STATUS" == "TimedOut" ]; then
+              echo "Deployment failed with status: $STATUS"
 
-          if [ "$STATUS" != "Success" ]; then
-            echo "Deployment failed with status: $STATUS"
-            # Optional: Print the error output
-            aws ssm list-command-invocations --command-id "$COMMAND_ID" --details --query "CommandInvocations[0].CommandPlugins[0].Output" --output text
-            exit 1
-          else
-            echo "Deployment successful!"
-          fi
+              # Fetch and print the logs from the first instance for debugging
+              echo "Fetching logs..."
+              aws ssm list-command-invocations \
+                --command-id "$COMMAND_ID" \
+                --details \
+                --query "CommandInvocations[*].CommandPlugins[*].Output" \
+                --output text
+              exit 1
+            fi
+
+            echo "Current status: $STATUS... waiting 10s"
+            sleep 10
+          done
