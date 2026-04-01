@@ -8,8 +8,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE_NAME: ${{ github.repository_owner }}/project-backend
-  FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/project-frontend
 
 jobs:
   build-and-push:
@@ -21,6 +19,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Docker metadata for Backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-backend
+          tags: type=raw,value=latest
+
+      - name: Docker metadata for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-frontend
+          tags: type=raw,value=latest
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -34,20 +46,36 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./neighbour-help
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
 
   deploy-to-ec2:
     name: Deploy to EC2
     needs: [build-and-push]
     runs-on: ubuntu-latest
     steps:
+      - name: Docker metadata for Backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-backend
+          tags: type=raw,value=latest
+
+      - name: Docker metadata for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-frontend
+          tags: type=raw,value=latest
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -63,13 +91,13 @@ jobs:
             --comment "Deploy containers" \
             --parameters 'commands=[
               "docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}",
-              "docker pull ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest",
-              "docker pull ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest",
+              "docker pull ${{ steps.meta-backend.outputs.tags }}",
+              "docker pull ${{ steps.meta-frontend.outputs.tags }}",
               "docker stop backend frontend || true",
               "docker rm backend frontend || true",
               "DB_HOST=$(aws ssm get-parameter --name /app/db/host --with-decryption --query Parameter.Value --output text)",
               "DB_USER=$(aws ssm get-parameter --name /app/db/username --with-decryption --query Parameter.Value --output text)",
               "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
-              "docker run -d --restart always --name backend -p 8080:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest",
-              "docker run -d --restart always --name frontend -p 3000:3000 ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest"
+              "docker run -d --restart always --name backend -p 8080:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ steps.meta-backend.outputs.tags }}",
+              "docker run -d --restart always --name frontend -p 3000:3000 ${{ steps.meta-frontend.outputs.tags }}"
             ]'
