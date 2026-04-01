@@ -1,0 +1,75 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE_NAME: ${{ github.repository_owner }}/project-backend
+  FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/project-frontend
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./neighbour-help
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+
+  deploy-to-ec2:
+    name: Deploy to EC2
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-5
+
+      - name: Deploy Containers via AWS SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=App-Backend-Tier" \
+            --comment "Deploy containers" \
+            --parameters 'commands=[
+              "docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}",
+              "docker pull ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest",
+              "docker pull ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest",
+              "docker stop backend frontend || true",
+              "docker rm backend frontend || true",
+              "DB_HOST=$(aws ssm get-parameter --name /app/db/host --with-decryption --query Parameter.Value --output text)",
+              "DB_USER=$(aws ssm get-parameter --name /app/db/username --with-decryption --query Parameter.Value --output text)",
+              "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
+              "docker run -d --restart always --name backend -p 8080:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest",
+              "docker run -d --restart always --name frontend -p 3000:3000 ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest"
+            ]'

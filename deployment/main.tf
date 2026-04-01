@@ -19,6 +19,18 @@ variable "aws_region" {
   }
 }
 
+variable "db_username" {
+  description = "The database admin username"
+  type        = string
+  default     = "dbadmin"
+}
+
+variable "db_password" {
+  description = "The database admin password"
+  type        = string
+  sensitive   = true
+}
+
 provider "aws" {
   region = var.aws_region
 }
@@ -188,6 +200,26 @@ resource "aws_iam_role" "ec2_ssm_role" {
   })
 }
 
+resource "aws_iam_role_policy" "ssm_parameter_read" {
+  name = "ssm-parameter-read"
+  role = aws_iam_role.ec2_ssm_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/app/*"
+      }
+    ]
+  })
+}
+
 # Attach the AWS managed policy for SSM Core functionality
 resource "aws_iam_role_policy_attachment" "ssm_core_attachment" {
   role       = aws_iam_role.ec2_ssm_role.name
@@ -258,10 +290,30 @@ resource "aws_db_instance" "postgres" {
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
   storage_type           = "gp2"
-  username               = "dbadmin"
-  password               = "SuperSecretPassword123!"
+  username               = var.db_username
+  password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
   skip_final_snapshot    = true
   multi_az               = false
+}
+
+# --- Secrets & Configuration Store ---
+resource "aws_ssm_parameter" "db_host" {
+  name  = "/app/db/host"
+  type  = "String"
+  value = aws_db_instance.postgres.address
+}
+
+resource "aws_ssm_parameter" "db_username" {
+  name  = "/app/db/username"
+  type  = "String"
+  value = var.db_username
+}
+
+resource "aws_ssm_parameter" "db_password" {
+  name        = "/app/db/password"
+  description = "Database admin password"
+  type        = "SecureString"
+  value       = var.db_password
 }
