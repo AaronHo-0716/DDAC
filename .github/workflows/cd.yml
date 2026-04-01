@@ -85,7 +85,8 @@ jobs:
 
       - name: Deploy Containers via AWS SSM
         run: |
-          aws ssm send-command \
+          # Send the command and capture the Command ID
+          COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=App-Backend-Tier" \
             --comment "Deploy containers" \
@@ -99,5 +100,27 @@ jobs:
               "DB_USER=$(aws ssm get-parameter --name /app/db/username --with-decryption --query Parameter.Value --output text)",
               "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
               "docker run -d --restart always --name backend -p 8080:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ steps.meta-backend.outputs.tags }}",
-              "docker run -d --restart always --name frontend -p 3000:3000 ${{ steps.meta-frontend.outputs.tags }}"
-            ]'
+              "docker run -d --restart always --name frontend -p 3000:3000 ${{ steps.meta-frontend.outputs.tags }}",
+              "sleep 10",
+              "docker ps | grep backend",
+              "docker ps | grep frontend"
+            ]' \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "Sent SSM Command: $COMMAND_ID. Waiting for completion..."
+
+          # Wait for the command to reach a terminal state (Success, Failed, etc.)
+          aws ssm wait command-executed --command-id "$COMMAND_ID"
+
+          # Check if the command actually succeeded
+          STATUS=$(aws ssm list-command-invocations --command-id "$COMMAND_ID" --details --query "CommandInvocations[0].Status" --output text)
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "Deployment failed with status: $STATUS"
+            # Optional: Print the error output
+            aws ssm list-command-invocations --command-id "$COMMAND_ID" --details --query "CommandInvocations[0].CommandPlugins[0].Output" --output text
+            exit 1
+          else
+            echo "Deployment successful!"
+          fi
