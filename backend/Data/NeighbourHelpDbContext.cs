@@ -50,7 +50,6 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Role).HasColumnName("role");
             entity.Property(e => e.IsActive).HasColumnName("account_status").HasDefaultValue(true);
 
-            // THESE TWO LINES FIX THE "AvatarUrl does not exist" ERROR:
             entity.Property(e => e.AvatarUrl).HasColumnName("avatar_url");
             entity.Property(e => e.Rating).HasColumnName("rating").HasPrecision(3, 2);
 
@@ -65,7 +64,6 @@ public partial class NeighbourHelpDbContext : DbContext
                 .HasForeignKey(d => d.Blocked_By_User_Id);
         });
 
-        // --- 2. JOB ---
         modelBuilder.Entity<Job>(entity =>
         {
             entity.ToTable("jobs");
@@ -86,7 +84,6 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.HasOne(d => d.Posted_By_User).WithMany(p => p.Jobs).HasForeignKey(d => d.Posted_By_User_Id);
         });
 
-        // --- 3. BID ---
         modelBuilder.Entity<Bid>(entity =>
         {
             entity.ToTable("bids");
@@ -101,11 +98,10 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Is_Recommended).HasColumnName("is_recommended");
             entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
             entity.Property(e => e.Updated_At_Utc).HasColumnName("updated_at_utc");
-            entity.HasOne(d => d.Job).WithOne(p => p.Bid).HasForeignKey<Bid>(d => d.Job_Id);
+            entity.HasOne(d => d.Job).WithMany(p => p.Bids).HasForeignKey(d => d.Job_Id);
             entity.HasOne(d => d.Handyman_User).WithMany(p => p.Bids).HasForeignKey(d => d.Handyman_User_Id);
         });
 
-        // --- 4. HANDYMAN VERIFICATION ---
         modelBuilder.Entity<Handyman_Verification>(entity =>
         {
             entity.ToTable("handyman_verifications");
@@ -122,7 +118,6 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.HasOne(d => d.Reviewed_By_User).WithMany(p => p.Handyman_Verification_Reviewed_By_Users).HasForeignKey(d => d.Reviewed_By_User_Id);
         });
 
-        // --- 5. BID LOCK ---
         modelBuilder.Entity<Bid_Lock>(entity =>
         {
             entity.ToTable("bid_locks");
@@ -135,7 +130,6 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.HasOne(d => d.Locked_By_User).WithMany(p => p.Bid_Locks).HasForeignKey(d => d.Locked_By_User_Id);
         });
 
-        // --- 6. BID TRANSACTION ---
         modelBuilder.Entity<Bid_Transaction>(entity =>
         {
             entity.ToTable("bid_transactions");
@@ -148,14 +142,15 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Event_Type).HasColumnName("event_type");
             entity.Property(e => e.Event_By_User_Id).HasColumnName("event_by_user_id");
             entity.Property(e => e.Event_Reason).HasColumnName("event_reason");
-            entity.Property(e => e.Event_Metadata).HasColumnName("event_metadata");
+            entity.Property(e => e.Event_Metadata).HasColumnName("event_metadata").HasColumnType("jsonb");
             entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
             entity.HasOne(d => d.Handyman_User).WithMany(p => p.Bid_Transaction_Handyman_Users).HasForeignKey(d => d.Handyman_User_Id);
             entity.HasOne(d => d.Homeowner_User).WithMany(p => p.Bid_Transaction_Homeowner_Users).HasForeignKey(d => d.Homeowner_User_Id);
             entity.HasOne(d => d.Event_By_User).WithMany(p => p.Bid_Transaction_Event_By_Users).HasForeignKey(d => d.Event_By_User_Id);
-        });
+            entity.HasOne(d => d.Bid).WithMany(p => p.Bid_Transactions).HasForeignKey(d => d.Bid_Id).HasConstraintName("bid_transactions_bid_id_fkey");
+            entity.HasOne(d => d.Job).WithMany(p => p.Bid_Transactions).HasForeignKey(d => d.Job_Id).HasConstraintName("bid_transactions_job_id_fkey");
+            });
 
-        // --- 7. NOTIFICATION ---
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.ToTable("notifications");
@@ -168,6 +163,7 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Is_Read).HasColumnName("is_read");
             entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
             entity.HasOne(d => d.User).WithMany(p => p.Notifications).HasForeignKey(d => d.User_Id);
+            entity.HasOne(d => d.Related_Job).WithMany(p => p.Notifications).HasForeignKey(d => d.Related_Job_Id).OnDelete(DeleteBehavior.SetNull);
         });
 
         // --- 8. REFRESH TOKEN ---
@@ -198,7 +194,7 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Target_Type).HasColumnName("target_type");
             entity.Property(e => e.Target_Id).HasColumnName("target_id");
             entity.Property(e => e.Reason).HasColumnName("reason");
-            entity.Property(e => e.Payload).HasColumnName("payload");
+            entity.Property(e => e.Payload).HasColumnName("payload").HasColumnType("jsonb");
             entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
             entity.HasOne(d => d.Admin_User).WithMany(p => p.Admin_Actions).HasForeignKey(d => d.Admin_User_Id);
         });

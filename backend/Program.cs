@@ -92,6 +92,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 // Register job service
 builder.Services.AddScoped<IJobService, JobService>();
+// Register bid service
+builder.Services.AddScoped<IBidService, BidService>();
 
 // Error Handling
 builder.Services.AddProblemDetails(options =>

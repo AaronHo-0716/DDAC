@@ -9,14 +9,8 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/jobs")]
 [Authorize(Roles = "admin, handyman, homeowner")]
-public class JobController(IJobService jobService) : ControllerBase
+public class JobController(IJobService jobService, IBidService bidService) : ControllerBase
 {
-    /// <summary>
-    /// GET /api/jobs
-    /// Retrieve all jobs with filters and pagination.
-    /// Handyman can see open jobs, Admin can see all.
-    /// Query parameters: page, pageSize, category, status, search, isEmergency, maxDistanceKm
-    /// </summary>
     [HttpGet]
     public async Task<ActionResult<JobListResponse>> GetJobs(
         [FromQuery] int page = 1,
@@ -44,10 +38,6 @@ public class JobController(IJobService jobService) : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// GET /api/jobs/my
-    /// Retrieve jobs posted by the current user (homeowner only).
-    /// </summary>
     [Authorize]
     [HttpGet("my")]
     public async Task<ActionResult<JobListResponse>> GetMyJobs(
@@ -62,10 +52,6 @@ public class JobController(IJobService jobService) : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// GET /api/jobs/{id}
-    /// Retrieve a single job by ID.
-    /// </summary>
     [HttpGet("{id}")]
     public async Task<ActionResult<JobDto>> GetJobById(Guid id)
     {
@@ -79,10 +65,6 @@ public class JobController(IJobService jobService) : ControllerBase
         return Ok(job);
     }
 
-    /// <summary>
-    /// POST /api/jobs
-    /// Create a new job (homeowner only).
-    /// </summary>
     [Authorize]
     [HttpPost]
     public async Task<ActionResult<JobDto>> CreateJob([FromBody] CreateJobRequest request)
@@ -106,10 +88,6 @@ public class JobController(IJobService jobService) : ControllerBase
         }
     }
 
-    /// <summary>
-    /// PUT /api/jobs/{id}
-    /// Update a job (homeowner owner or admin only).
-    /// </summary>
     [Authorize]
     [HttpPut("{id}")]
     public async Task<ActionResult<JobDto>> UpdateJob(Guid id, [FromBody] UpdateJobRequest request)
@@ -143,10 +121,6 @@ public class JobController(IJobService jobService) : ControllerBase
         }
     }
 
-    /// <summary>
-    /// DELETE /api/jobs/{id}
-    /// Delete a job (homeowner owner or admin only).
-    /// </summary>
     [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteJob(Guid id)
@@ -176,9 +150,60 @@ public class JobController(IJobService jobService) : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Helper method to extract user ID from JWT claims.
-    /// </summary>
+    [HttpGet("{jobId}/bids")]
+    public async Task<ActionResult<BidListResponse>> GetBidsByJobId(
+        Guid jobId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        try
+        {
+            var result = await bidService.GetBidsByJobIdAsync(jobId, page, pageSize);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("{jobId}/bids")]
+    public async Task<ActionResult<BidDto>> CreateBid(Guid jobId, [FromBody] CreateBidRequest request)
+    {
+        try
+        {
+            var userId = GetUserIdFromClaims();
+            var userRole = GetUserRoleFromClaims();
+
+            if (userId == null)
+                return Unauthorized("User ID not found in token");
+
+            var bid = await bidService.CreateBidAsync(jobId, request, userId.Value, userRole);
+            return CreatedAtAction(nameof(GetBidsByJobId), new { jobId = jobId }, bid);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = ex.Message });
+        }
+    }
+
     private Guid? GetUserIdFromClaims()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -188,9 +213,6 @@ public class JobController(IJobService jobService) : ControllerBase
         return null;
     }
 
-    /// <summary>
-    /// Helper method to extract user role from JWT claims.
-    /// </summary>
     private string GetUserRoleFromClaims()
     {
         return User.FindFirstValue(ClaimTypes.Role) ?? "guest";
