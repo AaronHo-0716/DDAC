@@ -31,7 +31,7 @@ public partial class Job
 
     public DateTime Updated_At_Utc { get; set; }
 
-    public virtual Bid? Bid { get; set; }
+    public virtual ICollection<Bid> Bids { get; set; } = new List<Bid>();
 
     public virtual ICollection<Bid_Transaction> Bid_Transactions { get; set; } = new List<Bid_Transaction>();
 
