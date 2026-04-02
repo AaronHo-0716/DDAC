@@ -1,4 +1,4 @@
--- Changed from UUID to auto-incrementing INT for all table IDs
+CREATE EXTENSION IF NOT EXISTS pgcrypto; -- for gen_random_uuid()
 
 -- Replaced enum types with VARCHAR for simplicity
 -- Previous enums:
@@ -15,7 +15,7 @@
 
 
 CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(120) NOT NULL,
   email VARCHAR(320) NOT NULL,
   password_hash TEXT NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE users (
   rating NUMERIC(3,2),
   blocked_reason TEXT,
   blocked_at_utc TIMESTAMPTZ,
-  blocked_by_user_id INT REFERENCES users(id),
+  blocked_by_user_id UUID REFERENCES users(id),
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT uq_users_email UNIQUE (email),
@@ -34,8 +34,8 @@ CREATE TABLE users (
 );
 
 CREATE TABLE refresh_tokens (
-  id SERIAL PRIMARY KEY,
-  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL,
   expires_at_utc TIMESTAMPTZ NOT NULL,
   revoked_at_utc TIMESTAMPTZ,
@@ -50,8 +50,8 @@ CREATE INDEX ix_refresh_tokens_user_created ON refresh_tokens(user_id, created_a
 
 
 CREATE TABLE jobs (
-  id SERIAL PRIMARY KEY,
-  posted_by_user_id INT NOT NULL REFERENCES users(id),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  posted_by_user_id UUID NOT NULL REFERENCES users(id),
   title VARCHAR(180) NOT NULL,
   description TEXT NOT NULL,
   category VARCHAR(50) NOT NULL,
@@ -67,8 +67,8 @@ CREATE TABLE jobs (
 );
 
 CREATE TABLE job_images (
-  id SERIAL PRIMARY KEY,
-  job_id INT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   image_url TEXT NOT NULL,
   object_key TEXT NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
@@ -76,9 +76,9 @@ CREATE TABLE job_images (
 );
 
 CREATE TABLE bids (
-  id SERIAL PRIMARY KEY,
-  job_id INT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-  handyman_user_id INT NOT NULL REFERENCES users(id),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  handyman_user_id UUID NOT NULL REFERENCES users(id),
   price NUMERIC(10,2) NOT NULL,
   estimated_arrival_utc TIMESTAMPTZ NOT NULL,
   message TEXT NOT NULL,
@@ -99,20 +99,20 @@ CREATE UNIQUE INDEX uq_bids_one_accepted_per_job
 
 
 CREATE TABLE notifications (
-  id SERIAL PRIMARY KEY,
-  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   type VARCHAR(50) NOT NULL,
   message TEXT NOT NULL,
-  related_job_id INT REFERENCES jobs(id) ON DELETE SET NULL,
+  related_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
   is_read BOOLEAN NOT NULL DEFAULT FALSE,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE handyman_verifications (
-  id SERIAL PRIMARY KEY,
-  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
-  reviewed_by_user_id INT REFERENCES users(id),
+  reviewed_by_user_id UUID REFERENCES users(id),
   reviewed_at_utc TIMESTAMPTZ,
   notes TEXT,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -121,31 +121,31 @@ CREATE TABLE handyman_verifications (
 );
 
 CREATE TABLE bid_transactions (
-  id SERIAL PRIMARY KEY,
-  bid_id INT NOT NULL REFERENCES bids(id) ON DELETE CASCADE,
-  job_id INT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-  handyman_user_id INT NOT NULL REFERENCES users(id),
-  homeowner_user_id INT NOT NULL REFERENCES users(id),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bid_id UUID NOT NULL REFERENCES bids(id) ON DELETE CASCADE,
+  job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  handyman_user_id UUID NOT NULL REFERENCES users(id),
+  homeowner_user_id UUID NOT NULL REFERENCES users(id),
   event_type VARCHAR(50) NOT NULL,
-  event_by_user_id INT REFERENCES users(id),
+  event_by_user_id UUID REFERENCES users(id),
   event_reason TEXT,
   event_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE bid_locks (
-  bid_id INT PRIMARY KEY REFERENCES bids(id) ON DELETE CASCADE,
-  locked_by_user_id INT NOT NULL REFERENCES users(id),
+  bid_id UUID PRIMARY KEY REFERENCES bids(id) ON DELETE CASCADE,
+  locked_by_user_id UUID NOT NULL REFERENCES users(id),
   locked_reason TEXT,
   locked_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE admin_actions (
-  id SERIAL PRIMARY KEY,
-  admin_user_id INT NOT NULL REFERENCES users(id),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_user_id UUID NOT NULL REFERENCES users(id),
   action_type VARCHAR(50) NOT NULL,
   target_type VARCHAR(50) NOT NULL,
-  target_id INT NOT NULL,
+  target_id UUID NOT NULL,
   reason TEXT,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()

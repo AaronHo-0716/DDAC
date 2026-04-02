@@ -5,19 +5,19 @@ namespace backend.Models.Entities;
 
 public partial class Bid_Transaction
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
-    public int Bid_Id { get; set; }
+    public Guid Bid_Id { get; set; }
 
-    public int Job_Id { get; set; }
+    public Guid Job_Id { get; set; }
 
-    public int Handyman_User_Id { get; set; }
+    public Guid Handyman_User_Id { get; set; }
 
-    public int Homeowner_User_Id { get; set; }
+    public Guid Homeowner_User_Id { get; set; }
 
     public string Event_Type { get; set; } = null!;
 
-    public int? Event_By_User_Id { get; set; }
+    public Guid? Event_By_User_Id { get; set; }
 
     public string? Event_Reason { get; set; }
 

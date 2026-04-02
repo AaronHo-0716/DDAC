@@ -12,6 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
   api:
     build: .
     container_name: neighbourhelp-api
@@ -26,5 +27,6 @@ services:
       - Jwt__Audience=NeighborHelpFrontend
     depends_on:
       - db
+
 volumes:
   postgres_data:
