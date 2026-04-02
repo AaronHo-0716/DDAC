@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import {
   Users,
   Briefcase,
-  Clock,
   ShieldCheck,
   Zap,
   ShieldAlert,
@@ -13,92 +13,11 @@ import {
   Gavel,
 } from "lucide-react";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
-
-const METRICS = [
-  {
-    label: "New Users Today",
-    value: "42",
-    delta: "+9%",
-    icon: Users,
-    color: "text-blue-600",
-    bg: "bg-blue-50",
-  },
-  {
-    label: "Jobs Posted Today",
-    value: "67",
-    delta: "+14",
-    icon: Briefcase,
-    color: "text-amber-600",
-    bg: "bg-amber-50",
-  },
-  {
-    label: "Bids Created Today",
-    value: "219",
-    delta: "+27",
-    icon: Gavel,
-    color: "text-purple-600",
-    bg: "bg-purple-50",
-  },
-  {
-    label: "Blocked Accounts",
-    value: "8",
-    delta: "2 today",
-    icon: Ban,
-    color: "text-red-600",
-    bg: "bg-red-50",
-  },
-];
-
-const PENDING_HANDYMEN = [
-  {
-    id: "v1",
-    name: "Ahmad Faris",
-    category: "Plumbing",
-    experience: "5 years",
-    submittedAt: "2026-03-26T08:00:00Z",
-  },
-  {
-    id: "v2",
-    name: "Raj Kumar",
-    category: "Electrical",
-    experience: "8 years",
-    submittedAt: "2026-03-26T11:30:00Z",
-  },
-];
-
-const FLAGGED_BIDS = [
-  {
-    id: "b101",
-    jobTitle: "Water heater not working",
-    handyman: "Demo Handyman",
-    reason: "Price spike >300% vs median",
-    createdAt: "2026-03-26T10:10:00Z",
-  },
-  {
-    id: "b109",
-    jobTitle: "Emergency electrical short",
-    handyman: "Raj Kumar",
-    reason: "Repeated bid edits in 5 min",
-    createdAt: "2026-03-26T11:05:00Z",
-  },
-];
-
-const EMERGENCY_JOBS = [
-  {
-    id: "e1",
-    title: "Gas leak suspected",
-    location: "Cheras, Kuala Lumpur",
-    postedAt: "2026-03-26T06:45:00Z",
-    bidCount: 0,
-  },
-  {
-    id: "e2",
-    title: "Water heater sparking",
-    location: "Bangsar, Kuala Lumpur",
-    postedAt: "2026-03-26T07:10:00Z",
-    bidCount: 1,
-  },
-];
+import {
+  adminService,
+  type AdminUserItem,
+  type BidTransactionItem,
+} from "@/app/lib/api/admin";
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -109,6 +28,133 @@ function timeAgo(iso: string) {
 
 export default function AdminPage() {
   const { authorized, loading } = useRequireRole("admin");
+  const [users, setUsers] = useState<AdminUserItem[]>([]);
+  const [transactions, setTransactions] = useState<BidTransactionItem[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authorized) return;
+
+    let cancelled = false;
+
+    const load = async () => {
+      setFetching(true);
+      setError(null);
+      try {
+        const [usersData, bidData] = await Promise.all([
+          adminService.getUsers(),
+          adminService.getBidTransactions(),
+        ]);
+        if (!cancelled) {
+          setUsers(usersData);
+          setTransactions(bidData);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load dashboard data.");
+        }
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authorized]);
+
+  const startOfToday = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  }, []);
+
+  const pendingHandymen = useMemo(() => {
+    return users
+      .filter((u) => u.role === "handyman" && u.verificationStatus === "pending")
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+  }, [users]);
+
+  const flaggedBids = useMemo(() => {
+    return transactions
+      .filter((t) => t.flagged)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+  }, [transactions]);
+
+  const emergencyJobs = useMemo(() => {
+    const byJob = new Map<string, { id: string; title: string; postedAt: string; bidCount: number }>();
+
+    for (const row of transactions) {
+      if (!row.emergency) continue;
+      const key = row.jobTitle;
+      const existing = byJob.get(key);
+      if (!existing) {
+        byJob.set(key, {
+          id: row.id,
+          title: row.jobTitle,
+          postedAt: row.createdAt,
+          bidCount: 1,
+        });
+      } else {
+        existing.bidCount += 1;
+        if (new Date(row.createdAt).getTime() < new Date(existing.postedAt).getTime()) {
+          existing.postedAt = row.createdAt;
+        }
+      }
+    }
+
+    return Array.from(byJob.values())
+      .sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime())
+      .slice(0, 5);
+  }, [transactions]);
+
+  const metrics = useMemo(() => {
+    const newUsersToday = users.filter((u) => new Date(u.createdAt).getTime() >= startOfToday).length;
+    const bidsToday = transactions.filter((t) => new Date(t.createdAt).getTime() >= startOfToday).length;
+    const blockedAccounts = users.filter((u) => u.status === "blocked").length;
+    const pendingVerificationCount = users.filter(
+      (u) => u.role === "handyman" && u.verificationStatus === "pending"
+    ).length;
+
+    return [
+      {
+        label: "New Users Today",
+        value: String(newUsersToday),
+        delta: `${users.length} total`,
+        icon: Users,
+        color: "text-blue-600",
+        bg: "bg-blue-50",
+      },
+      {
+        label: "Pending Verifications",
+        value: String(pendingVerificationCount),
+        delta: "handyman",
+        icon: Briefcase,
+        color: "text-amber-600",
+        bg: "bg-amber-50",
+      },
+      {
+        label: "Bids Created Today",
+        value: String(bidsToday),
+        delta: `${transactions.length} total`,
+        icon: Gavel,
+        color: "text-purple-600",
+        bg: "bg-purple-50",
+      },
+      {
+        label: "Blocked Accounts",
+        value: String(blockedAccounts),
+        delta: "active moderation",
+        icon: Ban,
+        color: "text-red-600",
+        bg: "bg-red-50",
+      },
+    ];
+  }, [startOfToday, transactions, users]);
 
   if (loading || !authorized) {
     return null;
@@ -140,8 +186,14 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          {METRICS.map((metric) => {
+          {metrics.map((metric) => {
             const Icon = metric.icon;
             return (
               <div key={metric.label} className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
@@ -167,13 +219,16 @@ export default function AdminPage() {
               <h2 className="text-sm font-semibold text-[#111827]">Pending Handyman Verification</h2>
             </div>
             <div className="space-y-3">
-              {PENDING_HANDYMEN.map((h) => (
+              {pendingHandymen.map((h) => (
                 <div key={h.id} className="rounded-xl border border-[#E5E7EB] p-3">
                   <p className="text-sm font-semibold text-[#111827]">{h.name}</p>
-                  <p className="text-xs text-[#6B7280]">{h.category} · {h.experience}</p>
-                  <p className="text-xs text-[#9CA3AF] mt-1">Submitted {timeAgo(h.submittedAt)}</p>
+                  <p className="text-xs text-[#6B7280]">{h.email}</p>
+                  <p className="text-xs text-[#9CA3AF] mt-1">Joined {timeAgo(h.createdAt)}</p>
                 </div>
               ))}
+              {!fetching && pendingHandymen.length === 0 && (
+                <p className="text-sm text-[#6B7280]">No pending verifications.</p>
+              )}
             </div>
             <Link href="/admin/users" className="mt-4 inline-flex items-center text-sm font-semibold text-[#0B74FF] hover:underline">
               Review all verifications <ArrowRight className="w-4 h-4 ml-1" />
@@ -186,14 +241,17 @@ export default function AdminPage() {
               <h2 className="text-sm font-semibold text-[#111827]">Flagged Bid Activity</h2>
             </div>
             <div className="space-y-3">
-              {FLAGGED_BIDS.map((bid) => (
+              {flaggedBids.map((bid) => (
                 <div key={bid.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <p className="text-sm font-semibold text-[#111827]">{bid.jobTitle}</p>
-                  <p className="text-xs text-[#6B7280]">Bid by {bid.handyman}</p>
-                  <p className="text-xs text-amber-700 mt-1">{bid.reason}</p>
+                  <p className="text-xs text-[#6B7280]">Bid by {bid.handymanName}</p>
+                  <p className="text-xs text-amber-700 mt-1">Flagged transaction requires review.</p>
                   <p className="text-xs text-[#9CA3AF] mt-1">{timeAgo(bid.createdAt)}</p>
                 </div>
               ))}
+              {!fetching && flaggedBids.length === 0 && (
+                <p className="text-sm text-[#6B7280]">No flagged bids right now.</p>
+              )}
             </div>
             <Link href="/admin/transactions/bids" className="mt-4 inline-flex items-center text-sm font-semibold text-[#0B74FF] hover:underline">
               Open bid transaction queue <ArrowRight className="w-4 h-4 ml-1" />
@@ -206,16 +264,18 @@ export default function AdminPage() {
               <h2 className="text-sm font-semibold text-[#111827]">Emergency Jobs Queue</h2>
             </div>
             <div className="space-y-3">
-              {EMERGENCY_JOBS.map((job) => (
+              {emergencyJobs.map((job) => (
                 <div key={job.id} className="rounded-xl border border-[#E5E7EB] p-3">
                   <p className="text-sm font-semibold text-[#111827]">{job.title}</p>
-                  <p className="text-xs text-[#6B7280]">{job.location}</p>
                   <p className="text-xs mt-1 text-red-600 font-medium">
                     {job.bidCount === 0 ? "No bids yet" : `${job.bidCount} bid(s)`}
                   </p>
                   <p className="text-xs text-[#9CA3AF] mt-1">Posted {timeAgo(job.postedAt)}</p>
                 </div>
               ))}
+              {!fetching && emergencyJobs.length === 0 && (
+                <p className="text-sm text-[#6B7280]">No emergency jobs in queue.</p>
+              )}
             </div>
             <Link href="/admin/transactions/bids" className="mt-4 inline-flex items-center text-sm font-semibold text-[#0B74FF] hover:underline">
               Check emergency bid activity <ArrowRight className="w-4 h-4 ml-1" />

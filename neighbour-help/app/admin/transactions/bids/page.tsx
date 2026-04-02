@@ -1,76 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Lock, Shield, ShieldCheck } from "lucide-react";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
-import type { BidStatus } from "@/app/types";
-
-type AdminBidStatus = BidStatus | "retracted";
-
-interface BidTransactionItem {
-  id: string;
-  jobTitle: string;
-  homeownerName: string;
-  handymanName: string;
-  price: number;
-  status: AdminBidStatus;
-  emergency: boolean;
-  createdAt: string;
-  flagged: boolean;
-  locked: boolean;
-}
-
-const SEED_TRANSACTIONS: BidTransactionItem[] = [
-  {
-    id: "tx-bid-1",
-    jobTitle: "Water heater not working",
-    homeownerName: "Alice Tan",
-    handymanName: "Demo Handyman",
-    price: 210,
-    status: "pending",
-    emergency: true,
-    createdAt: "2026-03-26T09:20:00Z",
-    flagged: false,
-    locked: false,
-  },
-  {
-    id: "tx-bid-2",
-    jobTitle: "Ceiling fan installation",
-    homeownerName: "Alice Tan",
-    handymanName: "Raj Kumar",
-    price: 180,
-    status: "accepted",
-    emergency: false,
-    createdAt: "2026-03-26T07:45:00Z",
-    flagged: false,
-    locked: false,
-  },
-  {
-    id: "tx-bid-3",
-    jobTitle: "Emergency electrical short",
-    homeownerName: "Lim Wei",
-    handymanName: "Mike Rahman",
-    price: 900,
-    status: "pending",
-    emergency: true,
-    createdAt: "2026-03-26T10:10:00Z",
-    flagged: true,
-    locked: false,
-  },
-  {
-    id: "tx-bid-4",
-    jobTitle: "Cabinet hinge replacement",
-    homeownerName: "Jane Ooi",
-    handymanName: "David Lim",
-    price: 75,
-    status: "rejected",
-    emergency: false,
-    createdAt: "2026-03-25T16:50:00Z",
-    flagged: false,
-    locked: false,
-  },
-];
+import {
+  adminService,
+  type AdminBidStatus,
+  type BidTransactionItem,
+} from "@/app/lib/api/admin";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString("en-MY", {
@@ -98,9 +36,39 @@ function statusPill(status: AdminBidStatus) {
 
 export default function AdminBidTransactionsPage() {
   const { authorized, loading } = useRequireRole("admin");
-  const [rows, setRows] = useState<BidTransactionItem[]>(SEED_TRANSACTIONS);
+  const [rows, setRows] = useState<BidTransactionItem[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | AdminBidStatus>("all");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
+
+  useEffect(() => {
+    if (!authorized) return;
+
+    let cancelled = false;
+
+    const load = async () => {
+      setFetching(true);
+      setError(null);
+      try {
+        const transactions = await adminService.getBidTransactions();
+        if (!cancelled) setRows(transactions);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load bid transactions.");
+        }
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authorized]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -114,24 +82,51 @@ export default function AdminBidTransactionsPage() {
     return null;
   }
 
-  const forceReject = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) =>
-        row.id === id ? { ...row, status: "rejected", flagged: true, locked: true } : row
-      )
-    );
+  const forceReject = async (id: string) => {
+    setPendingActionId(id);
+    setError(null);
+    try {
+      await adminService.forceRejectBid(id);
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === id ? { ...row, status: "rejected", flagged: true, locked: true } : row
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reject bid.");
+    } finally {
+      setPendingActionId(null);
+    }
   };
 
-  const toggleFlag = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, flagged: !row.flagged } : row))
-    );
+  const toggleFlag = async (id: string, nextFlagged: boolean) => {
+    setPendingActionId(id);
+    setError(null);
+    try {
+      await adminService.setBidFlag(id, nextFlagged);
+      setRows((prev) =>
+        prev.map((row) => (row.id === id ? { ...row, flagged: nextFlagged } : row))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update flag.");
+    } finally {
+      setPendingActionId(null);
+    }
   };
 
-  const toggleLock = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, locked: !row.locked } : row))
-    );
+  const toggleLock = async (id: string, nextLocked: boolean) => {
+    setPendingActionId(id);
+    setError(null);
+    try {
+      await adminService.setBidLock(id, nextLocked);
+      setRows((prev) =>
+        prev.map((row) => (row.id === id ? { ...row, locked: nextLocked } : row))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update lock.");
+    } finally {
+      setPendingActionId(null);
+    }
   };
 
   return (
@@ -174,6 +169,12 @@ export default function AdminBidTransactionsPage() {
             Emergency only
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden">
           <div className="overflow-x-auto">
@@ -220,19 +221,22 @@ export default function AdminBidTransactionsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => toggleFlag(row.id)}
+                          onClick={() => void toggleFlag(row.id, !row.flagged)}
+                          disabled={pendingActionId === row.id}
                           className="text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50"
                         >
                           {row.flagged ? "Unflag" : "Flag"}
                         </button>
                         <button
-                          onClick={() => toggleLock(row.id)}
+                          onClick={() => void toggleLock(row.id, !row.locked)}
+                          disabled={pendingActionId === row.id}
                           className="text-xs px-2.5 py-1.5 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50"
                         >
                           {row.locked ? "Unlock" : "Lock"}
                         </button>
                         <button
-                          onClick={() => forceReject(row.id)}
+                          onClick={() => void forceReject(row.id)}
+                          disabled={pendingActionId === row.id}
                           className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50"
                         >
                           Force Reject
@@ -245,6 +249,10 @@ export default function AdminBidTransactionsPage() {
             </table>
           </div>
 
+          {fetching && (
+            <div className="p-8 text-center text-sm text-[#6B7280]">Loading bid transactions...</div>
+          )}
+
           {filtered.length === 0 && (
             <div className="p-8 text-center text-sm text-[#6B7280]">No bid transactions in this filter.</div>
           )}
@@ -252,7 +260,7 @@ export default function AdminBidTransactionsPage() {
 
         <p className="text-xs text-[#9CA3AF] mt-4 inline-flex items-center gap-1">
           <ShieldCheck className="w-3.5 h-3.5" />
-          Demo mode: these actions are local mock updates and will map to admin APIs later.
+          Actions are applied via admin API endpoints.
         </p>
       </div>
     </div>

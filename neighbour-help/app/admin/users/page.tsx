@@ -1,63 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Ban, CheckCircle2, UserCheck, UserX } from "lucide-react";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
+import {
+  adminService,
+  type AdminUserItem,
+  type UserStatus,
+  type VerificationStatus,
+} from "@/app/lib/api/admin";
 import type { UserRole } from "@/app/types";
-
-type VerificationStatus = "pending" | "approved" | "rejected";
-
-type UserStatus = "active" | "blocked";
-
-interface AdminUserItem {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  status: UserStatus;
-  verificationStatus?: VerificationStatus;
-  blockReason?: string;
-  createdAt: string;
-}
-
-const SEED_USERS: AdminUserItem[] = [
-  {
-    id: "u-homeowner-1",
-    name: "Alice Tan",
-    email: "alice@example.com",
-    role: "homeowner",
-    status: "active",
-    createdAt: "2026-02-01T08:00:00Z",
-  },
-  {
-    id: "u-handyman-1",
-    name: "Demo Handyman",
-    email: "handyman@neighborhelp.test",
-    role: "handyman",
-    status: "active",
-    verificationStatus: "approved",
-    createdAt: "2026-02-10T10:10:00Z",
-  },
-  {
-    id: "u-handyman-2",
-    name: "Raj Kumar",
-    email: "raj@example.com",
-    role: "handyman",
-    status: "active",
-    verificationStatus: "pending",
-    createdAt: "2026-03-01T09:20:00Z",
-  },
-  {
-    id: "u-homeowner-2",
-    name: "Noisy User",
-    email: "noisy@example.com",
-    role: "homeowner",
-    status: "blocked",
-    blockReason: "Repeated abuse reports",
-    createdAt: "2026-01-20T11:40:00Z",
-  },
-];
 
 function statusPill(status: UserStatus) {
   return status === "active" ? (
@@ -89,9 +42,39 @@ function verificationPill(status?: VerificationStatus) {
 
 export default function AdminUsersPage() {
   const { authorized, loading } = useRequireRole("admin");
-  const [rows, setRows] = useState<AdminUserItem[]>(SEED_USERS);
+  const [rows, setRows] = useState<AdminUserItem[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | UserStatus>("all");
+
+  useEffect(() => {
+    if (!authorized) return;
+
+    let cancelled = false;
+
+    const load = async () => {
+      setFetching(true);
+      setError(null);
+      try {
+        const users = await adminService.getUsers();
+        if (!cancelled) setRows(users);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load users.");
+        }
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authorized]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -105,30 +88,57 @@ export default function AdminUsersPage() {
     return null;
   }
 
-  const blockUser = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) =>
-        row.id === id
-          ? { ...row, status: "blocked", blockReason: "Blocked by admin moderation" }
-          : row
-      )
-    );
+  const blockUser = async (id: string) => {
+    setPendingActionId(id);
+    setError(null);
+    try {
+      await adminService.blockUser(id);
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === id
+            ? { ...row, status: "blocked", blockReason: "Blocked by admin moderation" }
+            : row
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to block user.");
+    } finally {
+      setPendingActionId(null);
+    }
   };
 
-  const unblockUser = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, status: "active", blockReason: undefined } : row))
-    );
+  const unblockUser = async (id: string) => {
+    setPendingActionId(id);
+    setError(null);
+    try {
+      await adminService.unblockUser(id);
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === id ? { ...row, status: "active", blockReason: undefined } : row
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to unblock user.");
+    } finally {
+      setPendingActionId(null);
+    }
   };
 
-  const updateVerification = (id: string, status: VerificationStatus) => {
-    setRows((prev) =>
-      prev.map((row) =>
-        row.id === id && row.role === "handyman"
-          ? { ...row, verificationStatus: status }
-          : row
-      )
-    );
+  const updateVerification = async (id: string, status: VerificationStatus) => {
+    setPendingActionId(id);
+    setError(null);
+    try {
+      await adminService.updateVerification(id, status);
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === id && row.role === "handyman" ? { ...row, verificationStatus: status } : row
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update verification.");
+    } finally {
+      setPendingActionId(null);
+    }
   };
 
   return (
@@ -176,6 +186,12 @@ export default function AdminUsersPage() {
           ))}
         </div>
 
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -205,14 +221,16 @@ export default function AdminUsersPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         {row.status === "active" ? (
                           <button
-                            onClick={() => blockUser(row.id)}
+                            onClick={() => void blockUser(row.id)}
+                            disabled={pendingActionId === row.id}
                             className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 inline-flex items-center gap-1"
                           >
                             <UserX className="w-3.5 h-3.5" /> Block
                           </button>
                         ) : (
                           <button
-                            onClick={() => unblockUser(row.id)}
+                            onClick={() => void unblockUser(row.id)}
+                            disabled={pendingActionId === row.id}
                             className="text-xs px-2.5 py-1.5 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 inline-flex items-center gap-1"
                           >
                             <UserCheck className="w-3.5 h-3.5" /> Unblock
@@ -222,13 +240,15 @@ export default function AdminUsersPage() {
                         {row.role === "handyman" && (
                           <>
                             <button
-                              onClick={() => updateVerification(row.id, "approved")}
+                              onClick={() => void updateVerification(row.id, "approved")}
+                              disabled={pendingActionId === row.id}
                               className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 inline-flex items-center gap-1"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" /> Approve
                             </button>
                             <button
-                              onClick={() => updateVerification(row.id, "rejected")}
+                              onClick={() => void updateVerification(row.id, "rejected")}
+                              disabled={pendingActionId === row.id}
                               className="text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 inline-flex items-center gap-1"
                             >
                               <Ban className="w-3.5 h-3.5" /> Reject
@@ -242,6 +262,8 @@ export default function AdminUsersPage() {
               </tbody>
             </table>
           </div>
+
+          {fetching && <div className="p-8 text-center text-sm text-[#6B7280]">Loading users...</div>}
 
           {filtered.length === 0 && (
             <div className="p-8 text-center text-sm text-[#6B7280]">No users in this filter.</div>
