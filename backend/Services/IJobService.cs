@@ -7,36 +7,16 @@ namespace backend.Services;
 
 public interface IJobService
 {
-    /// <summary>
-    /// Get all jobs with filters and pagination.
-    /// Handyman can see open jobs, Admin can see all jobs.
-    /// </summary>
     Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId, string userRole);
 
-    /// <summary>
-    /// Get jobs posted by the current user (homeowner only).
-    /// </summary>
     Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 10);
 
-    /// <summary>
-    /// Get a single job by ID.
-    /// Handyman can only see open jobs, Admin can see all.
-    /// </summary>
     Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId, string userRole);
 
-    /// <summary>
-    /// Create a new job (homeowner only).
-    /// </summary>
     Task<JobDto> CreateJobAsync(CreateJobRequest request, Guid userId);
 
-    /// <summary>
-    /// Update a job (homeowner owner only or admin).
-    /// </summary>
     Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId, string userRole);
 
-    /// <summary>
-    /// Delete a job (homeowner owner only or admin).
-    /// </summary>
     Task DeleteJobAsync(Guid jobId, Guid userId, string userRole);
 }
 
@@ -54,20 +34,15 @@ public class JobService : IJobService
     {
         var query = _context.Jobs.AsQueryable();
 
-        // Apply role-based visibility rules
         if (userRole == "handyman")
         {
-            // Handyman can only see open jobs
             query = query.Where(j => j.Status == "open");
         }
         else if (userRole == "homeowner")
         {
-            // Homeowner can see all open jobs (for discovery) and their own jobs
             query = query.Where(j => j.Status == "open" || j.Posted_By_User_Id == userId);
         }
-        // Admin can see all jobs (no filter)
 
-        // Apply filters
         if (!string.IsNullOrEmpty(filter.Category))
         {
             query = query.Where(j => j.Category == filter.Category);
@@ -91,20 +66,15 @@ public class JobService : IJobService
             query = query.Where(j => j.Is_Emergency == filter.IsEmergency.Value);
         }
 
-        // Distance filter (if latitude/longitude available)
         if (filter.MaxDistanceKm.HasValue && userId.HasValue)
         {
-            // This is a simplified implementation. In production, use PostGIS or similar.
-            // For now, we'll just apply basic distance logic if coordinates are available.
             var maxDistance = filter.MaxDistanceKm.Value;
             query = query.Where(j => 
                 j.Latitude != null && j.Longitude != null);
         }
 
-        // Get total count
         var totalCount = await query.CountAsync();
 
-        // Apply pagination
         var jobs = await query
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
@@ -113,7 +83,6 @@ public class JobService : IJobService
             .Take(filter.PageSize)
             .ToListAsync();
 
-        // Map to DTOs
         var jobDtos = jobs.Select(j => MapToDto(j)).ToList();
 
         return new JobListResponse(
@@ -134,7 +103,6 @@ public class JobService : IJobService
         var jobs = await query
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
-            .Include(j => j.Bid)
             .OrderByDescending(j => j.Created_At_Utc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -142,7 +110,9 @@ public class JobService : IJobService
 
         var jobDtos = jobs.Select(j => MapToDto(j)).ToList();
 
+        //return new JobListResponse(jobDtos, page, pageSize, totalCount);
         return new JobListResponse(jobDtos, page, pageSize, totalCount);
+
     }
 
     public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId, string userRole)
@@ -155,15 +125,14 @@ public class JobService : IJobService
         if (job == null)
             return null;
 
-        // Apply visibility rules
         if (userRole == "handyman" && job.Status != "open")
         {
-            return null; // Handyman can only see open jobs
+            return null;
         }
 
         if (userRole == "homeowner" && job.Status != "open" && job.Posted_By_User_Id != userId)
         {
-            return null; // Homeowner can only see open jobs or their own
+            return null;
         }
 
         // Admin can see all jobs (no restriction)
@@ -173,7 +142,6 @@ public class JobService : IJobService
 
     public async Task<JobDto> CreateJobAsync(CreateJobRequest request, Guid userId)
     {
-        // Validate input
         if (string.IsNullOrWhiteSpace(request.Title))
             throw new ArgumentException("Title is required");
         if (string.IsNullOrWhiteSpace(request.Description))
@@ -200,7 +168,6 @@ public class JobService : IJobService
 
         _context.Jobs.Add(newJob);
 
-        // Add job images if provided
         if (request.ImageUrls != null && request.ImageUrls.Count > 0)
         {
             var images = request.ImageUrls.Select((url, index) => new Job_Image
@@ -218,7 +185,6 @@ public class JobService : IJobService
 
         await _context.SaveChangesAsync();
 
-        // Fetch the job with related data
         var createdJob = await _context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
@@ -237,11 +203,9 @@ public class JobService : IJobService
         if (job == null)
             throw new KeyNotFoundException($"Job with id {jobId} not found");
 
-        // Authorization: only owner (homeowner) or admin can update
         if (userRole != "admin" && job.Posted_By_User_Id != userId)
             throw new UnauthorizedAccessException("You can only update your own jobs");
 
-        // Validate input
         if (string.IsNullOrWhiteSpace(request.Title))
             throw new ArgumentException("Title is required");
         if (string.IsNullOrWhiteSpace(request.Description))
@@ -262,7 +226,6 @@ public class JobService : IJobService
         _context.Jobs.Update(job);
         await _context.SaveChangesAsync();
 
-        // Fetch updated job with related data
         var updatedJob = await _context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
@@ -278,7 +241,6 @@ public class JobService : IJobService
         if (job == null)
             throw new KeyNotFoundException($"Job with id {jobId} not found");
 
-        // Authorization: only owner (homeowner) or admin can delete
         if (userRole != "admin" && job.Posted_By_User_Id != userId)
             throw new UnauthorizedAccessException("You can only delete your own jobs");
 
@@ -286,9 +248,6 @@ public class JobService : IJobService
         await _context.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Helper method to map job entity to DTO, including bid count.
-    /// </summary>
     private JobDto MapToDto(Job job)
     {
         var bidCount = _context.Bids.Count(b => b.Job_Id == job.Id);
