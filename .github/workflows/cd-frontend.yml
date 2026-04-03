@@ -1,0 +1,85 @@
+name: Continuous Deployment - Frontend
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'neighbour-help/**'
+      - '.github/workflows/cd-frontend.yml'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push-frontend:
+    name: Build and Push Frontend Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Docker metadata for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-frontend
+          tags: type=raw,value=latest
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./neighbour-help
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+
+  deploy-frontend:
+    name: Deploy Frontend to EC2
+    needs: [build-and-push-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Docker metadata for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-frontend
+          tags: type=raw,value=latest
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-5
+
+      - name: Deploy Frontend via AWS SSM
+        run: |
+          FRONTEND_COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=App-Caddy-NAT" \
+            --comment "Deploy frontend container" \
+            --parameters 'commands=[
+              "docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}",
+              "docker pull ${{ steps.meta-frontend.outputs.tags }}",
+              "docker stop frontend || true",
+              "docker rm frontend || true",
+              "docker run -d --restart always --name frontend -p 3000:3000 ${{ steps.meta-frontend.outputs.tags }}",
+              "sleep 10",
+              "docker ps | grep frontend"
+            ]' \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "Sent Frontend SSM Command: $FRONTEND_COMMAND_ID."
