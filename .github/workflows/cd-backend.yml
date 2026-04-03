@@ -1,17 +1,20 @@
-name: Continuous Deployment
+name: Continuous Deployment - Backend
 
 on:
   push:
     branches:
       - main
       - master
+    paths:
+      - "backend/**"
+      - ".github/workflows/cd-backend.yml"
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
   build-and-push:
-    name: Build and Push Images
+    name: Build and Push Backend Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,13 +28,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-backend
-          tags: type=raw,value=latest
-
-      - name: Docker metadata for Frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-frontend
           tags: type=raw,value=latest
 
       - name: Log in to the Container registry
@@ -49,16 +45,8 @@ jobs:
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
 
-      - name: Build and push Frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./neighbour-help
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-
-  deploy-to-ec2:
-    name: Deploy to EC2
+  deploy-backend:
+    name: Deploy Backend to EC2
     needs: [build-and-push]
     runs-on: ubuntu-latest
     steps:
@@ -69,13 +57,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-backend
           tags: type=raw,value=latest
 
-      - name: Docker metadata for Frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-frontend
-          tags: type=raw,value=latest
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -83,54 +64,25 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-southeast-5
 
-      - name: Deploy Containers via AWS SSM
+      - name: Deploy Backend via AWS SSM
         run: |
-          # 1. Send the command and capture the Command ID
-          COMMAND_ID=$(aws ssm send-command \
+          BACKEND_COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=App-Backend-Tier" \
-            --comment "Deploy containers" \
+            --comment "Deploy backend container" \
             --parameters 'commands=[
               "docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}",
               "docker pull ${{ steps.meta-backend.outputs.tags }}",
-              "docker pull ${{ steps.meta-frontend.outputs.tags }}",
-              "docker stop backend frontend || true",
-              "docker rm backend frontend || true",
+              "docker stop backend || true",
+              "docker rm backend || true",
               "DB_HOST=$(aws ssm get-parameter --name /app/db/host --with-decryption --query Parameter.Value --output text)",
               "DB_USER=$(aws ssm get-parameter --name /app/db/username --with-decryption --query Parameter.Value --output text)",
               "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
               "docker run -d --restart always --name backend -p 8080:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ steps.meta-backend.outputs.tags }}",
-              "docker run -d --restart always --name frontend -p 3000:3000 ${{ steps.meta-frontend.outputs.tags }}",
               "sleep 10",
-              "docker ps | grep backend",
-              "docker ps | grep frontend"
+              "docker ps | grep backend"
             ]' \
             --query "Command.CommandId" \
             --output text)
 
-          echo "Sent SSM Command: $COMMAND_ID. Waiting for completion..."
-
-          # 2. Poll for the command status
-          while true; do
-            # Get the aggregate status of the command across all targets
-            STATUS=$(aws ssm list-commands --command-id "$COMMAND_ID" --query "Commands[0].Status" --output text)
-
-            if [ "$STATUS" == "Success" ]; then
-              echo "Deployment successful!"
-              break
-            elif [ "$STATUS" == "Failed" ] || [ "$STATUS" == "Cancelled" ] || [ "$STATUS" == "TimedOut" ]; then
-              echo "Deployment failed with status: $STATUS"
-
-              # Fetch and print the logs from the first instance for debugging
-              echo "Fetching logs..."
-              aws ssm list-command-invocations \
-                --command-id "$COMMAND_ID" \
-                --details \
-                --query "CommandInvocations[*].CommandPlugins[*].Output" \
-                --output text
-              exit 1
-            fi
-
-            echo "Current status: $STATUS... waiting 10s"
-            sleep 10
-          done
+          echo "Sent Backend SSM Command: $BACKEND_COMMAND_ID."

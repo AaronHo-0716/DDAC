@@ -251,6 +251,10 @@ resource "aws_instance" "caddy_nat_instance" {
               dnf install -y iptables-services
               systemctl enable iptables
               iptables-save > /etc/sysconfig/iptables
+              dnf install -y docker
+              systemctl start docker
+              systemctl enable docker
+              usermod -aG docker ssm-user
               EOF
 
   tags = { Name = "App-Caddy-NAT" }
