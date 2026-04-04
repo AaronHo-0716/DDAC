@@ -35,4 +35,7 @@ public partial class User
     public virtual ICollection<Job> Jobs { get; set; } = new List<Job>();
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public virtual ICollection<Refresh_Token> Refresh_Tokens { get; set; } = new List<Refresh_Token>();
+    public int TokenVersion { get; set; } = 1; 
+
+    public uint xmin { get; set; }
 }

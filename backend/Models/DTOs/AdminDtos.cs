@@ -8,8 +8,8 @@ public enum UserRoleFilter
 }
 
 public record UserSearchRequest(
-    string? Name,      // Separate column for Name
-    string? Email,     // Separate column for "User" (Email)
-    UserRoleFilter? Role, // This will become a dropdown
+    string? Name,
+    string? Email,
+    UserRoleFilter? Role,
     bool? IsActive
 );

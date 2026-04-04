@@ -20,8 +20,6 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
         catch (DbUpdateException)
         {
-            // Specifically catches Unique Constraint violations (e.g., duplicate Email) 
-            // occurring due to simultaneous registration attempts.
             return Conflict(new { message = "A user with this email already exists." });
         }
         catch (HttpRequestException ex)
@@ -84,7 +82,6 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Handles cases where a refresh token is exchanged twice in exact parallel
             return Conflict(new { message = "Refresh token is currently being processed. Please try again." });
         }
         catch (Exception ex)
