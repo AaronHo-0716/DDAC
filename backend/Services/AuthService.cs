@@ -7,6 +7,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Net;
+using System.Security.Cryptography;
 
 namespace backend.Services;
 
@@ -14,113 +15,120 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
 {
     private static readonly string[] AllowedRoles = ["handyman", "homeowner", "admin"];
 
-    public async Task<AuthResponse> Login(LoginRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
-            throw new HttpRequestException("Email and password are required.", null, HttpStatusCode.BadRequest);
-
-        var user = await context.Users
-            .FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
-
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
-
-        return GenerateAuthResponse(user);
-    }
-
     public async Task<AuthResponse> Register(RegisterRequest request)
     {
-        // 1. Basic field validation
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
-            throw new HttpRequestException("All fields (Email, Password, Name) are required.", null, HttpStatusCode.BadRequest);
-
-        // 2. Email format validation
-        if (!IsValidEmail(request.Email))
-            throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
-
-        // 3. ROLE VERIFICATION
-        var roleLower = request.Role?.ToLower().Trim();
-        if (string.IsNullOrEmpty(roleLower) || !AllowedRoles.Contains(roleLower))
-        {
-            throw new HttpRequestException($"Invalid role. Choose from: {string.Join(", ", AllowedRoles)}", null, HttpStatusCode.BadRequest);
-        }
-
-        // 4. Duplicate email check
         var emailLower = request.Email.ToLower().Trim();
         if (await context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("Email already exists.", null, HttpStatusCode.Conflict);
 
-        // 5. Create new user
         var newUser = new User
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Email = emailLower,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Role = roleLower, // Use the validated role
+            Role = request.Role?.ToLower().Trim() ?? "homeowner",
             IsActive = true
         };
 
         context.Users.Add(newUser);
         await context.SaveChangesAsync();
 
-        return GenerateAuthResponse(newUser);
+        return await GenerateAuthResponse(newUser);
     }
 
-    public async Task<UserDto> GetUserById(Guid userId)
+    public async Task<AuthResponse> Login(LoginRequest request)
     {
-        var user = await context.Users.FindAsync(userId);
-        if (user == null) throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
-        return MapToDto(user);
+        var user = await context.Users
+            .FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
+
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
+
+        return await GenerateAuthResponse(user);
     }
 
     public async Task<AuthResponse> RefreshToken(string token)
     {
-        // Mocking refresh logic
-        var userDto = new UserDto(Guid.Empty, "System", "ref@example.com", "user", null, null, DateTime.UtcNow, true);
-        return await Task.FromResult(new AuthResponse(
-            User: userDto,
-            Tokens: new TokenDto("new_access_token", Guid.NewGuid().ToString(), 86400)
-        ));
+        var existingToken = await context.Refresh_Tokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Token_Hash == token);
+
+        if (existingToken == null || !existingToken.IsActive)
+            throw new HttpRequestException("Invalid or expired refresh token.", null, HttpStatusCode.Unauthorized);
+
+        existingToken.User.TokenVersion++;
+
+        var newRefreshTokenStr = GenerateSecureRandomString();
+        existingToken.Revoked_At_Utc = DateTime.UtcNow;
+        existingToken.Replaced_By_Token_Hash = newRefreshTokenStr;
+
+        var newRefreshToken = new Refresh_Token
+        {
+            Id = Guid.NewGuid(),
+            User_Id = existingToken.User_Id,
+            Token_Hash = newRefreshTokenStr,
+            Expires_At_Utc = DateTime.UtcNow.AddDays(7)
+        };
+
+        context.Refresh_Tokens.Add(newRefreshToken);
+
+        await context.SaveChangesAsync();
+
+        var (accessToken, expiresIn) = CreateJwtToken(existingToken.User);
+        return new AuthResponse(MapToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
     }
 
-    private AuthResponse GenerateAuthResponse(User user)
+    private async Task<AuthResponse> GenerateAuthResponse(User user)
     {
-        var (token, expiresIn) = CreateJwtToken(user);
-        return new AuthResponse(
-            User: MapToDto(user),
-            Tokens: new TokenDto(token, Guid.NewGuid().ToString(), expiresIn)
-        );
-    }
+        var (accessToken, expiresIn) = CreateJwtToken(user);
+        var refreshTokenStr = GenerateSecureRandomString();
 
-    private static UserDto MapToDto(User user) => new(
-        user.Id, user.Name, user.Email, user.Role, user.AvatarUrl, user.Rating, user.CreatedAtUtc, user.IsActive
-    );
+        var refreshToken = new Refresh_Token
+        {
+            Id = Guid.NewGuid(),
+            User_Id = user.Id,
+            Token_Hash = refreshTokenStr,
+            Expires_At_Utc = DateTime.UtcNow.AddDays(7)
+        };
+
+        context.Refresh_Tokens.Add(refreshToken);
+        await context.SaveChangesAsync();
+
+        return new AuthResponse(MapToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
+    }
 
     private (string Token, int ExpiresIn) CreateJwtToken(User user)
     {
-        var expiryMinutes = config.GetValue<int>("Jwt:ExpiryInMinutes", 1440);
-        var expiration = DateTime.UtcNow.AddMinutes(expiryMinutes);
-
         var claims = new List<Claim> {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(ClaimTypes.Email, user.Email),
-            new(ClaimTypes.Role, user.Role)
+            new(ClaimTypes.Role, user.Role.Trim()),
+            new("TokenVersion", user.TokenVersion.ToString()) 
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]!));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
         var token = new JwtSecurityToken(
             issuer: config["Jwt:Issuer"],
             audience: config["Jwt:Audience"],
             claims: claims,
-            expires: expiration,
-            signingCredentials: creds
+            expires: DateTime.UtcNow.AddMinutes(config.GetValue<int>("Jwt:ExpiryInMinutes", 1440)),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
         );
 
-        return (new JwtSecurityTokenHandler().WriteToken(token), expiryMinutes * 60);
+        return (new JwtSecurityTokenHandler().WriteToken(token), 3600);
     }
+
+    private string GenerateSecureRandomString()
+    {
+        var randomNumber = new byte[64];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber);
+    }
+
+    private static UserDto MapToDto(User user) => new(user.Id, user.Name, user.Email, user.Role, user.AvatarUrl, user.Rating, user.CreatedAtUtc, user.IsActive);
+
+    public async Task<UserDto> GetUserById(Guid userId) => MapToDto(await context.Users.FindAsync(userId));
 
     private static bool IsValidEmail(string email)
     {

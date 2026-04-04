@@ -25,6 +25,8 @@ public partial class NeighbourHelpDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+
         modelBuilder.HasPostgresExtension("pgcrypto");
 
         // --- 1. USER ENTITY (Fixed Column Mappings) ---
@@ -32,6 +34,8 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("users");
             entity.HasKey(e => e.Id).HasName("users_pkey");
+
+            entity.Property(u => u.xmin).HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsRowVersion();
 
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Name).HasColumnName("name");
@@ -52,6 +56,8 @@ public partial class NeighbourHelpDbContext : DbContext
 
             entity.HasOne(d => d.Blocked_By_User).WithMany(p => p.Inverse_Blocked_By_User)
                 .HasForeignKey(d => d.Blocked_By_User_Id);
+
+            entity.Property(e => e.TokenVersion).HasColumnName("token_version");
         });
 
         modelBuilder.Entity<Job>(entity =>
@@ -161,6 +167,9 @@ public partial class NeighbourHelpDbContext : DbContext
         {
             entity.ToTable("refresh_tokens");
             entity.HasKey(e => e.Id).HasName("refresh_tokens_pkey");
+
+            entity.Property(rt => rt.xmin).HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsRowVersion();
+            
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.User_Id).HasColumnName("user_id");
             entity.Property(e => e.Token_Hash).HasColumnName("token_hash");

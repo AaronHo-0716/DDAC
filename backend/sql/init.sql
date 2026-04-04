@@ -29,6 +29,7 @@ CREATE TABLE users (
   blocked_by_user_id UUID REFERENCES users(id),
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  token_version INT NOT NULL DEFAULT 1, 
   CONSTRAINT uq_users_email UNIQUE (email),
   CONSTRAINT chk_users_rating_range CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))
 );

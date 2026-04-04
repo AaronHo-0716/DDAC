@@ -17,6 +17,10 @@ public class AuthController(IAuthService authService) : ControllerBase
             var result = await authService.Register(request);
             return Ok(result);
         }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = "A user with this email already exists." });
+        }
         catch (HttpRequestException ex)
         {
             // Catches 400 (Bad Request) or 409 (Conflict) from the service
@@ -77,6 +81,10 @@ public class AuthController(IAuthService authService) : ControllerBase
         {
             var result = await authService.RefreshToken(request.RefreshToken);
             return Ok(result);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "Refresh token is currently being processed. Please try again." });
         }
         catch (Exception ex)
         {

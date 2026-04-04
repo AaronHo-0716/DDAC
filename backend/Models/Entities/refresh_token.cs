@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace backend.Models.Entities;
 
 public partial class Refresh_Token
 {
+    [Key]
     public Guid Id { get; set; }
 
     public Guid User_Id { get; set; }
@@ -24,4 +26,8 @@ public partial class Refresh_Token
     public DateTime Created_At_Utc { get; set; }
 
     public virtual User User { get; set; } = null!;
+
+    public uint xmin { get; set; }
+
+    public bool IsActive => Revoked_At_Utc == null && DateTime.UtcNow < Expires_At_Utc;
 }
