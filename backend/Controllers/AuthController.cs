@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
 using System.Security.Claims;
 using System.Net;
-using Microsoft.EntityFrameworkCore;
 
 [ApiController]
 [Route("api/auth")]
@@ -24,10 +23,12 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
         catch (HttpRequestException ex)
         {
+            // Catches 400 (Bad Request) or 409 (Conflict) from the service
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
         catch (Exception ex)
         {
+            // Catches unexpected server crashes
             return StatusCode(500, new { message = "An internal server error occurred.", details = ex.Message });
         }
     }
@@ -42,6 +43,7 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
         catch (HttpRequestException ex)
         {
+            // Catches 401 (Unauthorized) or 400 (Bad Request)
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
         catch (Exception ex)

@@ -80,9 +80,18 @@ builder.Services.AddCors(options =>
 
 // --- DEPENDENCY INJECTION (Register ALL services here) ---
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IAdminService, AdminService>(); // <--- THIS WAS MISSING
+builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IBidService, BidService>();
+
+// Error Handling
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Extensions["statusCode"] = context.HttpContext.Response.StatusCode;
+    };
+});
 
 
 // --- 2. BUILD THE APP ---
