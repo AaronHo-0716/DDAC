@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
 using System.Security.Claims;
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 
 [ApiController]
 [Route("api/auth")]

@@ -51,8 +51,9 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         context.Users.Add(newUser);
         await context.SaveChangesAsync();
 
-        return GenerateAuthResponse(newUser);
+        return await GenerateAuthResponse(newUser);
     }
+
     public async Task<AuthResponse> Login(LoginRequest request)
     {
         var user = await context.Users
