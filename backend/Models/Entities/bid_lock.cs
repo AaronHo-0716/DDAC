@@ -5,9 +5,9 @@ namespace backend.Models.Entities;
 
 public partial class Bid_Lock
 {
-    public Guid Bid_Id { get; set; }
+    public int Bid_Id { get; set; }
 
-    public Guid Locked_By_User_Id { get; set; }
+    public int Locked_By_User_Id { get; set; }
 
     public string? Locked_Reason { get; set; }
 

@@ -5,11 +5,11 @@ namespace backend.Models.Entities;
 
 public partial class Bid
 {
-    public Guid Id { get; set; }
+    public int Id { get; set; }
 
-    public Guid Job_Id { get; set; }
+    public int Job_Id { get; set; }
 
-    public Guid Handyman_User_Id { get; set; }
+    public int Handyman_User_Id { get; set; }
 
     public decimal Price { get; set; }
 

@@ -5,9 +5,9 @@ namespace backend.Models.Entities;
 
 public partial class Job
 {
-    public Guid Id { get; set; }
+    public int Id { get; set; }
 
-    public Guid Posted_By_User_Id { get; set; }
+    public int Posted_By_User_Id { get; set; }
 
     public string Title { get; set; } = null!;
 
