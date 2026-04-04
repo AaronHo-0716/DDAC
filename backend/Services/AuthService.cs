@@ -17,26 +17,42 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
 
     public async Task<AuthResponse> Register(RegisterRequest request)
     {
+        // 1. Basic field validation
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
+            throw new HttpRequestException("All fields (Email, Password, Name) are required.", null, HttpStatusCode.BadRequest);
+
+        // 2. Email format validation
+        if (!IsValidEmail(request.Email))
+            throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
+
+        // 3. ROLE VERIFICATION
+        var roleLower = request.Role?.ToLower().Trim();
+        if (string.IsNullOrEmpty(roleLower) || !AllowedRoles.Contains(roleLower))
+        {
+            throw new HttpRequestException($"Invalid role. Choose from: {string.Join(", ", AllowedRoles)}", null, HttpStatusCode.BadRequest);
+        }
+
+        // 4. Duplicate email check
         var emailLower = request.Email.ToLower().Trim();
         if (await context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("Email already exists.", null, HttpStatusCode.Conflict);
 
+        // 5. Create new user
         var newUser = new User
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Email = emailLower,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Role = request.Role?.ToLower().Trim() ?? "homeowner",
+            Role = roleLower,  
             IsActive = true
         };
 
         context.Users.Add(newUser);
         await context.SaveChangesAsync();
 
-        return await GenerateAuthResponse(newUser);
+        return GenerateAuthResponse(newUser);
     }
-
     public async Task<AuthResponse> Login(LoginRequest request)
     {
         var user = await context.Users
