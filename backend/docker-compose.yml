@@ -6,7 +6,7 @@ services:
     environment:
       - POSTGRES_USER=neighbourhelp_user
       - POSTGRES_PASSWORD=neighbourhelp_dev_password
-      - POSTGRES_DB=neighbourhelp_postgres
+      - POSTGRES_DB=neighbourhelp_postgres # Database name
     ports:
       - "5432:5432"
     volumes:
@@ -14,22 +14,17 @@ services:
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: neighbourhelp-api
     ports:
       - "5073:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      # Use 'db' as the host to connect to the container above
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=neighbourhelp_postgres;Username=neighbourhelp_user;Password=neighbourhelp_dev_password;
       - Jwt__Key=Your_Super_Secret_Fallback_Key_32_Chars_Long!
       - Jwt__Issuer=NeighborHelpApi
       - Jwt__Audience=NeighborHelpFrontend
-    volumes:
-      - .:/app                     # Maps current directory to /app in container
-      - /app/obj/                  # Keeps container build files separate from host
-      - /app/bin/                  # Keeps container build files separate from host
     depends_on:
       - db
 

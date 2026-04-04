@@ -1,20 +1,22 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0
-WORKDIR /app
+# Stage 1: Build and Publish
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
 
-# Enable Hot Reload for Docker
-ENV DOTNET_USE_POLLING_FILE_WATCHER=1
-ENV ASPNETCORE_ENVIRONMENT=Development
+# Restore dependencies first to cache the layer
+COPY ["backend.csproj", "./"]
+RUN dotnet restore "backend.csproj"
 
-# Copy csproj and restore as distinct layers for faster builds
-COPY *.csproj ./
-RUN dotnet restore
-
-# Copy everything else
+# Copy remaining source code and build
 COPY . .
+RUN dotnet publish "backend.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-# Expose the internal port
+# Stage 2: Runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
 EXPOSE 8080
 
-# Use dotnet watch to run the app. 
-# --non-interactive prevents the tool from waiting for keyboard input
-ENTRYPOINT ["dotnet", "watch", "run", "--urls", "http://0.0.0.0:8080", "--non-interactive"]
+COPY --from=build /app/publish .
+
+# Run as non-root user for security compliance
+USER $APP_UID
+ENTRYPOINT ["dotnet", "backend.dll"]
