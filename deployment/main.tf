@@ -31,6 +31,19 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "key_name" {
+  description = "The name of the EC2 Key Pair to use for SSH access"
+  type        = string
+}
+
+variable "instance_password" {
+  description = "Password for the 'user' account on frontend and backend EC2 instances"
+  type        = string
+  sensitive   = true
+}
+
+
+
 provider "aws" {
   region = var.aws_region
 }
@@ -40,12 +53,12 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
-data "aws_ami" "amazon_linux_2023" {
+data "aws_ami" "ubuntu_2404" {
   most_recent = true
-  owners      = ["amazon"]
+  owners      = ["099720109477"]
   filter {
     name   = "name"
-    values = ["al2023-ami-2023.*-x86_64"]
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
   }
 }
 
@@ -100,10 +113,25 @@ resource "aws_route_table_association" "public_assoc" {
 
 resource "aws_route_table" "private_rt" {
   vpc_id = aws_vpc.app_vpc.id
-  route {
-    cidr_block           = "0.0.0.0/0"
-    network_interface_id = aws_instance.caddy_nat_instance.primary_network_interface_id
-  }
+}
+
+resource "aws_eip" "nat_eip" {
+  domain = "vpc"
+}
+
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public_dmz.id
+  depends_on    = [aws_internet_gateway.igw]
+
+  tags = { Name = "Temp-NAT-Gateway" }
+}
+
+# Replace your existing aws_route.private_nat_route with this:
+resource "aws_route" "private_nat_route" {
+  route_table_id         = aws_route_table.private_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.nat_gw.id
 }
 
 resource "aws_route_table_association" "private_app_assoc" {
@@ -121,6 +149,14 @@ resource "aws_security_group" "public_sg" {
   name        = "public-caddy-nat-sg"
   description = "Allow HTTP for Caddy and route traffic for NAT"
   vpc_id      = aws_vpc.app_vpc.id
+
+  ingress {
+    description = "SSH from Internet"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     description = "HTTP from Internet"
@@ -148,13 +184,21 @@ resource "aws_security_group" "public_sg" {
 
 resource "aws_security_group" "app_sg" {
   name        = "private-app-sg"
-  description = "Allow traffic from Caddy proxy"
+  description = "Allow traffic from Caddy proxy and SSH from Caddy"
   vpc_id      = aws_vpc.app_vpc.id
 
   ingress {
-    description     = "Allow traffic from Public SG"
+    description     = "Allow all TCP from Public SG (Caddy)"
     from_port       = 0
     to_port         = 65535
+    protocol        = "tcp"
+    security_groups = [aws_security_group.public_sg.id]
+  }
+
+  ingress {
+    description     = "SSH from Caddy instance"
+    from_port       = 22
+    to_port         = 22
     protocol        = "tcp"
     security_groups = [aws_security_group.public_sg.id]
   }
@@ -234,27 +278,43 @@ resource "aws_iam_instance_profile" "ec2_ssm_profile" {
 
 # --- Compute: Combined Proxy + NAT Instance (Public DMZ) ---
 resource "aws_instance" "caddy_nat_instance" {
-  ami                  = data.aws_ami.amazon_linux_2023.id
+  ami                  = data.aws_ami.ubuntu_2404.id
   instance_type        = "t3.micro"
   subnet_id            = aws_subnet.public_dmz.id
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
+  key_name             = var.key_name
 
   vpc_security_group_ids = [aws_security_group.public_sg.id]
   source_dest_check      = false
 
   user_data = <<-EOF
               #!/bin/bash
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y iptables iptables-persistent docker.io
               sysctl -w net.ipv4.ip_forward=1
-              echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.d/custom-ip-forwarding.conf
+              echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.d/99-ip-forwarding.conf
               PRIMARY_IF=$(ip route show default | awk '/default/ {print $5}')
               iptables -t nat -A POSTROUTING -o $PRIMARY_IF -s ${aws_vpc.app_vpc.cidr_block} -j MASQUERADE
-              dnf install -y iptables-services
-              systemctl enable iptables
-              iptables-save > /etc/sysconfig/iptables
-              dnf install -y docker
-              systemctl start docker
-              systemctl enable docker
-              usermod -aG docker ssm-user
+              iptables-save > /etc/iptables/rules.v4
+              systemctl enable --now docker
+              usermod -aG docker ubuntu
+
+              # Install Caddy
+              apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+              apt-get update
+              apt-get install -y caddy
+
+              # Configure Caddy reverse proxy to frontend on port 3000
+              cat > /etc/caddy/Caddyfile << 'CADDYFILE'
+              :80 {
+                  reverse_proxy ${aws_instance.frontend_instance.private_ip}:3000
+              }
+              CADDYFILE
+
+              systemctl enable --now caddy
               EOF
 
   tags = { Name = "App-Caddy-NAT" }
@@ -262,23 +322,110 @@ resource "aws_instance" "caddy_nat_instance" {
 
 # --- Compute: App Tier (Private Subnet) ---
 resource "aws_instance" "app_instance" {
-  ami                  = data.aws_ami.amazon_linux_2023.id
+  ami                  = data.aws_ami.ubuntu_2404.id
   instance_type        = "t3.large"
   subnet_id            = aws_subnet.private_app.id
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
+  key_name             = var.key_name
 
   vpc_security_group_ids = [aws_security_group.app_sg.id]
+  user_data_replace_on_change = true
 
   user_data = <<-EOF
               #!/bin/bash
-              dnf update -y
-              dnf install -y docker
-              systemctl start docker
-              systemctl enable docker
-              usermod -aG docker ssm-user
+              export DEBIAN_FRONTEND=noninteractive
+
+              # 1. Wait for internet connectivity (NAT Gateway takes time to provision)
+              echo "Waiting for internet connectivity..."
+              for i in {1..30}; do
+                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
+                      echo "Internet is reachable!"
+                      break
+                  fi
+                  echo "Attempt $i: Internet not reachable yet. Waiting 10s..."
+                  sleep 10
+              done
+
+              # 2. Update packages (Force IPv4)
+              apt-get update -o Acquire::ForceIPv4=true
+
+              # 3. Install Docker & SSH
+              apt-get install -y docker.io openssh-server
+              systemctl enable --now docker
+              usermod -aG docker ubuntu
+
+              # 4. Create 'user' account
+              useradd -m -s /bin/bash user
+              echo "user:${var.instance_password}" | chpasswd
+              usermod -aG sudo user
+
+              # 5. Fix SSH Config for Ubuntu 24.04
+              if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
+                  sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+              fi
+
+              sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+              systemctl restart ssh
               EOF
 
+
   tags = { Name = "App-Backend-Tier" }
+}
+
+# --- Compute: Frontend Tier (Private Subnet) ---
+resource "aws_instance" "frontend_instance" {
+  ami                  = data.aws_ami.ubuntu_2404.id
+  instance_type        = "t3.micro"
+  subnet_id            = aws_subnet.private_app.id
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
+  key_name             = var.key_name
+
+  vpc_security_group_ids = [aws_security_group.app_sg.id]
+  user_data_replace_on_change = true
+
+  user_data = <<-EOF
+              #!/bin/bash
+              export DEBIAN_FRONTEND=noninteractive
+
+              # 1. Wait for internet connectivity (NAT Gateway takes time to provision)
+              echo "Waiting for internet connectivity..."
+              for i in {1..30}; do
+                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
+                      echo "Internet is reachable!"
+                      break
+                  fi
+                  echo "Attempt $i: Internet not reachable yet. Waiting 10s..."
+                  sleep 10
+              done
+
+              # 2. Update packages (Force IPv4)
+              apt-get update -o Acquire::ForceIPv4=true
+
+              # 3. Install Docker & SSH
+              apt-get install -y docker.io openssh-server
+              systemctl enable --now docker
+              usermod -aG docker ubuntu
+
+              # 4. Create 'user' account
+              useradd -m -s /bin/bash user
+              echo "user:${var.instance_password}" | chpasswd
+              usermod -aG sudo user
+
+              # 5. Fix SSH Config for Ubuntu 24.04
+              if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
+                  sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+              fi
+
+              sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+              systemctl restart ssh
+              EOF
+
+
+  tags = { Name = "App-Frontend-Tier" }
 }
 
 # --- Database: PostgreSQL RDS ---

@@ -6,8 +6,8 @@ on:
       - main
       - master
     paths:
-      - 'neighbour-help/**'
-      - '.github/workflows/cd-frontend.yml'
+      - "neighbour-help/**"
+      - ".github/workflows/cd-frontend.yml"
 
 env:
   REGISTRY: ghcr.io
@@ -68,7 +68,7 @@ jobs:
         run: |
           FRONTEND_COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --targets "Key=tag:Name,Values=App-Caddy-NAT" \
+            --targets "Key=tag:Name,Values=App-Frontend-Tier" \
             --comment "Deploy frontend container" \
             --parameters 'commands=[
               "docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}",
