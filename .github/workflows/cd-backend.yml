@@ -78,7 +78,7 @@ jobs:
               "DB_HOST=$(aws ssm get-parameter --name /app/db/host --with-decryption --query Parameter.Value --output text)",
               "DB_USER=$(aws ssm get-parameter --name /app/db/username --with-decryption --query Parameter.Value --output text)",
               "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
-              "docker run -d --restart always --name backend -p 8080:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ steps.meta-backend.outputs.tags }}",
+              "docker run -d --restart always --name backend -p 5073:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ steps.meta-backend.outputs.tags }}",
               "sleep 10",
               "docker ps | grep backend"
             ]' \
