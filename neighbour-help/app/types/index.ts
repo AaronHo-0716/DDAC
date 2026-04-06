@@ -101,6 +101,8 @@ export interface Job {
   description: string;
   category: JobCategory;
   location: string;
+  latitude?: number;
+  longitude?: number;
   budget?: number;
   imageUrls: string[];
   status: JobStatus;
@@ -116,8 +118,21 @@ export interface CreateJobRequest {
   description: string;
   category: JobCategory;
   location: string;
+  latitude?: number;
+  longitude?: number;
   budget?: number;
   imageUrls?: string[];
+  isEmergency?: boolean;
+}
+
+export interface UpdateJobRequest {
+  title?: string;
+  description?: string;
+  category?: JobCategory;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  budget?: number;
   isEmergency?: boolean;
 }
 
@@ -135,13 +150,20 @@ export interface Bid {
   status: BidStatus;
   isRecommended: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateBidRequest {
-  jobId: string;
   price: number;
   estimatedArrival: string;
   message: string;
+}
+
+export interface BidListResponse {
+  bids: Bid[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
 }
 
 // ─── API Shared ───────────────────────────────────────────────────────────────

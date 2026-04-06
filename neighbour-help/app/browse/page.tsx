@@ -1,76 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { Search, MapPin, Clock, ChevronRight } from "lucide-react";
 import type { Job, JobCategory } from "@/app/types";
 import StatusBadge from "@/app/components/ui/StatusBadge";
-
-const jobs: (Job & { distanceKm: number })[] = [
-  {
-    id: "301",
-    title: "Water heater troubleshooting",
-    description: "Shower water stays cold. Need diagnosis and repair if required.",
-    category: "Plumbing",
-    location: "Bangsar, Kuala Lumpur",
-    budget: 260,
-    imageUrls: [],
-    status: "open",
-    isEmergency: true,
-    postedBy: {
-      id: "u2",
-      name: "Zara Lee",
-      email: "zara@example.com",
-      role: "homeowner",
-      createdAt: "2025-01-10T00:00:00Z",
-    },
-    createdAt: "2026-03-20T08:30:00Z",
-    updatedAt: "2026-03-20T08:30:00Z",
-    bidCount: 1,
-    distanceKm: 2.4,
-  },
-  {
-    id: "302",
-    title: "Replace faulty wall switch",
-    description: "One bedroom switch sparks occasionally. Need safe replacement.",
-    category: "Electrical",
-    location: "Subang Jaya",
-    budget: 140,
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: {
-      id: "u3",
-      name: "Darren Ng",
-      email: "darren@example.com",
-      role: "homeowner",
-      createdAt: "2025-04-01T00:00:00Z",
-    },
-    createdAt: "2026-03-19T17:15:00Z",
-    updatedAt: "2026-03-19T17:15:00Z",
-    bidCount: 3,
-    distanceKm: 5.8,
-  },
-  {
-    id: "303",
-    title: "Small drywall patch and paint",
-    description: "Patch a 30cm wall dent and repaint affected area.",
-    category: "General Maintenance",
-    location: "Cheras",
-    budget: 180,
-    imageUrls: [],
-    status: "open",
-    isEmergency: false,
-    postedBy: {
-      id: "u4",
-      name: "Nadia Ahmad",
-      email: "nadia@example.com",
-      role: "homeowner",
-      createdAt: "2025-02-21T00:00:00Z",
-    },
-    createdAt: "2026-03-18T09:45:00Z",
-    updatedAt: "2026-03-18T09:45:00Z",
-    bidCount: 0,
-    distanceKm: 8.1,
-  },
-];
+import { jobsService } from "@/app/lib/api/jobs";
 
 const chips: (JobCategory | "All")[] = [
   "All",
@@ -80,6 +15,8 @@ const chips: (JobCategory | "All")[] = [
   "Appliance Repair",
   "General Maintenance",
 ];
+
+const PAGE_SIZE = 9;
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -91,28 +28,114 @@ function timeAgo(iso: string) {
 }
 
 export default function BrowsePage() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<JobCategory | "All">("All");
+  const [emergencyOnly, setEmergencyOnly] = useState(false);
+  const [maxDistance, setMaxDistance] = useState("");
+
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await jobsService.getJobs({
+          page,
+          pageSize: PAGE_SIZE,
+          status: "open",
+          search: debouncedSearch || undefined,
+          category: category === "All" ? undefined : category,
+          isEmergency: emergencyOnly ? true : undefined,
+          maxDistanceKm: maxDistance.trim() ? Number(maxDistance) : undefined,
+        });
+
+        if (!cancelled) {
+          setJobs(response.jobs ?? []);
+          setTotalCount(response.totalCount ?? 0);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Unable to load jobs.");
+          setJobs([]);
+          setTotalCount(0);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedSearch, category, emergencyOnly, maxDistance]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / PAGE_SIZE)), [totalCount]);
+
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#111827]">Browse Jobs</h1>
-          <p className="text-sm text-[#6B7280] mt-0.5">Explore available repair requests from nearby homeowners.</p>
+          <p className="text-sm text-[#6B7280] mt-0.5">
+            Explore available repair requests from nearby homeowners.
+          </p>
         </div>
 
         <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 mb-5">
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+            <div className="relative lg:col-span-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+              <input
+                value={search}
+                onChange={(e) => {
+                  setPage(1);
+                  setSearch(e.target.value);
+                }}
+                placeholder="Search jobs, category, location..."
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+              />
+            </div>
             <input
-              placeholder="Search jobs, category, location..."
-              className="w-full pl-10 pr-4 py-2.5 text-sm border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+              type="number"
+              min={1}
+              value={maxDistance}
+              onChange={(e) => {
+                setPage(1);
+                setMaxDistance(e.target.value);
+              }}
+              placeholder="Max distance (km)"
+              className="w-full px-4 py-2.5 text-sm border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex flex-wrap gap-2 mb-3">
             {chips.map((chip) => (
               <button
                 key={chip}
+                onClick={() => {
+                  setPage(1);
+                  setCategory(chip);
+                }}
                 className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
-                  chip === "All"
+                  category === chip
                     ? "bg-[#0B74FF] text-white border-[#0B74FF]"
                     : "bg-white text-[#6B7280] border-[#E5E7EB] hover:border-[#0B74FF]"
                 }`}
@@ -121,31 +144,104 @@ export default function BrowsePage() {
               </button>
             ))}
           </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <label className="inline-flex items-center gap-2 text-sm text-[#111827]">
+              <input
+                type="checkbox"
+                checked={emergencyOnly}
+                onChange={(e) => {
+                  setPage(1);
+                  setEmergencyOnly(e.target.checked);
+                }}
+              />
+              Emergency only
+            </label>
+            <button
+              onClick={() => {
+                setPage(1);
+                setSearch("");
+                setDebouncedSearch("");
+                setCategory("All");
+                setEmergencyOnly(false);
+                setMaxDistance("");
+              }}
+              className="text-xs text-[#6B7280] hover:text-[#111827] underline"
+            >
+              Clear filters
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {jobs.map((job) => (
-            <article key={job.id} className="bg-white border border-[#E5E7EB] rounded-2xl p-5 hover:shadow-md hover:-translate-y-0.5 transition-all">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <h2 className="text-base font-semibold text-[#111827]">{job.title}</h2>
-                {job.isEmergency && <StatusBadge status="emergency" />}
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+            <p className="text-[#6B7280] text-sm">Loading jobs...</p>
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+            <p className="text-[#6B7280] text-sm">No jobs found for the selected filters.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {jobs.map((job) => (
+                <article
+                  key={job.id}
+                  className="bg-white border border-[#E5E7EB] rounded-2xl p-5 hover:shadow-md hover:-translate-y-0.5 transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h2 className="text-base font-semibold text-[#111827]">{job.title}</h2>
+                    {job.isEmergency && <StatusBadge status="emergency" />}
+                  </div>
+                  <p className="text-sm text-[#6B7280] line-clamp-2 mb-3">{job.description}</p>
+                  <div className="flex items-center gap-2 text-xs text-[#6B7280] mb-1">
+                    <MapPin className="w-3 h-3" /> {job.location}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[#6B7280] mb-3">
+                    <Clock className="w-3 h-3" /> {timeAgo(job.createdAt)} · {job.category}
+                  </div>
+                  <div className="flex items-center justify-between pt-3 border-t border-[#F3F4F6]">
+                    <span className="text-sm text-[#111827] font-semibold">RM {job.budget ?? "—"}</span>
+                    <Link
+                      href={`/jobs/${job.id}`}
+                      className="text-sm font-medium text-[#0B74FF] hover:underline inline-flex items-center gap-1"
+                    >
+                      View Details <ChevronRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-6 flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm text-[#6B7280]">
+                Showing page {page} of {totalPages} ({totalCount} results)
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-sm text-[#374151] disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-sm text-[#374151] disabled:opacity-50"
+                >
+                  Next
+                </button>
               </div>
-              <p className="text-sm text-[#6B7280] line-clamp-2 mb-3">{job.description}</p>
-              <div className="flex items-center gap-2 text-xs text-[#6B7280] mb-1">
-                <MapPin className="w-3 h-3" /> {job.location} · {job.distanceKm} km
-              </div>
-              <div className="flex items-center gap-2 text-xs text-[#6B7280] mb-3">
-                <Clock className="w-3 h-3" /> {timeAgo(job.createdAt)} · {job.category}
-              </div>
-              <div className="flex items-center justify-between pt-3 border-t border-[#F3F4F6]">
-                <span className="text-sm text-[#111827] font-semibold">RM {job.budget ?? "—"}</span>
-                <Link href={`/jobs/${job.id}`} className="text-sm font-medium text-[#0B74FF] hover:underline inline-flex items-center gap-1">
-                  View Details <ChevronRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </article>
-          ))}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

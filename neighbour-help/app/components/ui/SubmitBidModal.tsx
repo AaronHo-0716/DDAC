@@ -32,8 +32,7 @@ export default function SubmitBidModal({
     setSubmitting(true);
 
     try {
-      await bidsService.createBid({
-        jobId,
+      await bidsService.createBid(jobId, {
         price: Number(price),
         estimatedArrival: new Date(arrivalDate).toISOString(),
         message,

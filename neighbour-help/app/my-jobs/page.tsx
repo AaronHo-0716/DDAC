@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { Plus, Filter } from "lucide-react";
-import type { Job } from "@/app/types";
+import type { Job, JobStatus } from "@/app/types";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import JobCard from "@/app/components/ui/JobCard";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { jobsService } from "../lib/api/jobs";
 
 export default function MyJobsPage() {
@@ -15,6 +15,7 @@ export default function MyJobsPage() {
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<"all" | JobStatus>("all");
 
   // 2. Define the fetcher with useCallback to avoid unnecessary re-renders
   const fetchUserJobs = useCallback(async () => {
@@ -39,16 +40,14 @@ export default function MyJobsPage() {
   // 3. Trigger fetch ONLY when authorized is true
   useEffect(() => {
     if (authorized) {
-      console.log("1");
-
       fetchUserJobs();
-    } else {
-      console.log("Not authorized yet, skipping API call. Auth State:", {
-        authorized,
-        authLoading,
-      });
     }
   }, [authorized, fetchUserJobs]);
+
+  const filteredJobs = useMemo(() => {
+    if (statusFilter === "all") return jobs;
+    return jobs.filter((job) => job.status === statusFilter);
+  }, [jobs, statusFilter]);
 
   // If auth check finished and user isn't a homeowner
   if (authLoading) return null;
@@ -72,7 +71,7 @@ export default function MyJobsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="px-4 py-2.5 bg-white border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] inline-flex items-center gap-2">
+            <button className="px-4 py-2.5 bg-white border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] inline-flex items-center gap-2">
               <Filter className="w-4 h-4" /> Filter
             </button>
             <Link href="/create-job">
@@ -83,10 +82,32 @@ export default function MyJobsPage() {
           </div>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {(["all", "open", "in-progress", "completed"] as const).map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                statusFilter === status
+                  ? "bg-[#0B74FF] text-white border-[#0B74FF]"
+                  : "bg-white text-[#374151] border-[#E5E7EB] hover:border-blue-300"
+              }`}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-4">
-          {jobs.map((job) => (
+          {filteredJobs.map((job) => (
             <JobCard key={job.id} job={job} />
           ))}
+
+          {!isLoading && filteredJobs.length === 0 && (
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-10 text-center">
+              <p className="text-[#6B7280] text-sm">No jobs found for this filter.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

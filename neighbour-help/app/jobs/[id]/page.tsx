@@ -4,11 +4,14 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Trash2, X } from "lucide-react";
-import type { Job, JobCategory } from "@/app/types";
+import type { Bid, Job, JobCategory } from "@/app/types";
 import { jobsService } from "@/app/lib/api/jobs";
+import { bidsService } from "@/app/lib/api/bids";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import StatusBadge from "@/app/components/ui/StatusBadge";
+import BidCard from "@/app/components/ui/BidCard";
+import SubmitBidModal from "@/app/components/ui/SubmitBidModal";
 
 const ALL_CATEGORIES: JobCategory[] = [
   "Plumbing",
@@ -52,6 +55,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<EditForm | null>(null);
 
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [bidsLoading, setBidsLoading] = useState(false);
+  const [bidsError, setBidsError] = useState<string | null>(null);
+  const [bidActionLoadingId, setBidActionLoadingId] = useState<string | null>(null);
+  const [bidStatusFilter, setBidStatusFilter] = useState<"all" | Bid["status"]>("all");
+  const [showBidModal, setShowBidModal] = useState(false);
+
   useEffect(() => {
     let ignore = false;
 
@@ -87,6 +97,39 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   }, [job, user]);
 
   const canEdit = !!job && isOwner;
+  const canSubmitBid = !!job && user?.role === "handyman" && user.id !== job.postedBy.id;
+
+  useEffect(() => {
+    if (!job || !isOwner) {
+      setBids([]);
+      setBidsError(null);
+      return;
+    }
+
+    let ignore = false;
+
+    const loadBids = async () => {
+      setBidsLoading(true);
+      setBidsError(null);
+      try {
+        const response = await bidsService.getBidsForJob(job.id, { page: 1, pageSize: 100 });
+        if (!ignore) setBids(response.bids ?? []);
+      } catch (err) {
+        if (!ignore) {
+          setBids([]);
+          setBidsError(err instanceof Error ? err.message : "Unable to load bids.");
+        }
+      } finally {
+        if (!ignore) setBidsLoading(false);
+      }
+    };
+
+    void loadBids();
+
+    return () => {
+      ignore = true;
+    };
+  }, [job, isOwner]);
 
   const hasChanges = useMemo(() => {
     if (!job || !form) return false;
@@ -100,6 +143,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       form.isEmergency !== job.isEmergency
     );
   }, [form, job]);
+
+  const visibleBids = useMemo(() => {
+    if (bidStatusFilter === "all") return bids;
+    return bids.filter((bid) => bid.status === bidStatusFilter);
+  }, [bids, bidStatusFilter]);
 
   const handleSave = async () => {
     if (!job || !form || !hasChanges) return;
@@ -141,6 +189,33 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete job.");
       setDeleting(false);
+    }
+  };
+
+  const handleAcceptBid = async (bidId: string) => {
+    setBidActionLoadingId(bidId);
+    setBidsError(null);
+    try {
+      const accepted = await bidsService.acceptBid(bidId);
+      setBids((prev) => prev.map((bid) => (bid.id === bidId ? accepted : bid)));
+      setJob((prev) => (prev ? { ...prev, status: "in-progress" } : prev));
+    } catch (err) {
+      setBidsError(err instanceof Error ? err.message : "Unable to accept bid.");
+    } finally {
+      setBidActionLoadingId(null);
+    }
+  };
+
+  const handleRejectBid = async (bidId: string) => {
+    setBidActionLoadingId(bidId);
+    setBidsError(null);
+    try {
+      const rejected = await bidsService.rejectBid(bidId);
+      setBids((prev) => prev.map((bid) => (bid.id === bidId ? rejected : bid)));
+    } catch (err) {
+      setBidsError(err instanceof Error ? err.message : "Unable to reject bid.");
+    } finally {
+      setBidActionLoadingId(null);
     }
   };
 
@@ -200,20 +275,29 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </span>
             </div>
 
-            {canEdit && !editing && (
+            {(canEdit || canSubmitBid) && !editing && (
               <div className="flex items-center gap-2">
-                <PrimaryButton size="sm" variant="secondary" onClick={() => setEditing(true)}>
-                  <Pencil className="w-3.5 h-3.5" /> Edit
-                </PrimaryButton>
-                <PrimaryButton
-                  size="sm"
-                  variant="outline"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="text-red-600 border-red-300 hover:bg-red-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Deleting..." : "Delete"}
-                </PrimaryButton>
+                {canSubmitBid && (
+                  <PrimaryButton size="sm" onClick={() => setShowBidModal(true)}>
+                    Submit Bid
+                  </PrimaryButton>
+                )}
+                {canEdit && (
+                  <>
+                    <PrimaryButton size="sm" variant="secondary" onClick={() => setEditing(true)}>
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </PrimaryButton>
+                    <PrimaryButton
+                      size="sm"
+                      variant="outline"
+                      onClick={handleDelete}
+                      disabled={deleting}
+                      className="text-red-600 border-red-300 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Deleting..." : "Delete"}
+                    </PrimaryButton>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -340,7 +424,71 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </div>
           )}
         </div>
+
+        {isOwner && (
+          <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
+            <h2 className="text-lg font-bold text-[#111827] mb-4">Bids ({bids.length})</h2>
+
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {(["all", "pending", "accepted", "rejected"] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setBidStatusFilter(status)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                    bidStatusFilter === status
+                      ? "bg-[#0B74FF] text-white border-[#0B74FF]"
+                      : "bg-white text-[#374151] border-[#E5E7EB] hover:border-blue-300"
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+
+            {bidsError && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {bidsError}
+              </div>
+            )}
+
+            {bidsLoading ? (
+              <p className="text-sm text-[#6B7280]">Loading bids...</p>
+            ) : visibleBids.length === 0 ? (
+              <p className="text-sm text-[#6B7280]">No bids have been submitted yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {visibleBids.map((bid) => (
+                  <div key={bid.id} className="space-y-2">
+                    <BidCard bid={bid} onAccept={handleAcceptBid} />
+                    {bid.status === "pending" && (
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => void handleRejectBid(bid.id)}
+                          disabled={bidActionLoadingId === bid.id}
+                          className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {bidActionLoadingId === bid.id ? "Updating..." : "Reject Bid"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </div>
+
+      {showBidModal && (
+        <SubmitBidModal
+          jobId={job.id}
+          onClose={() => setShowBidModal(false)}
+          onSuccess={() => {
+            setShowBidModal(false);
+            setJob((prev) => (prev ? { ...prev, bidCount: prev.bidCount + 1 } : prev));
+          }}
+        />
+      )}
     </div>
   );
 }

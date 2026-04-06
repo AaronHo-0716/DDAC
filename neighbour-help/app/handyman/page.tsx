@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Clock,
@@ -94,6 +94,7 @@ export default function HandymanPage() {
   const { authorized, loading } = useRequireRole("handyman");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<JobCategory | "">("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -105,11 +106,20 @@ export default function HandymanPage() {
 
     const fetchJobs = async () => {
       setJobsLoading(true);
+      setError(null);
       try {
-        const response = await jobsService.getJobs({ status: "open" });
+        const response = await jobsService.getJobs({
+          status: "open",
+          category: categoryFilter || undefined,
+          isEmergency: emergencyOnly ? true : undefined,
+          pageSize: 50,
+        });
         if (!ignore) setJobs(response.jobs ?? []);
-      } catch {
-        if (!ignore) setJobs([]);
+      } catch (err) {
+        if (!ignore) {
+          setJobs([]);
+          setError(err instanceof Error ? err.message : "Unable to load jobs.");
+        }
       } finally {
         if (!ignore) setJobsLoading(false);
       }
@@ -120,17 +130,7 @@ export default function HandymanPage() {
     return () => {
       ignore = true;
     };
-  }, [authorized]);
-
-  const filtered = useMemo(
-    () =>
-      jobs.filter((job) => {
-        if (categoryFilter && job.category !== categoryFilter) return false;
-        if (emergencyOnly && !job.isEmergency) return false;
-        return true;
-      }),
-    [categoryFilter, emergencyOnly, jobs]
-  );
+  }, [authorized, categoryFilter, emergencyOnly]);
 
   const activeFilterCount =
     (categoryFilter ? 1 : 0) + (emergencyOnly ? 1 : 0);
@@ -149,7 +149,7 @@ export default function HandymanPage() {
               Jobs Near You
             </h1>
             <p className="text-sm text-[#6B7280] mt-0.5">
-              {filtered.length} open job{filtered.length !== 1 ? "s" : ""}
+              {jobs.length} open job{jobs.length !== 1 ? "s" : ""}
             </p>
           </div>
           <button
@@ -242,11 +242,17 @@ export default function HandymanPage() {
         )}
 
         {/* Feed */}
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {jobsLoading ? (
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
             <p className="text-[#6B7280] text-sm">Loading jobs...</p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : jobs.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
             <p className="text-[#6B7280] text-sm">
               No jobs match your current filters.
@@ -263,7 +269,7 @@ export default function HandymanPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {filtered.map((job) => (
+            {jobs.map((job) => (
               <JobFeedCard key={job.id} job={job} />
             ))}
           </div>
