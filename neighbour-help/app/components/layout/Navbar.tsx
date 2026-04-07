@@ -47,7 +47,7 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { user, logout, resetMockData } = useAuth();
+  const { user, logout } = useAuth();
   const navLinks = user
     ? user.role === "handyman"
       ? handymanNavLinks
@@ -140,16 +140,6 @@ export default function Navbar() {
                       <Link href="/settings" className="block px-4 py-2.5 text-sm text-[#111827] hover:bg-[#F7F8FA] transition-colors">
                         Settings
                       </Link>
-                      <div className="border-t border-[#E5E7EB] my-1" />
-                      <button
-                        onClick={() => {
-                          setDropdownOpen(false);
-                          resetMockData();
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors"
-                      >
-                        Reset Mock Data
-                      </button>
                       <button
                         onClick={() => { setDropdownOpen(false); logout(); }}
                         className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
@@ -219,15 +209,6 @@ export default function Navbar() {
           )}
           {user && (
             <div className="border-t border-[#E5E7EB] pt-2 mt-2 space-y-1 px-4">
-              <button
-                onClick={() => {
-                  setMobileOpen(false);
-                  resetMockData();
-                }}
-                className="block w-full text-left px-4 py-2.5 text-sm font-medium text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
-              >
-                Reset Mock Data
-              </button>
               <button
                 onClick={() => {
                   setMobileOpen(false);

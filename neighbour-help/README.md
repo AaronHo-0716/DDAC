@@ -20,26 +20,13 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Mock Auth Mode (No Backend Required)
+## Authentication
 
-You can test login and sign up before the ASP.NET backend and database are ready.
+Authentication is backend-driven.
 
-How it works:
-- The app tries real API auth endpoints first.
-- If backend is unavailable, auth automatically falls back to local mock auth in browser storage.
-- Mock users and session are stored temporarily in localStorage.
-
-Demo accounts:
-- Homeowner: homeowner@neighborhelp.test / Password123!
-- Handyman: handyman@neighborhelp.test / Password123!
-- Admin: admin@neighborhelp.test / Password123!
-
-Optional setting:
-- Set NEXT_PUBLIC_USE_MOCK_AUTH=true in your local env file to always use mock auth in browser.
-
-Reset mock data:
-- While logged in, open the navbar user menu and click Reset Mock Data.
-- This clears temporary mock users/session and reseeds demo accounts.
+- Login and registration call the ASP.NET API endpoints directly through the Next.js proxy.
+- Ensure `API_URL` is set in `.env.local` and points to your running backend.
+- Use real backend accounts (register first if needed).
 
 ## Learn More
 

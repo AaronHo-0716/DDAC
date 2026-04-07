@@ -180,12 +180,6 @@ function LoginForm() {
         </Link>
       </p>
 
-      <div className="mt-4 w-full max-w-md rounded-xl border border-[#DBEAFE] bg-[#EFF6FF] px-4 py-3 text-xs text-[#1E3A8A]">
-        <p className="font-semibold">Mock login accounts (temporary local storage):</p>
-        <p className="mt-1">Homeowner: homeowner@neighborhelp.test / Password123!</p>
-        <p>Handyman: handyman@neighborhelp.test / Password123!</p>
-        <p>Admin: admin@neighborhelp.test / Password123!</p>
-      </div>
     </div>
   );
 }
