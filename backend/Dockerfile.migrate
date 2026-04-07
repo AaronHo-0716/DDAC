@@ -1,0 +1,7 @@
+# backend/Dockerfile.migrate
+FROM alpine:3.19
+
+RUN apk add --no-cache postgresql-client
+COPY sql/init.sql /init.sql
+
+CMD ["psql", "-f", "/init.sql"]

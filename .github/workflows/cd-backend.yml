@@ -14,7 +14,7 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and Push Backend Image
+    name: Build and Push Images
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -28,6 +28,14 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-backend
+          tags: type=raw,value=latest
+
+      # Add metadata block for Migration image
+      - name: Docker metadata for Migration
+        id: meta-migration
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-migration
           tags: type=raw,value=latest
 
       - name: Log in to the Container registry
@@ -45,6 +53,16 @@ jobs:
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
 
+      # Build and push the Migration image
+      - name: Build and push Migration image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.migrate
+          push: true
+          tags: ${{ steps.meta-migration.outputs.tags }}
+          labels: ${{ steps.meta-migration.outputs.labels }}
+
   deploy-backend:
     name: Deploy Backend to EC2
     needs: [build-and-push]
@@ -55,6 +73,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-backend
+          tags: type=raw,value=latest
+
+      - name: Docker metadata for Migration
+        id: meta-migration
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/project-migration
           tags: type=raw,value=latest
 
       - name: Configure AWS Credentials
@@ -73,11 +98,15 @@ jobs:
             --parameters 'commands=[
               "docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}",
               "docker pull ${{ steps.meta-backend.outputs.tags }}",
+              "docker pull ${{ steps.meta-migration.outputs.tags }}",
+              "DB_HOST=$(aws ssm get-parameter --name /app/db/host --query Parameter.Value --output text)",
+              "DB_USER=$(aws ssm get-parameter --name /app/db/username --query Parameter.Value --output text)",
+              "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
+              "echo \"Running database migrations...\"",
+              "docker run --rm --name migration -e PGHOST=$DB_HOST -e PGUSER=$DB_USER -e PGPASSWORD=$DB_PASS -e PGDATABASE=neighbourhelp_postgres ${{ steps.meta-migration.outputs.tags }}",
+              "if [ $? -ne 0 ]; then echo \"Migration failed, aborting deployment.\"; exit 1; fi",
               "docker stop backend || true",
               "docker rm backend || true",
-              "DB_HOST=$(aws ssm get-parameter --name /app/db/host --with-decryption --query Parameter.Value --output text)",
-              "DB_USER=$(aws ssm get-parameter --name /app/db/username --with-decryption --query Parameter.Value --output text)",
-              "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
               "docker run -d --restart always --name backend -p 5073:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ steps.meta-backend.outputs.tags }}",
               "sleep 10",
               "docker ps | grep backend"
