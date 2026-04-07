@@ -328,7 +328,7 @@ resource "aws_instance" "app_instance" {
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
   key_name             = var.key_name
 
-  vpc_security_group_ids = [aws_security_group.app_sg.id]
+  vpc_security_group_ids      = [aws_security_group.app_sg.id]
   user_data_replace_on_change = true
 
   user_data = <<-EOF
@@ -382,7 +382,7 @@ resource "aws_instance" "frontend_instance" {
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
   key_name             = var.key_name
 
-  vpc_security_group_ids = [aws_security_group.app_sg.id]
+  vpc_security_group_ids      = [aws_security_group.app_sg.id]
   user_data_replace_on_change = true
 
   user_data = <<-EOF
@@ -450,6 +450,13 @@ resource "aws_db_instance" "postgres" {
 }
 
 # --- Secrets & Configuration Store ---
+resource "aws_ssm_parameter" "db_connection_string" {
+  name = "/app/ConnectionStrings/DefaultConnection"
+  type = "String"
+  value = format("Host=%s;Port=5432;Database=neighbourhelp_postgres;Username=%s;Password=%s;",
+  aws_db_instance.postgres.address, var.db_username, var.db_password)
+}
+
 resource "aws_ssm_parameter" "db_host" {
   name  = "/app/db/host"
   type  = "String"

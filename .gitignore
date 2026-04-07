@@ -1,3 +1,4 @@
 
 /deployment/.terraform
 deployment/.terraform.lock.hcl
+backend/Program.cs.bak

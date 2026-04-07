@@ -1,4 +1,5 @@
 using System.Text;
+using Amazon.Extensions.Configuration.SystemsManager;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -7,6 +8,12 @@ using backend.Services;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add AWS SSM configuration for production environments
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddSystemsManager("/app/", optional: true);
+}
 
 // --- 1. SERVICE REGISTRATION ---
 
@@ -110,8 +117,8 @@ app.UseCors("NextJsPolicy");
 app.UseHttpsRedirection();
 
 // IMPORTANT ORDER: Authentication -> Custom Validation -> Authorization
-app.UseAuthentication(); 
-app.UseMiddleware<backend.Middleware.TokenValidationMiddleware>(); 
+app.UseAuthentication();
+app.UseMiddleware<backend.Middleware.TokenValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
