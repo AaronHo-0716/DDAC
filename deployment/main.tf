@@ -358,10 +358,15 @@ resource "aws_instance" "app_instance" {
               # 2. Update packages (Force IPv4)
               apt-get update -o Acquire::ForceIPv4=true
 
-              # 3. Install Docker & SSH
-              apt-get install -y docker.io openssh-server
+              # 3. Install Unzip, Docker & SSH
+              apt-get install -y docker.io openssh-server unzip
               systemctl enable --now docker
               usermod -aG docker ubuntu
+
+              # 3.1 Install AWS CLI
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip awscliv2.zip
+              ./aws/install
 
               # 4. Create 'user' account
               useradd -m -s /bin/bash user
@@ -445,6 +450,7 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
 
 resource "aws_db_instance" "postgres" {
   identifier             = "app-db"
+  db_name                = "neighbourhelp_postgres"
   engine                 = "postgres"
   engine_version         = "16"
   instance_class         = "db.t3.micro"
