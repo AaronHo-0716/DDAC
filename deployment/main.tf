@@ -203,6 +203,14 @@ resource "aws_security_group" "app_sg" {
     security_groups = [aws_security_group.public_sg.id]
   }
 
+  ingress {
+    description = "Allow all traffic from instances in the same SG"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -315,6 +323,7 @@ resource "aws_instance" "caddy_nat_instance" {
               CADDYFILE
 
               systemctl enable --now caddy
+              systemctl restart caddy
               EOF
 
   tags = { Name = "App-Caddy-NAT" }
