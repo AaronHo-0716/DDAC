@@ -110,7 +110,7 @@ jobs:
               "docker run -d --restart always --name backend -p 5073:8080 -e DB_HOST=$DB_HOST -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASS ${{ steps.meta-backend.outputs.tags }}",
               "sleep 10",
               "docker ps | grep backend",
-              "BACKEND_IP=$(hostname -I | awk '{print $1}')",
+              "BACKEND_IP=$(hostname -I | cut -d\" \" -f1)",
               "aws ssm put-parameter --name /app/backend/api_url --type String --value http://$BACKEND_IP:5073 --overwrite",
               "echo \"Stored backend API URL in SSM: http://$BACKEND_IP:5073\""
             ]' \
