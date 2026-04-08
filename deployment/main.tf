@@ -316,10 +316,16 @@ resource "aws_instance" "caddy_nat_instance" {
               apt-get update
               apt-get install -y caddy
 
-              # Configure Caddy reverse proxy to frontend on port 3000
+              # Configure Caddy reverse proxy to frontend and backend
               cat > /etc/caddy/Caddyfile << 'CADDYFILE'
               :80 {
-                  reverse_proxy ${aws_instance.frontend_instance.private_ip}:3000
+                  handle_path /api/proxy/* {
+                      rewrite * /api{path}
+                      reverse_proxy ${aws_instance.app_instance.private_ip}:5073
+                  }
+                  handle {
+                      reverse_proxy ${aws_instance.frontend_instance.private_ip}:3000
+                  }
               }
               CADDYFILE
 
