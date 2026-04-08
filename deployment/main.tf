@@ -167,6 +167,14 @@ resource "aws_security_group" "public_sg" {
   }
 
   ingress {
+    description = "HTTPS from Internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "Allow all inbound from Private Subnets for NAT routing"
     from_port   = 0
     to_port     = 0
@@ -318,7 +326,7 @@ resource "aws_instance" "caddy_nat_instance" {
 
               # Configure Caddy reverse proxy to frontend and backend
               cat > /etc/caddy/Caddyfile << 'CADDYFILE'
-              :80 {
+              neighbourhelp.me {
                   handle_path /api/proxy/* {
                       rewrite * /api{path}
                       reverse_proxy ${aws_instance.app_instance.private_ip}:5073
