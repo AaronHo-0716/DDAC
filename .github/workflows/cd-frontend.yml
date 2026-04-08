@@ -75,7 +75,9 @@ jobs:
               "docker pull ${{ steps.meta-frontend.outputs.tags }}",
               "docker stop frontend || true",
               "docker rm frontend || true",
-              "docker run -d --restart always --name frontend -p 3000:3000 ${{ steps.meta-frontend.outputs.tags }}",
+              "API_URL=$(aws ssm get-parameter --name /app/backend/api_url --query Parameter.Value --output text)",
+              "echo \"Using API_URL=$API_URL\"",
+              "docker run -d --restart always --name frontend -p 3000:3000 -e API_URL=$API_URL ${{ steps.meta-frontend.outputs.tags }}"
               "sleep 10",
               "docker ps | grep frontend"
             ]' \

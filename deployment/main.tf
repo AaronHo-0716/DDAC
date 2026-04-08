@@ -252,8 +252,8 @@ resource "aws_iam_role" "ec2_ssm_role" {
   })
 }
 
-resource "aws_iam_role_policy" "ssm_parameter_read" {
-  name = "ssm-parameter-read"
+resource "aws_iam_role_policy" "ssm_parameter_read_and_write" {
+  name = "ssm-parameter-read-and-write"
   role = aws_iam_role.ec2_ssm_role.id
 
   policy = jsonencode({
@@ -264,7 +264,8 @@ resource "aws_iam_role_policy" "ssm_parameter_read" {
         Action = [
           "ssm:GetParameter",
           "ssm:GetParameters",
-          "ssm:GetParametersByPath"
+          "ssm:GetParametersByPath",
+          "ssm:PutParameter"
         ]
         Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/app/*"
       }
