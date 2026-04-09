@@ -9,7 +9,11 @@ import {
 } from "react";
 import { User, LoginRequest, RegisterRequest } from "@/app/types";
 import { authService } from "@/app/lib/api/auth";
-import { clearTokens, getAccessToken } from "@/app/lib/api/client";
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+} from "@/app/lib/api/client";
 
 // ─── Context shape ────────────────────────────────────────────────────────────
 
@@ -44,7 +48,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** On mount: restore session from stored token */
   useEffect(() => {
     const token = getAccessToken();
-    if (!token) {
+    const refreshToken = getRefreshToken();
+
+    if (!token && !refreshToken) {
       setLoading(false);
       return;
     }
@@ -92,7 +98,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async (): Promise<User | null> => {
     const token = getAccessToken();
-    if (!token) {
+    const refreshToken = getRefreshToken();
+
+    if (!token && !refreshToken) {
       setUser(null);
       return null;
     }

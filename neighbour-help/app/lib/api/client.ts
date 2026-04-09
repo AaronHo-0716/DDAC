@@ -26,6 +26,15 @@ const API_BASE_URL =
 const TOKEN_KEY = "nh_access_token";
 const REFRESH_TOKEN_KEY = "nh_refresh_token";
 
+interface RefreshResponse {
+  tokens?: {
+    accessToken?: string;
+    refreshToken?: string;
+  };
+}
+
+let refreshInFlight: Promise<string | null> | null = null;
+
 // ─── Token helpers (localStorage — client-side only) ─────────────────────────
 
 export function getAccessToken(): string | null {
@@ -66,27 +75,7 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(
-  path: string,
-  { authenticated = true, headers = {}, ...options }: RequestOptions = {},
-): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
-
-  const resolvedHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(headers as Record<string, string>),
-  };
-
-  if (authenticated) {
-    const token = getAccessToken();
-    if (token) resolvedHeaders["Authorization"] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: resolvedHeaders,
-  });
-
+async function parseResponse<T>(response: Response): Promise<T> {
   // 204 No Content – return void
   if (response.status === 204) return undefined as T;
 
@@ -115,6 +104,97 @@ async function request<T>(
   }
 
   return data as T;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return null;
+
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      clearTokens();
+      return null;
+    }
+
+    const data = (await response.json()) as RefreshResponse;
+    const accessToken = data.tokens?.accessToken;
+    const newRefreshToken = data.tokens?.refreshToken;
+
+    if (!accessToken || !newRefreshToken) {
+      clearTokens();
+      return null;
+    }
+
+    setTokens(accessToken, newRefreshToken);
+    return accessToken;
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
+async function request<T>(
+  path: string,
+  { authenticated = true, headers = {}, ...options }: RequestOptions = {},
+): Promise<T> {
+  const url = `${API_BASE_URL}${path}`;
+
+  const resolvedHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(headers as Record<string, string>),
+  };
+
+  if (authenticated) {
+    const token = getAccessToken();
+    if (token) resolvedHeaders["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: resolvedHeaders,
+  });
+
+  const shouldAttemptRefresh =
+    authenticated &&
+    response.status === 401 &&
+    typeof window !== "undefined" &&
+    path !== "/auth/refresh";
+
+  if (shouldAttemptRefresh) {
+    const newAccessToken = await refreshAccessToken();
+    if (newAccessToken) {
+      const retryHeaders = {
+        ...resolvedHeaders,
+        Authorization: `Bearer ${newAccessToken}`,
+      };
+
+      const retryResponse = await fetch(url, {
+        ...options,
+        headers: retryHeaders,
+      });
+
+      return parseResponse<T>(retryResponse);
+    }
+  }
+
+  return parseResponse<T>(response);
 }
 
 // ─── Convenience methods ──────────────────────────────────────────────────────
