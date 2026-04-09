@@ -29,7 +29,7 @@ const TEAM = [
   {
     name: "Priya Ramasamy",
     role: "Head of Operations",
-    bio: "Built and scaled the handyman workforce at Kaodim before joining NeighborHelp to lead quality assurance and vetting.",
+    bio: "Built and scaled the handyman workforce at Kaodim before joining NeighbourHelp to lead quality assurance and vetting.",
     avatar: "PR",
     bg: "bg-green-100",
     color: "text-green-700",
@@ -53,7 +53,7 @@ const VALUES = [
   {
     icon: <Heart className="w-5 h-5 text-red-500" />,
     title: "Community First",
-    desc: "We built NeighborHelp to strengthen local communities — connecting neighbours with skilled tradespeople nearby.",
+    desc: "We built NeighbourHelp to strengthen local communities — connecting neighbours with skilled tradespeople nearby.",
   },
   {
     icon: <Zap className="w-5 h-5 text-amber-500" />,
@@ -68,7 +68,7 @@ const VALUES = [
 ];
 
 const MILESTONES = [
-  { year: "2021", title: "Founded", desc: "NeighborHelp was incorporated in Kuala Lumpur with a seed round of RM 2.5M." },
+  { year: "2021", title: "Founded", desc: "NeighbourHelp was incorporated in Kuala Lumpur with a seed round of RM 2.5M." },
   { year: "2022", title: "Public Launch", desc: "Launched in Klang Valley with 200 verified handymen and 1,000 registered homeowners." },
   { year: "2023", title: "Series A", desc: "Raised RM 18M Series A. Expanded to Penang, Johor Bahru, and Kota Kinabalu." },
   { year: "2024", title: "Emergency Feature", desc: "Launched real-time emergency job matching, cutting average response time to under 40 minutes." },
@@ -89,7 +89,7 @@ export default function AboutPage() {
             We&apos;re fixing home services — one job at a time.
           </h1>
           <p className="text-lg text-[#6B7280] max-w-2xl mx-auto leading-relaxed">
-            NeighborHelp is Malaysia&apos;s most trusted marketplace for home repair and maintenance services.
+            NeighbourHelp is Malaysia&apos;s most trusted marketplace for home repair and maintenance services.
             We connect homeowners with honest, skilled, and vetted handymen in their neighbourhood.
           </p>
         </div>
@@ -117,13 +117,13 @@ export default function AboutPage() {
           <h2 className="text-2xl font-bold text-[#111827] mb-4">Our Story</h2>
           <div className="space-y-4 text-[#374151] leading-relaxed text-[15px]">
             <p>
-              NeighborHelp was born out of a frustrating Saturday afternoon in 2021. Our co-founders — Nurul and Marcus — were trying to get a plumber to fix a burst pipe in their apartment. After calling six different numbers found on lampposts, none showed up. The one who finally came charged triple the fair market rate.
+              NeighbourHelp was born out of a frustrating Saturday afternoon in 2021. Our co-founders — Nurul and Marcus — were trying to get a plumber to fix a burst pipe in their apartment. After calling six different numbers found on lampposts, none showed up. The one who finally came charged triple the fair market rate.
             </p>
             <p>
               They knew there had to be a better way. Malaysia has hundreds of thousands of skilled tradespeople who struggle to find consistent work, and millions of homeowners who can&apos;t find reliable help. The gap wasn&apos;t a talent problem — it was a trust and discovery problem.
             </p>
             <p>
-              Within six months, they had built a simple prototype, verified 200 handymen in Kuala Lumpur, and processed their first 1,000 jobs. Today, NeighborHelp operates across 12 cities, has processed over 61,000 jobs, and is the highest-rated home services app in Malaysia on both the App Store and Google Play.
+              Within six months, they had built a simple prototype, verified 200 handymen in Kuala Lumpur, and processed their first 1,000 jobs. Today, NeighbourHelp operates across 12 cities, has processed over 61,000 jobs, and is the highest-rated home services app in Malaysia on both the App Store and Google Play.
             </p>
           </div>
         </div>
@@ -199,7 +199,7 @@ export default function AboutPage() {
         <div className="bg-[#0B74FF] rounded-2xl p-8 text-center text-white">
           <h2 className="text-2xl font-bold mb-2">Ready to get started?</h2>
           <p className="text-blue-100 mb-6 text-sm">
-            Join over 28,000 homeowners who trust NeighborHelp to keep their homes in great shape.
+            Join over 28,000 homeowners who trust NeighbourHelp to keep their homes in great shape.
           </p>
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <Link href="/login">

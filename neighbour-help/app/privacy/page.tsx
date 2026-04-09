@@ -6,9 +6,9 @@ const SECTIONS = [
     id: "overview",
     title: "1. Overview",
     content: [
-      "NeighborHelp Sdn. Bhd. (Company No. 202101234567) ('we', 'us', 'our') is committed to protecting the personal data of every individual who uses our platform. This Privacy Policy explains what personal data we collect, why we collect it, how we use it, who we share it with, and what rights you have.",
-      "This Policy applies to all users of the NeighborHelp website (neighborhelp.my) and mobile applications. It is to be read together with our Terms of Service.",
-      "NeighborHelp is a registered data controller under Malaysia's Personal Data Protection Act 2010 (PDPA). Our Data Protection Officer can be contacted at dpo@neighborhelp.my.",
+      "NeighbourHelp Sdn. Bhd. (Company No. 202101234567) ('we', 'us', 'our') is committed to protecting the personal data of every individual who uses our platform. This Privacy Policy explains what personal data we collect, why we collect it, how we use it, who we share it with, and what rights you have.",
+      "This Policy applies to all users of the NeighbourHelp website (neighbourhelp.my) and mobile applications. It is to be read together with our Terms of Service.",
+      "NeighbourHelp is a registered data controller under Malaysia's Personal Data Protection Act 2010 (PDPA). Our Data Protection Officer can be contacted at dpo@neighbourhelp.my.",
     ],
   },
   {
@@ -101,7 +101,7 @@ const SECTIONS = [
       "Right to Withdraw Consent: where processing is based on consent, you may withdraw it at any time. This does not affect the lawfulness of processing before withdrawal.",
       "Right to Limit Processing: in certain circumstances you may request that we restrict the processing of your data.",
       "Right to Data Portability: you may request an export of your data in a machine-readable format (JSON or CSV).",
-      "To exercise any right, email dpo@neighborhelp.my with the subject line 'Data Rights Request'. We may need to verify your identity before processing the request.",
+      "To exercise any right, email dpo@neighbourhelp.my with the subject line 'Data Rights Request'. We may need to verify your identity before processing the request.",
     ],
   },
   {
@@ -121,7 +121,7 @@ const SECTIONS = [
     title: "9. Security",
     content: [
       "We implement industry-standard technical and organisational measures to protect your personal data, including: TLS 1.3 encryption for all data in transit; AES-256 encryption for data at rest; strict access controls limiting who within our organisation can access personal data; regular penetration testing and security audits; and multi-factor authentication for all internal admin systems.",
-      "Despite these measures, no system is completely secure. If you suspect your account has been compromised, contact us immediately at security@neighborhelp.my.",
+      "Despite these measures, no system is completely secure. If you suspect your account has been compromised, contact us immediately at security@neighbourhelp.my.",
       "In the event of a data breach that is likely to harm you, we will notify you and the relevant authorities within the timeframes required by the PDPA and any applicable regulations.",
     ],
   },
@@ -130,7 +130,7 @@ const SECTIONS = [
     title: "10. Children's Privacy",
     content: [
       "The Platform is not directed at individuals under the age of 18. We do not knowingly collect personal data from children. If we become aware that we have inadvertently collected data from a person under 18, we will delete it promptly.",
-      "If you are a parent or guardian and believe your child has registered on our Platform, please contact us at dpo@neighborhelp.my.",
+      "If you are a parent or guardian and believe your child has registered on our Platform, please contact us at dpo@neighbourhelp.my.",
     ],
   },
   {
@@ -154,8 +154,8 @@ const SECTIONS = [
     title: "13. Contact the DPO",
     content: [
       "For any privacy-related queries, concerns, or data rights requests, please contact our Data Protection Officer:",
-      "Email: dpo@neighborhelp.my",
-      "Post: Data Protection Officer, NeighborHelp Sdn. Bhd., Level 23, Menara Integra, 348 Jalan Tun Razak, 50400 Kuala Lumpur, Malaysia.",
+      "Email: dpo@neighbourhelp.my",
+      "Post: Data Protection Officer, NeighbourHelp Sdn. Bhd., Level 23, Menara Integra, 348 Jalan Tun Razak, 50400 Kuala Lumpur, Malaysia.",
       "If you are not satisfied with our response, you have the right to lodge a complaint with the Department of Personal Data Protection Malaysia (JPDP) at pdp.gov.my.",
     ],
   },
@@ -208,7 +208,7 @@ export default function PrivacyPage() {
             <strong>Plain-language summary:</strong> We collect only the data needed to run the
             platform. We never sell your data. Your address is only shared with a handyman after you
             accept their bid. You can request a copy, correction, or deletion of your data at any
-            time by emailing dpo@neighborhelp.my.
+            time by emailing dpo@neighbourhelp.my.
           </div>
 
           {SECTIONS.map(({ id, title, content, subsections }) => (
@@ -249,8 +249,8 @@ export default function PrivacyPage() {
               Support Centre
             </Link>{" "}
             or email{" "}
-            <a href="mailto:dpo@neighborhelp.my" className="text-[#0B74FF] hover:underline">
-              dpo@neighborhelp.my
+            <a href="mailto:dpo@neighbourhelp.my" className="text-[#0B74FF] hover:underline">
+              dpo@neighbourhelp.my
             </a>
             .
           </p>

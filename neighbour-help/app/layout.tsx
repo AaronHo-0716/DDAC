@@ -11,9 +11,9 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "NeighborHelp – Smart maintenance for every home",
+  title: "NeighbourHelp – Smart maintenance for every home",
   description:
-    "NeighborHelp connects homeowners with trusted local handymen for all your home repair needs.",
+    "NeighbourHelp connects homeowners with trusted local handymen for all your home repair needs.",
 };
 
 export default function RootLayout({

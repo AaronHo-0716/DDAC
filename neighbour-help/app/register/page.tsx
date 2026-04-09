@@ -65,7 +65,7 @@ function RegisterForm() {
             <Wrench className="w-5 h-5 text-white" />
           </div>
           <span className="text-xl font-bold text-[#111827]">
-            Neighbor<span className="text-[#0B74FF]">Help</span>
+            Neighbour<span className="text-[#0B74FF]">Help</span>
           </span>
         </div>
 

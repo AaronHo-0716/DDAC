@@ -84,7 +84,7 @@ export default function Navbar() {
               <Wrench className="w-4 h-4 text-white" />
             </div>
             <span className="text-lg font-bold text-[#111827] tracking-tight">
-              Neighbor<span className="text-[#0B74FF]">Help</span>
+              Neighbour<span className="text-[#0B74FF]">Help</span>
             </span>
           </Link>
 

@@ -36,7 +36,7 @@ export default function CtaSection() {
               Ready to get your home fixed?
             </h2>
             <p className="text-blue-100 text-lg mb-8 max-w-lg mx-auto">
-              Join thousands of homeowners who trust NeighborHelp for fast, affordable, and professional repairs.
+              Join thousands of homeowners who trust NeighbourHelp for fast, affordable, and professional repairs.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/create-job">

@@ -19,7 +19,7 @@ export default function Footer() {
               <Wrench className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="text-base font-bold text-[#111827]">
-              Neighbor<span className="text-[#0B74FF]">Help</span>
+              Neighbour<span className="text-[#0B74FF]">Help</span>
             </span>
           </Link>
 
@@ -38,7 +38,7 @@ export default function Footer() {
 
           {/* Copyright */}
           <p className="text-sm text-[#6B7280]">
-            © {new Date().getFullYear()} NeighborHelp. All rights reserved.
+            © {new Date().getFullYear()} NeighbourHelp. All rights reserved.
           </p>
         </div>
       </div>

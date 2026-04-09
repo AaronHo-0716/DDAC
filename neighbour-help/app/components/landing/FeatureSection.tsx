@@ -37,7 +37,7 @@ export default function FeatureSection() {
             Get your home fixed in 3 steps
           </h2>
           <p className="text-[#6B7280] text-lg max-w-xl mx-auto">
-            NeighborHelp makes home repairs simple, transparent, and stress-free.
+            NeighbourHelp makes home repairs simple, transparent, and stress-free.
           </p>
         </div>
 

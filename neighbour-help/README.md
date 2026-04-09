@@ -1,4 +1,4 @@
-This is a Next.js project for NeighborHelp.
+This is a Next.js project for NeighbourHelp.
 
 ## Getting Started
 

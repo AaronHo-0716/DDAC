@@ -45,7 +45,7 @@ const CATEGORIES = [
 
 const FAQS = [
   {
-    q: "How do I post a job on NeighborHelp?",
+    q: "How do I post a job on NeighbourHelp?",
     a: 'Click "Post a Job" from your dashboard. You\'ll be guided through a short 4-step form — choose a category, describe the work, optionally add photos, and review your posting. Once submitted, verified handymen in your area will start bidding within minutes.',
     category: "Jobs & Bookings",
   },
@@ -56,7 +56,7 @@ const FAQS = [
   },
   {
     q: "What is the 30-day service guarantee?",
-    a: "If you are unsatisfied with a completed job within 30 days — for example, a repair fails or the work is substandard — contact our support team. We will arrange for the original handyman to return and fix the issue at no cost, or assign a new handyman if necessary. This guarantee applies to all jobs booked through NeighborHelp.",
+    a: "If you are unsatisfied with a completed job within 30 days — for example, a repair fails or the work is substandard — contact our support team. We will arrange for the original handyman to return and fix the issue at no cost, or assign a new handyman if necessary. This guarantee applies to all jobs booked through NeighbourHelp.",
     category: "Policies & Safety",
   },
   {
@@ -66,7 +66,7 @@ const FAQS = [
   },
   {
     q: "When and how do I pay?",
-    a: "Payment is only processed after you confirm the job is complete. You can pay via credit/debit card, online banking (FPX), or e-wallets (Touch 'n Go, GrabPay). NeighborHelp holds the payment in escrow until you confirm completion, protecting both you and the handyman.",
+    a: "Payment is only processed after you confirm the job is complete. You can pay via credit/debit card, online banking (FPX), or e-wallets (Touch 'n Go, GrabPay). NeighbourHelp holds the payment in escrow until you confirm completion, protecting both you and the handyman.",
     category: "Payments & Billing",
   },
   {
@@ -76,12 +76,12 @@ const FAQS = [
   },
   {
     q: "What happens if a handyman no-shows?",
-    a: "If a handyman does not arrive within 30 minutes of the agreed time and is unresponsive, you can mark them as a no-show in the app. NeighborHelp will immediately re-match you with another available handyman. No-show handymen receive a strike and may be suspended from the platform.",
+    a: "If a handyman does not arrive within 30 minutes of the agreed time and is unresponsive, you can mark them as a no-show in the app. NeighbourHelp will immediately re-match you with another available handyman. No-show handymen receive a strike and may be suspended from the platform.",
     category: "Jobs & Bookings",
   },
   {
     q: "Is my personal information safe?",
-    a: "Yes. NeighborHelp is fully compliant with Malaysia's Personal Data Protection Act 2010 (PDPA). Your address and contact details are only shared with a handyman after you have accepted their bid. We never sell your data to third parties. See our Privacy Policy for full details.",
+    a: "Yes. NeighbourHelp is fully compliant with Malaysia's Personal Data Protection Act 2010 (PDPA). Your address and contact details are only shared with a handyman after you have accepted their bid. We never sell your data to third parties. See our Privacy Policy for full details.",
     category: "Policies & Safety",
   },
   {
@@ -91,7 +91,7 @@ const FAQS = [
   },
   {
     q: "What are platform fees for handymen?",
-    a: "NeighborHelp charges a 12% platform fee on each completed job. This covers payment processing, insurance contribution, and platform maintenance. There are no monthly subscription fees or sign-up costs. The fee is automatically deducted before payout to your registered bank account.",
+    a: "NeighbourHelp charges a 12% platform fee on each completed job. This covers payment processing, insurance contribution, and platform maintenance. There are no monthly subscription fees or sign-up costs. The fee is automatically deducted before payout to your registered bank account.",
     category: "Payments & Billing",
   },
 ];
@@ -226,7 +226,7 @@ export default function SupportPage() {
                 icon: <Mail className="w-5 h-5 text-purple-600" />,
                 bg: "bg-purple-50",
                 title: "Email",
-                desc: "support@neighborhelp.my",
+                desc: "support@neighbourhelp.my",
                 detail: "Response within 24 hours",
                 action: "Send Email",
               },
