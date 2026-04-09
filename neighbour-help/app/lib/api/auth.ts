@@ -10,6 +10,73 @@ import {
 } from "@/app/types";
 import { apiClient, clearTokens, setTokens } from "./client";
 
+function buildDefaultSettings(role: User["role"]): UserSettings {
+  const base: UserSettings = {
+    notifications: {
+      emailBidUpdates: true,
+      emailJobUpdates: true,
+      productAnnouncements: false,
+    },
+    privacy: {
+      showProfileToPublic: false,
+      sharePreciseLocation: false,
+    },
+  };
+
+  if (role === "homeowner") {
+    base.homeowner = {
+      defaultEmergency: false,
+      preferredContactMethod: "email",
+    };
+  }
+
+  if (role === "handyman") {
+    base.handyman = {
+      serviceRadiusKm: 10,
+      acceptingNewJobs: true,
+      categories: ["General Maintenance"],
+    };
+  }
+
+  return base;
+}
+
+function mergeSettings(
+  current: UserSettings,
+  updates: UpdateUserSettingsRequest
+): UserSettings {
+  return {
+    ...current,
+    notifications: {
+      ...current.notifications,
+      ...updates.notifications,
+    },
+    privacy: {
+      ...current.privacy,
+      ...updates.privacy,
+    },
+    homeowner: updates.homeowner
+      ? {
+          ...(current.homeowner ?? {
+            defaultEmergency: false,
+            preferredContactMethod: "email" as const,
+          }),
+          ...updates.homeowner,
+        }
+      : current.homeowner,
+    handyman: updates.handyman
+      ? {
+          ...(current.handyman ?? {
+            serviceRadiusKm: 10,
+            acceptingNewJobs: true,
+            categories: ["General Maintenance"],
+          }),
+          ...updates.handyman,
+        }
+      : current.handyman,
+  };
+}
+
 export const authService = {
   /**
    * POST /api/auth/login
@@ -48,35 +115,45 @@ export const authService = {
   },
 
   /**
-   * PATCH /api/account/profile
-   * Updates editable profile fields for current user.
+   * Account profile write endpoint is not part of current backend v1 API.
+   * Returns the latest profile shape merged with requested edits for UI continuity.
    */
   async updateProfile(data: UpdateProfileRequest): Promise<User> {
-    return apiClient.patch<User>("/account/profile", data);
+    const user = await apiClient.get<User>("/auth/me");
+    return {
+      ...user,
+      name: data.name ?? user.name,
+      avatarUrl: data.avatarUrl ?? user.avatarUrl,
+    };
   },
 
   /**
-   * POST /api/account/change-password
-   * Changes password for currently authenticated user.
+   * Password change endpoint is not available in the current backend API surface.
    */
   async changePassword(data: ChangePasswordRequest): Promise<void> {
-    await apiClient.post<void>("/account/change-password", data);
+    void data;
+    throw new Error(
+      "Password change is not available yet. Current backend plan does not expose /api/account/change-password."
+    );
   },
 
   /**
-   * GET /api/account/settings
-   * Returns settings for currently authenticated user.
+   * Backend v1 plan does not expose /api/account/settings.
+   * Reroute to /api/auth/me and derive per-role default settings.
    */
   async getSettings(): Promise<UserSettings> {
-    return apiClient.get<UserSettings>("/account/settings");
+    const user = await apiClient.get<User>("/auth/me");
+    return buildDefaultSettings(user.role);
   },
 
   /**
-   * PATCH /api/account/settings
-   * Updates user settings.
+   * Backend v1 plan does not expose /api/account/settings write endpoint.
+   * Returns merged settings locally for now.
    */
   async updateSettings(data: UpdateUserSettingsRequest): Promise<UserSettings> {
-    return apiClient.patch<UserSettings>("/account/settings", data);
+    const user = await apiClient.get<User>("/auth/me");
+    const current = buildDefaultSettings(user.role);
+    return mergeSettings(current, data);
   },
 
   /**
