@@ -83,6 +83,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IBidService, BidService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // Error Handling
 builder.Services.AddProblemDetails(options =>
