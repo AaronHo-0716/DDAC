@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Briefcase, CalendarClock } from "lucide-react";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import StatusBadge from "@/app/components/ui/StatusBadge";
 import type { Bid, BidStatus } from "@/app/types";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
+import { bidsService } from "@/app/lib/api/bids";
+import { ApiClientError } from "@/app/lib/api/client";
 
 const FILTERS: Array<{ label: string; value: "all" | BidStatus }> = [
   { label: "All", value: "all" },
@@ -27,12 +29,50 @@ function fmtDate(iso: string) {
 export default function HandymanBidsPage() {
   const { authorized, loading } = useRequireRole("handyman");
   const [statusFilter, setStatusFilter] = useState<"all" | BidStatus>("all");
-  const myBids: Bid[] = [];
+  const [myBids, setMyBids] = useState<Bid[]>([]);
+  const [isLoadingBids, setIsLoadingBids] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authorized) return;
+
+    let isCancelled = false;
+
+    const loadBids = async () => {
+      setIsLoadingBids(true);
+      setErrorMessage(null);
+
+      try {
+        const response = await bidsService.getMyBids({ page: 1, pageSize: 100 });
+        if (!isCancelled) {
+          setMyBids(response.bids);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          if (error instanceof ApiClientError) {
+            setErrorMessage(error.message || "Failed to load submitted bids.");
+          } else {
+            setErrorMessage("Failed to load submitted bids.");
+          }
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingBids(false);
+        }
+      }
+    };
+
+    loadBids();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [authorized]);
 
   const filteredBids = useMemo(() => {
     if (statusFilter === "all") return myBids;
     return myBids.filter((bid) => bid.status === statusFilter);
-  }, [statusFilter]);
+  }, [myBids, statusFilter]);
 
   if (loading || !authorized) return null;
 
@@ -70,6 +110,18 @@ export default function HandymanBidsPage() {
         </div>
 
         <div className="space-y-4">
+          {errorMessage && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
+
+          {isLoadingBids && (
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-10 text-center">
+              <p className="text-[#6B7280] text-sm">Loading submitted bids...</p>
+            </div>
+          )}
+
           {filteredBids.map((bid) => (
             <div key={bid.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
               <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
@@ -109,7 +161,7 @@ export default function HandymanBidsPage() {
             </div>
           ))}
 
-          {filteredBids.length === 0 && (
+          {!isLoadingBids && filteredBids.length === 0 && (
             <div className="bg-white rounded-2xl border border-[#E5E7EB] p-10 text-center">
               <p className="text-[#6B7280] text-sm">No bids in this status yet.</p>
             </div>

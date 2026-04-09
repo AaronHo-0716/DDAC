@@ -112,6 +112,20 @@ export const bidsService = {
   },
 
   /**
+   * GET /api/bids/my
+   * Fetch bids submitted by the authenticated handyman.
+   */
+  async getMyBids(params: BidsQueryParams = {}): Promise<BidListResponse> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) query.set(k, String(v));
+    });
+    const qs = query.toString();
+    const response = await apiClient.get<RawBidListResponse>(`/bids/my${qs ? `?${qs}` : ""}`);
+    return normalizeBidList(response);
+  },
+
+  /**
    * POST /api/jobs/:jobId/bids
    * Submit a bid on a job (handyman only).
    */
