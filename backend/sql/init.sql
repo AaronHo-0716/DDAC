@@ -13,7 +13,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto; -- for gen_random_uuid()
 -- admin_action_type: 'block_user', 'unblock_user', 'approve_handyman', 'reject_handyman', 'force_reject_bid', 'lock_bid', 'unlock_bid', 'flag_bid', 'unflag_bid', 'assign_emergency_job'
 -- admin_target_type: 'user', 'job', 'bid', 'verification'
 
-CREATE TABLE IF NOT EXISTS users (
+
+CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(120) NOT NULL,
   email VARCHAR(320) NOT NULL,
@@ -28,12 +29,15 @@ CREATE TABLE IF NOT EXISTS users (
   blocked_by_user_id UUID REFERENCES users(id),
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  token_version INT NOT NULL DEFAULT 1,
+  token_version INT NOT NULL DEFAULT 1, 
   CONSTRAINT uq_users_email UNIQUE (email),
   CONSTRAINT chk_users_rating_range CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))
 );
 
 -- Seed default admin account during initialization (created before any other account)
+-- Login:
+--   email: admin@neighborhelp.test
+--   password: Password123!
 INSERT INTO users (name, email, password_hash, role, account_status, must_reset_password)
 VALUES (
   'System Admin',
@@ -45,7 +49,7 @@ VALUES (
 )
 ON CONFLICT (email) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS refresh_tokens (
+CREATE TABLE refresh_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL,
@@ -57,10 +61,11 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_refresh_tokens_token_hash ON refresh_tokens(token_hash);
-CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_created ON refresh_tokens(user_id, created_at_utc DESC);
+CREATE UNIQUE INDEX uq_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+CREATE INDEX ix_refresh_tokens_user_created ON refresh_tokens(user_id, created_at_utc DESC);
 
-CREATE TABLE IF NOT EXISTS jobs (
+
+CREATE TABLE jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   posted_by_user_id UUID NOT NULL REFERENCES users(id),
   title VARCHAR(180) NOT NULL,
@@ -77,7 +82,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   CONSTRAINT chk_jobs_budget_nonnegative CHECK (budget IS NULL OR budget >= 0)
 );
 
-CREATE TABLE IF NOT EXISTS job_images (
+CREATE TABLE job_images (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   image_url TEXT NOT NULL,
@@ -86,7 +91,7 @@ CREATE TABLE IF NOT EXISTS job_images (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS bids (
+CREATE TABLE bids (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   handyman_user_id UUID NOT NULL REFERENCES users(id),
@@ -101,14 +106,15 @@ CREATE TABLE IF NOT EXISTS bids (
 );
 
 -- Optional business rule guard at DB layer: one active bid per handyman per job
-CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_job_handyman ON bids(job_id, handyman_user_id);
+CREATE UNIQUE INDEX uq_bids_job_handyman ON bids(job_id, handyman_user_id);
 
 -- One accepted bid per job invariant
-CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_one_accepted_per_job
+CREATE UNIQUE INDEX uq_bids_one_accepted_per_job
   ON bids(job_id)
   WHERE status = 'accepted';
 
-CREATE TABLE IF NOT EXISTS notifications (
+
+CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   type VARCHAR(50) NOT NULL,
@@ -118,7 +124,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS handyman_verifications (
+CREATE TABLE handyman_verifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
@@ -130,7 +136,7 @@ CREATE TABLE IF NOT EXISTS handyman_verifications (
   CONSTRAINT uq_handyman_verifications_user UNIQUE (user_id)
 );
 
-CREATE TABLE IF NOT EXISTS bid_transactions (
+CREATE TABLE bid_transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   bid_id UUID NOT NULL REFERENCES bids(id) ON DELETE CASCADE,
   job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -143,14 +149,14 @@ CREATE TABLE IF NOT EXISTS bid_transactions (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS bid_locks (
+CREATE TABLE bid_locks (
   bid_id UUID PRIMARY KEY REFERENCES bids(id) ON DELETE CASCADE,
   locked_by_user_id UUID NOT NULL REFERENCES users(id),
   locked_reason TEXT,
   locked_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS admin_actions (
+CREATE TABLE admin_actions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_user_id UUID NOT NULL REFERENCES users(id),
   action_type VARCHAR(50) NOT NULL,
@@ -161,25 +167,26 @@ CREATE TABLE IF NOT EXISTS admin_actions (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS ix_users_role_status ON users(role, account_status);
-CREATE INDEX IF NOT EXISTS ix_users_created ON users(created_at_utc DESC);
 
-CREATE INDEX IF NOT EXISTS ix_jobs_status_category_emergency_created
+CREATE INDEX ix_users_role_status ON users(role, account_status);
+CREATE INDEX ix_users_created ON users(created_at_utc DESC);
+
+CREATE INDEX ix_jobs_status_category_emergency_created
   ON jobs(status, category, is_emergency, created_at_utc DESC);
-CREATE INDEX IF NOT EXISTS ix_jobs_posted_by ON jobs(posted_by_user_id, created_at_utc DESC);
+CREATE INDEX ix_jobs_posted_by ON jobs(posted_by_user_id, created_at_utc DESC);
 
-CREATE INDEX IF NOT EXISTS ix_bids_job_status_created ON bids(job_id, status, created_at_utc DESC);
-CREATE INDEX IF NOT EXISTS ix_bids_handyman_status_created ON bids(handyman_user_id, status, created_at_utc DESC);
+CREATE INDEX ix_bids_job_status_created ON bids(job_id, status, created_at_utc DESC);
+CREATE INDEX ix_bids_handyman_status_created ON bids(handyman_user_id, status, created_at_utc DESC);
 
-CREATE INDEX IF NOT EXISTS ix_notifications_user_read_created
+CREATE INDEX ix_notifications_user_read_created
   ON notifications(user_id, is_read, created_at_utc DESC);
 
-CREATE INDEX IF NOT EXISTS ix_verifications_status_created
+CREATE INDEX ix_verifications_status_created
   ON handyman_verifications(status, created_at_utc DESC);
 
-CREATE INDEX IF NOT EXISTS ix_bid_tx_bid_created ON bid_transactions(bid_id, created_at_utc DESC);
-CREATE INDEX IF NOT EXISTS ix_bid_tx_job_created ON bid_transactions(job_id, created_at_utc DESC);
-CREATE INDEX IF NOT EXISTS ix_bid_tx_event_type_created ON bid_transactions(event_type, created_at_utc DESC);
+CREATE INDEX ix_bid_tx_bid_created ON bid_transactions(bid_id, created_at_utc DESC);
+CREATE INDEX ix_bid_tx_job_created ON bid_transactions(job_id, created_at_utc DESC);
+CREATE INDEX ix_bid_tx_event_type_created ON bid_transactions(event_type, created_at_utc DESC);
 
-CREATE INDEX IF NOT EXISTS ix_admin_actions_actor_created ON admin_actions(admin_user_id, created_at_utc DESC);
-CREATE INDEX IF NOT EXISTS ix_admin_actions_target ON admin_actions(target_type, target_id, created_at_utc DESC);
+CREATE INDEX ix_admin_actions_actor_created ON admin_actions(admin_user_id, created_at_utc DESC);
+CREATE INDEX ix_admin_actions_target ON admin_actions(target_type, target_id, created_at_utc DESC);
