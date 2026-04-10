@@ -8,5 +8,5 @@ public interface IAuthService
     Task<AuthResponse> Login(LoginRequest request);
     Task<UserDto> GetUserById(Guid userId);
     Task<AuthResponse> RefreshToken(string token);
-    Task Logout(string refreshToken, Guid userId);
+    Task Logout(LogoutRequest request, Guid userId);
 }

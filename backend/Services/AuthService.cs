@@ -15,114 +15,44 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
 {
     private static readonly string[] AllowedRoles = ["handyman", "homeowner", "admin"];
 
+    public async Task<AuthResponse> Login(LoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            throw new HttpRequestException("Email and password are required.", null, HttpStatusCode.BadRequest);
+
+        var user = await context.Users
+            .FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
+
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
+
+        return await GenerateAuthResponse(user);
+    }
+
     public async Task<AuthResponse> Register(RegisterRequest request)
     {
-        // 1. Basic field validation
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
-            throw new HttpRequestException("All fields (Email, Password, Name) are required.", null, HttpStatusCode.BadRequest);
-
-        // 2. Email format validation
         if (!IsValidEmail(request.Email))
             throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
 
-        // 3. ROLE VERIFICATION
-        var roleLower = request.Role?.ToLower().Trim();
-        if (string.IsNullOrEmpty(roleLower) || !AllowedRoles.Contains(roleLower))
-        {
-            throw new HttpRequestException($"Invalid role. Choose from: {string.Join(", ", AllowedRoles)}", null, HttpStatusCode.BadRequest);
-        }
-
-        // 4. Duplicate email check
         var emailLower = request.Email.ToLower().Trim();
         if (await context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("Email already exists.", null, HttpStatusCode.Conflict);
 
-        // 5. Create new user
         var newUser = new User
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Email = emailLower,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Role = roleLower,  
-            IsActive = true
+            Role = request.Role?.ToLower().Trim() ?? "homeowner",
+            IsActive = true,
+            TokenVersion = 1
         };
 
         context.Users.Add(newUser);
         await context.SaveChangesAsync();
 
         return await GenerateAuthResponse(newUser);
-    }
-
-    public async Task Logout(string refreshToken, Guid userId)
-    {
-        // 1. Revoke the specific refresh token in DB
-        var tokenEntry = await context.Refresh_Tokens
-            .FirstOrDefaultAsync(t => t.Token_Hash == refreshToken && t.User_Id == userId);
-
-        if (tokenEntry != null)
-        {
-            tokenEntry.Revoked_At_Utc = DateTime.UtcNow;
-        }
-
-        // 2. Increment TokenVersion
-        // This is the "Magic" step. Because of your TokenValidationMiddleware, 
-        // the current Access Token (and any others on other devices) 
-        // will now be rejected immediately.
-        var user = await context.Users.FindAsync(userId);
-        if (user != null)
-        {
-            user.TokenVersion++;
-        }
-
-        await context.SaveChangesAsync();
-    }
-
-    public async Task Logout(LogoutRequest request, Guid userId)
-    {
-        // 1. Start a Transaction to ensure both actions happen or neither
-        using var transaction = await context.Database.BeginTransactionAsync();
-
-        try
-        {
-            // 2. Attempt to revoke the specific refresh token if it's valid
-            var tokenEntry = await context.Refresh_Tokens
-                .FirstOrDefaultAsync(t => t.Token_Hash == request.RefreshToken && t.User_Id == userId);
-
-            if (tokenEntry != null)
-            {
-                tokenEntry.Revoked_At_Utc = DateTime.UtcNow;
-                tokenEntry.Replaced_By_Token_Hash = "LOGOUT";
-            }
-
-            // 3. MANDATORY: Increment TokenVersion
-            var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user != null)
-            {
-                user.TokenVersion++;
-            }
-
-            // 4. AUDIT: Log the logout event
-            context.Admin_Actions.Add(new Admin_Action
-            {
-                Id = Guid.NewGuid(),
-                Admin_User_Id = userId, // Logging that the user performed this action on themselves
-                Action_Type = "USER_LOGOUT",
-                Target_Type = "USER",
-                Target_Id = userId,
-                Reason = "User initiated logout",
-                Payload = "{}",
-                Created_At_Utc = DateTime.UtcNow
-            });
-
-            await context.SaveChangesAsync();
-            await transaction.CommitAsync();
-        }
-        catch (Exception)
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
     }
 
     public async Task<AuthResponse> RefreshToken(string token)
@@ -134,6 +64,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         if (existingToken == null || !existingToken.IsActive)
             throw new HttpRequestException("Invalid or expired refresh token.", null, HttpStatusCode.Unauthorized);
 
+        // Rotation: kill Access Token A by incrementing version
         existingToken.User.TokenVersion++;
 
         var newRefreshTokenStr = GenerateSecureRandomString();
@@ -149,11 +80,39 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         };
 
         context.Refresh_Tokens.Add(newRefreshToken);
-
         await context.SaveChangesAsync();
 
         var (accessToken, expiresIn) = CreateJwtToken(existingToken.User);
         return new AuthResponse(MapToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
+    }
+
+    public async Task Logout(LogoutRequest request, Guid userId)
+    {
+        // Even if the token is "fake" or missing, we still increment TokenVersion 
+        // to kill the current Access Token for security.
+        var tokenEntry = await context.Refresh_Tokens
+            .FirstOrDefaultAsync(t => t.Token_Hash == request.RefreshToken && t.User_Id == userId);
+
+        if (tokenEntry != null)
+        {
+            tokenEntry.Revoked_At_Utc = DateTime.UtcNow;
+            tokenEntry.Replaced_By_Token_Hash = "LOGOUT";
+        }
+
+        var user = await context.Users.FindAsync(userId);
+        if (user != null)
+        {
+            user.TokenVersion++; // This is what actually kills the current session
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    public async Task<UserDto> GetUserById(Guid userId)
+    {
+        var user = await context.Users.FindAsync(userId);
+        if (user == null) throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
+        return MapToDto(user);
     }
 
     private async Task<AuthResponse> GenerateAuthResponse(User user)
@@ -166,7 +125,8 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
             Id = Guid.NewGuid(),
             User_Id = user.Id,
             Token_Hash = refreshTokenStr,
-            Expires_At_Utc = DateTime.UtcNow.AddDays(7)
+            Expires_At_Utc = DateTime.UtcNow.AddDays(7),
+            Created_At_Utc = DateTime.UtcNow
         };
 
         context.Refresh_Tokens.Add(refreshToken);
@@ -188,7 +148,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
             issuer: config["Jwt:Issuer"],
             audience: config["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(config.GetValue<int>("Jwt:ExpiryInMinutes", 1440)),
+            expires: DateTime.UtcNow.AddMinutes(config.GetValue<int>("Jwt:ExpiryInMinutes", 60)),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
         );
 
@@ -203,9 +163,9 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         return Convert.ToBase64String(randomNumber);
     }
 
-    private static UserDto MapToDto(User user) => new(user.Id, user.Name, user.Email, user.Role, user.AvatarUrl, user.Rating, user.CreatedAtUtc, user.IsActive);
-
-    public async Task<UserDto> GetUserById(Guid userId) => MapToDto(await context.Users.FindAsync(userId));
+    private static UserDto MapToDto(User user) => new(
+        user.Id, user.Name.Trim(), user.Email.Trim(), user.Role.Trim(), user.AvatarUrl, user.Rating, user.CreatedAtUtc, user.IsActive
+    );
 
     private static bool IsValidEmail(string email)
     {
