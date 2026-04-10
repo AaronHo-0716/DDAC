@@ -197,9 +197,11 @@ export interface JobListResponse {
 
 export type NotificationEventType =
   | "bid_received"
+  | "bid_rejected"
   | "bid_accepted"
   | "handyman_arriving"
-  | "job_completed";
+  | "job_completed"
+  | "system";
 
 export interface Notification {
   id: string;
@@ -208,4 +210,9 @@ export interface Notification {
   read: boolean;
   createdAt: string;
   relatedJobId?: string;
+}
+
+export interface NotificationListResponse {
+  notifications: Notification[];
+  unreadCount: number;
 }

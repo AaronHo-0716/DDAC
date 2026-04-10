@@ -5,10 +5,7 @@ import Link from "next/link";
 import { Bell, CheckCircle, ChevronLeft, DollarSign, Star, Truck } from "lucide-react";
 import type { Notification, NotificationEventType } from "@/app/types";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
-import {
-  ensureStoredNotifications,
-  writeStoredNotifications,
-} from "@/app/lib/mock/notificationsMock";
+import { notificationsService } from "@/app/lib/api/notifications";
 
 const NOTIF_CONFIG: Record<
   NotificationEventType,
@@ -18,6 +15,11 @@ const NOTIF_CONFIG: Record<
     icon: <DollarSign className="w-4 h-4" />,
     bg: "bg-blue-50",
     color: "text-[#0B74FF]",
+  },
+  bid_rejected: {
+    icon: <Bell className="w-4 h-4" />,
+    bg: "bg-red-50",
+    color: "text-red-600",
   },
   bid_accepted: {
     icon: <CheckCircle className="w-4 h-4" />,
@@ -34,6 +36,11 @@ const NOTIF_CONFIG: Record<
     bg: "bg-purple-50",
     color: "text-purple-600",
   },
+  system: {
+    icon: <Bell className="w-4 h-4" />,
+    bg: "bg-gray-100",
+    color: "text-gray-700",
+  },
 };
 
 function timeAgo(iso: string) {
@@ -48,10 +55,39 @@ function timeAgo(iso: string) {
 export default function NotificationsPage() {
   const { authorized, loading } = useRequireRole(["homeowner", "handyman", "admin"]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setNotifications(ensureStoredNotifications());
-  }, []);
+    if (!authorized) return;
+
+    let cancelled = false;
+
+    const load = async () => {
+      setFetching(true);
+      setError(null);
+      try {
+        const response = await notificationsService.getNotifications();
+        if (!cancelled) {
+          setNotifications(response.notifications);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load notifications.");
+        }
+      } finally {
+        if (!cancelled) {
+          setFetching(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authorized]);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
@@ -59,20 +95,35 @@ export default function NotificationsPage() {
   );
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) => {
-      const next = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
-      writeStoredNotifications(next);
-      return next;
-    });
-  }, []);
+    const target = notifications.find((n) => n.id === id);
+    if (!target || target.read) return;
+
+    void (async () => {
+      try {
+        await notificationsService.markAsRead(id);
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+        );
+        window.dispatchEvent(new Event("nh_notifications_updated"));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update notification.");
+      }
+    })();
+  }, [notifications]);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => {
-      const next = prev.map((n) => ({ ...n, read: true }));
-      writeStoredNotifications(next);
-      return next;
-    });
-  }, []);
+    if (notifications.every((n) => n.read)) return;
+
+    void (async () => {
+      try {
+        await notificationsService.markAllAsRead();
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        window.dispatchEvent(new Event("nh_notifications_updated"));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to mark all notifications as read.");
+      }
+    })();
+  }, [notifications]);
 
   if (loading || !authorized) {
     return null;
@@ -103,8 +154,16 @@ export default function NotificationsPage() {
           )}
         </div>
 
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="bg-white border border-[#E5E7EB] rounded-2xl overflow-hidden">
-          {notifications.length === 0 ? (
+          {fetching ? (
+            <div className="p-8 text-center text-sm text-[#6B7280]">Loading notifications...</div>
+          ) : notifications.length === 0 ? (
             <div className="p-12 text-center text-[#9CA3AF]">
               <Bell className="w-9 h-9 mx-auto mb-3" />
               <p className="text-sm">No notifications yet</p>

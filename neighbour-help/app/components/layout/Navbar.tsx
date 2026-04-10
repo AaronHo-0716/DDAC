@@ -5,24 +5,7 @@ import { useEffect, useState } from "react";
 import { Bell, ChevronDown, Wrench, Menu, X } from "lucide-react";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import NotificationsPanel from "@/app/components/ui/NotificationsPanel";
-import type { Notification } from "@/app/types";
-
-const NOTIFICATIONS_STORAGE_KEY = "nh_mock_notifications";
-
-function getUnreadCount(): number {
-  if (typeof window === "undefined") return 0;
-
-  const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
-  if (!raw) return 0;
-
-  try {
-    const parsed = JSON.parse(raw) as Notification[];
-    if (!Array.isArray(parsed)) return 0;
-    return parsed.filter((n) => !n.read).length;
-  } catch {
-    return 0;
-  }
-}
+import { notificationsService } from "@/app/lib/api/notifications";
 
 const homeownerNavLinks = [
   { label: "My Jobs", href: "/my-jobs" },
@@ -62,15 +45,23 @@ export default function Navbar() {
       return;
     }
 
-    const refreshUnread = () => {
-      setUnreadCount(getUnreadCount());
+    const refreshUnread = async () => {
+      try {
+        const response = await notificationsService.getNotifications();
+        setUnreadCount(response.unreadCount);
+      } catch {
+        setUnreadCount(0);
+      }
     };
 
-    refreshUnread();
-    window.addEventListener("nh_notifications_updated", refreshUnread);
+    void refreshUnread();
+    const listener = () => {
+      void refreshUnread();
+    };
+    window.addEventListener("nh_notifications_updated", listener);
 
     return () => {
-      window.removeEventListener("nh_notifications_updated", refreshUnread);
+      window.removeEventListener("nh_notifications_updated", listener);
     };
   }, [user]);
 
