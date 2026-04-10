@@ -2,13 +2,19 @@ import {
   AuthResponse,
   ChangePasswordRequest,
   LoginRequest,
+  LogoutRequest,
   RegisterRequest,
   UpdateProfileRequest,
   UpdateUserSettingsRequest,
   User,
   UserSettings,
 } from "@/app/types";
-import { apiClient, clearTokens, setTokens } from "./client";
+import {
+  apiClient,
+  clearTokens,
+  getRefreshToken,
+  setTokens,
+} from "./client";
 
 function buildDefaultSettings(role: User["role"]): UserSettings {
   const base: UserSettings = {
@@ -161,8 +167,14 @@ export const authService = {
    * Invalidates the refresh token server-side then clears local storage.
    */
   async logout(): Promise<void> {
+    const payload: LogoutRequest = {
+      refreshToken: getRefreshToken(),
+    };
+
     try {
-      await apiClient.post("/auth/logout", {});
+      await apiClient.post("/auth/logout", payload);
+    } catch {
+      // Logout should remain best-effort; local session state is cleared below.
     } finally {
       clearTokens();
     }

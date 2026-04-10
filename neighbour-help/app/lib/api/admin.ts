@@ -41,6 +41,12 @@ interface RawUserDto {
   createdAt?: string | null;
 }
 
+interface RawHandymanVerificationDto {
+  id?: string | null;
+  userId?: string | null;
+  status?: string | null;
+}
+
 function normalizeRole(value?: string | null): UserRole {
   const normalized = (value ?? "homeowner").toLowerCase();
   if (normalized === "admin") return "admin";
@@ -61,20 +67,59 @@ function toAdminUser(row: RawUserDto): AdminUserItem {
 
 export const adminService = {
   async getUsers(): Promise<AdminUserItem[]> {
-    const users = await apiClient.get<RawUserDto[]>("/users");
-    return Array.isArray(users) ? users.map(toAdminUser) : [];
+    const [users, pendingVerifications] = await Promise.all([
+      apiClient.get<RawUserDto[]>("/admin/users?page=1&pageSize=200"),
+      apiClient
+        .get<RawHandymanVerificationDto[]>("/admin/handymen/pending-verification")
+        .catch(() => [] as RawHandymanVerificationDto[]),
+    ]);
+
+    const pendingByUserId = new Map(
+      (Array.isArray(pendingVerifications) ? pendingVerifications : [])
+        .filter((v) => v.userId && v.status?.toLowerCase() === "pending")
+        .map((v) => [v.userId as string, v])
+    );
+
+    if (!Array.isArray(users)) return [];
+
+    return users.map((row) => {
+      const user = toAdminUser(row);
+      if (user.role === "handyman" && pendingByUserId.has(user.id)) {
+        return { ...user, verificationStatus: "pending" as const };
+      }
+      return user;
+    });
   },
 
   async blockUser(userId: string): Promise<void> {
-    throw new Error("Block user endpoint is not available in the current API spec.");
+    await apiClient.patch(`/admin/users/${userId}/block`, {
+      reason: "Blocked by admin moderation",
+    });
   },
 
   async unblockUser(userId: string): Promise<void> {
-    throw new Error("Unblock user endpoint is not available in the current API spec.");
+    await apiClient.patch(`/admin/users/${userId}/unblock`, {});
   },
 
   async updateVerification(userId: string, status: VerificationStatus): Promise<void> {
-    throw new Error("Verification update endpoint is not available in the current API spec.");
+    const pending = await apiClient.get<RawHandymanVerificationDto[]>(
+      "/admin/handymen/pending-verification"
+    );
+
+    const record = (Array.isArray(pending) ? pending : []).find(
+      (v) => v.userId === userId && v.status?.toLowerCase() === "pending"
+    );
+
+    if (!record?.id) {
+      throw new Error("No pending verification record found for this handyman.");
+    }
+
+    if (status === "approved") {
+      await apiClient.patch(`/admin/handymen/${record.id}/approve`, "Approved by admin");
+      return;
+    }
+
+    await apiClient.patch(`/admin/handymen/${record.id}/reject`, "Rejected by admin");
   },
 
   async getBidTransactions(): Promise<BidTransactionItem[]> {
@@ -108,14 +153,23 @@ export const adminService = {
   },
 
   async setBidFlag(transactionId: string, flagged: boolean): Promise<void> {
-    throw new Error("Bid flag endpoint is not available in the current API spec.");
+    const reason = flagged
+      ? "Flagged by admin from dashboard"
+      : "Unflag requested by admin from dashboard";
+    await apiClient.patch(`/admin/bid-transactions/${transactionId}/flag`, reason);
   },
 
   async setBidLock(transactionId: string, locked: boolean): Promise<void> {
-    throw new Error("Bid lock endpoint is not available in the current API spec.");
+    const reason = locked
+      ? "Locked by admin from dashboard"
+      : "Unlock requested by admin from dashboard";
+    await apiClient.patch(`/admin/bid-transactions/${transactionId}/lock`, reason);
   },
 
   async forceRejectBid(transactionId: string): Promise<void> {
-    await bidsService.rejectBid(transactionId);
+    await apiClient.patch(
+      `/admin/bid-transactions/${transactionId}/force-reject`,
+      "Force rejected by admin"
+    );
   },
 };

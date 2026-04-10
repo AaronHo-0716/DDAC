@@ -31,6 +31,10 @@ export interface RegisterRequest {
   role: UserRole;
 }
 
+export interface LogoutRequest {
+  refreshToken?: string | null;
+}
+
 export interface AuthResponse {
   user: User;
   tokens: AuthTokens;
