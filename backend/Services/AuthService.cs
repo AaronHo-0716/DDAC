@@ -54,6 +54,30 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         return await GenerateAuthResponse(newUser);
     }
 
+    public async Task Logout(string refreshToken, Guid userId)
+    {
+        // 1. Revoke the specific refresh token in DB
+        var tokenEntry = await context.Refresh_Tokens
+            .FirstOrDefaultAsync(t => t.Token_Hash == refreshToken && t.User_Id == userId);
+
+        if (tokenEntry != null)
+        {
+            tokenEntry.Revoked_At_Utc = DateTime.UtcNow;
+        }
+
+        // 2. Increment TokenVersion
+        // This is the "Magic" step. Because of your TokenValidationMiddleware, 
+        // the current Access Token (and any others on other devices) 
+        // will now be rejected immediately.
+        var user = await context.Users.FindAsync(userId);
+        if (user != null)
+        {
+            user.TokenVersion++;
+        }
+
+        await context.SaveChangesAsync();
+    }
+
     public async Task<AuthResponse> Login(LoginRequest request)
     {
         var user = await context.Users

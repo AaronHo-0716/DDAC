@@ -25,3 +25,4 @@ public record AuthResponse(
 public record LoginRequest(string Email, string Password);
 public record RegisterRequest(string Name, string Email, string Password, string Role);
 public record RefreshRequest(string RefreshToken);
+public record LogoutRequest(string RefreshToken);

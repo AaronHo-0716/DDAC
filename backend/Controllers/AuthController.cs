@@ -95,8 +95,25 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [Authorize]
     [HttpPost("logout")]
-    public IActionResult Logout()
+    public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
-        return Ok();
+        try
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+            var userId = Guid.Parse(userIdClaim);
+
+            // Perform the real logout logic
+            await authService.Logout(request.RefreshToken, userId);
+
+            return Ok(new { message = "Logged out successfully. Session invalidated." });
+        }
+        catch (Exception)
+        {
+            // Even if it fails, we return 200 because the client will 
+            // delete the tokens anyway.
+            return Ok();
+        }
     }
 }
