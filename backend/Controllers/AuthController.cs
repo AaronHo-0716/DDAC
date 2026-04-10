@@ -97,23 +97,26 @@ public class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
+        // Extract User ID from the valid JWT claims
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        var userId = Guid.Parse(userIdClaim);
+
         try
         {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+            await authService.Logout(request, userId);
 
-            var userId = Guid.Parse(userIdClaim);
-
-            // Perform the real logout logic
-            await authService.Logout(request.RefreshToken, userId);
-
-            return Ok(new { message = "Logged out successfully. Session invalidated." });
+            return Ok(new 
+            { 
+                message = "Logged out successfully. All active access tokens for this account have been invalidated.",
+                serverTime = DateTime.UtcNow 
+            });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Even if it fails, we return 200 because the client will 
-            // delete the tokens anyway.
-            return Ok();
+            // Log internal errors but don't expose DB details
+            return StatusCode(500, new { message = "An error occurred during logout.", details = ex.Message });
         }
     }
 }

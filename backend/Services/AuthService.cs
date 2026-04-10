@@ -78,15 +78,51 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         await context.SaveChangesAsync();
     }
 
-    public async Task<AuthResponse> Login(LoginRequest request)
+    public async Task Logout(LogoutRequest request, Guid userId)
     {
-        var user = await context.Users
-            .FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
+        // 1. Start a Transaction to ensure both actions happen or neither
+        using var transaction = await context.Database.BeginTransactionAsync();
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
+        try
+        {
+            // 2. Attempt to revoke the specific refresh token if it's valid
+            var tokenEntry = await context.Refresh_Tokens
+                .FirstOrDefaultAsync(t => t.Token_Hash == request.RefreshToken && t.User_Id == userId);
 
-        return await GenerateAuthResponse(user);
+            if (tokenEntry != null)
+            {
+                tokenEntry.Revoked_At_Utc = DateTime.UtcNow;
+                tokenEntry.Replaced_By_Token_Hash = "LOGOUT";
+            }
+
+            // 3. MANDATORY: Increment TokenVersion
+            var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user != null)
+            {
+                user.TokenVersion++;
+            }
+
+            // 4. AUDIT: Log the logout event
+            context.Admin_Actions.Add(new Admin_Action
+            {
+                Id = Guid.NewGuid(),
+                Admin_User_Id = userId, // Logging that the user performed this action on themselves
+                Action_Type = "USER_LOGOUT",
+                Target_Type = "USER",
+                Target_Id = userId,
+                Reason = "User initiated logout",
+                Payload = "{}",
+                Created_At_Utc = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<AuthResponse> RefreshToken(string token)
