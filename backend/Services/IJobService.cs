@@ -2,6 +2,7 @@ using backend.Data;
 using backend.Models.Entities;
 using backend.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace backend.Services;
 
@@ -23,11 +24,13 @@ public interface IJobService
 public class JobService : IJobService
 {
     private readonly NeighbourHelpDbContext _context;
+    private readonly ILogger<JobService> _logger;
     private const int MaxDistance = 100; // km
 
-    public JobService(NeighbourHelpDbContext context)
+    public JobService(NeighbourHelpDbContext context, ILogger<JobService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId, string userRole)
@@ -110,7 +113,6 @@ public class JobService : IJobService
 
         var jobDtos = jobs.Select(j => MapToDto(j)).ToList();
 
-        //return new JobListResponse(jobDtos, page, pageSize, totalCount);
         return new JobListResponse(jobDtos, page, pageSize, totalCount);
 
     }
@@ -134,8 +136,6 @@ public class JobService : IJobService
         {
             return null;
         }
-
-        // Admin can see all jobs (no restriction)
 
         return MapToDto(job);
     }
@@ -184,6 +184,7 @@ public class JobService : IJobService
         }
 
         await _context.SaveChangesAsync();
+        _logger.LogInformation("Job {JobId} created by User {UserId}", newJob.Id, userId);
 
         var createdJob = await _context.Jobs
             .Include(j => j.Posted_By_User)
@@ -225,6 +226,7 @@ public class JobService : IJobService
 
         _context.Jobs.Update(job);
         await _context.SaveChangesAsync();
+        _logger.LogInformation("Job {JobId} updated by User {UserId}", jobId, userId);
 
         var updatedJob = await _context.Jobs
             .Include(j => j.Posted_By_User)
@@ -246,6 +248,7 @@ public class JobService : IJobService
 
         _context.Jobs.Remove(job);
         await _context.SaveChangesAsync();
+        _logger.LogInformation("Job {JobId} deleted by User {UserId}", jobId, userId);
     }
 
     private JobDto MapToDto(Job job)

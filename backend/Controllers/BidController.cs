@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using backend.Services;
 using backend.Models.DTOs;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 
 namespace backend.Controllers;
@@ -9,20 +10,20 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/bids")]
 [Authorize(Roles = "admin, handyman")]
-public class BidController(IBidService bidService) : ControllerBase
+public class BidController(IBidService bidService, ILogger<BidController> logger) : ControllerBase
 {
     [Authorize]
     [HttpPatch("{bidId}/accept")]
     public async Task<ActionResult<BidDto>> AcceptBid(Guid bidId)
     {
+        var userId = GetUserIdFromClaims();
+        var userRole = GetUserRoleFromClaims();
+
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
+
         try
         {
-            var userId = GetUserIdFromClaims();
-            var userRole = GetUserRoleFromClaims();
-
-            if (userId == null)
-                return Unauthorized("User ID not found in token");
-
             var bid = await bidService.AcceptBidAsync(bidId, userId.Value, userRole);
             return Ok(bid);
         }
@@ -38,24 +39,20 @@ public class BidController(IBidService bidService) : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
-        }
     }
 
     [Authorize]
     [HttpPatch("{bidId}/reject")]
     public async Task<ActionResult<BidDto>> RejectBid(Guid bidId)
     {
+        var userId = GetUserIdFromClaims();
+        var userRole = GetUserRoleFromClaims();
+
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
+
         try
         {
-            var userId = GetUserIdFromClaims();
-            var userRole = GetUserRoleFromClaims();
-
-            if (userId == null)
-                return Unauthorized("User ID not found in token");
-
             var bid = await bidService.RejectBidAsync(bidId, userId.Value, userRole);
             return Ok(bid);
         }
@@ -71,24 +68,20 @@ public class BidController(IBidService bidService) : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
-        }
     }
 
     [Authorize]
     [HttpDelete("{bidId}")]
     public async Task<IActionResult> DeleteBid(Guid bidId)
     {
+        var userId = GetUserIdFromClaims();
+        var userRole = GetUserRoleFromClaims();
+
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
+
         try
         {
-            var userId = GetUserIdFromClaims();
-            var userRole = GetUserRoleFromClaims();
-
-            if (userId == null)
-                return Unauthorized("User ID not found in token");
-
             await bidService.DeleteBidAsync(bidId, userId.Value, userRole);
             return NoContent();
         }
@@ -103,10 +96,6 @@ public class BidController(IBidService bidService) : ControllerBase
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
         }
     }
 

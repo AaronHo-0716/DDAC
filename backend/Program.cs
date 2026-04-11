@@ -1,27 +1,63 @@
 using System.Text;
 using Amazon.Extensions.Configuration.SystemsManager;
+using backend.Data;
+using backend.Data.Seeders;
+using backend.Middleware;
+using backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using backend.Data;
-using backend.Services;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add AWS SSM configuration for production environments
+// 1. Serilog Setup (Structured Logging)
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .Enrich.WithCorrelationId()
+    .WriteTo.Console()
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// 2. AWS SSM (Production only)
 if (!builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddSystemsManager("/app/", optional: true);
 }
 
-// --- 1. SERVICE REGISTRATION ---
+// 3. Service Registration
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
+
+// Health Checks
+builder.Services.AddHealthChecks()
+    .AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!);
+
+// Rate Limiting (Brute Force Protection)
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth_policy", opt =>
+    {
+        opt.PermitLimit = 5; // 5 requests
+        opt.Window = TimeSpan.FromSeconds(30); // per 30 seconds
+        opt.QueueLimit = 0;
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
+// Metrics
+builder.Services.AddMetrics();
+builder.Services.AddSingleton<MetricsService>();
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -84,40 +120,73 @@ builder.Services.AddCors(options =>
     });
 });
 
-// --- DEPENDENCY INJECTION (Register ALL services here) ---
+// DI
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IBidService, BidService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
-// Error Handling
-builder.Services.AddProblemDetails(options =>
-{
-    options.CustomizeProblemDetails = context =>
-    {
-        context.ProblemDetails.Extensions["statusCode"] = context.HttpContext.Response.StatusCode;
-    };
-});
-
-// --- 2. BUILD THE APP ---
 var app = builder.Build();
 
+// 4. Database Seeding
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<NeighbourHelpDbContext>();
+    var logger = services.GetRequiredService<ILogger<Program>>();
 
-// --- 3. MIDDLEWARE PIPELINE ---
+    // Production-ready retry logic to wait for the DB container to initialize
+    int maxRetries = 10;
+    int delayMilliseconds = 5000; // 5 seconds between retries
+
+    for (int i = 1; i <= maxRetries; i++)
+    {
+        try
+        {
+            logger.LogInformation("Attempting to connect to database (Attempt {Attempt}/{MaxRetries})...", i, maxRetries);
+            await DbInitializer.SeedAsync(context);
+            logger.LogInformation("Database connection and seeding successful.");
+            break; // Exit loop on success
+        }
+        catch (Exception ex)
+        {
+            if (i == maxRetries)
+            {
+                logger.LogCritical(ex, "Database connection failed after {MaxRetries} attempts. API shutting down.", maxRetries);
+                throw;
+            }
+
+            logger.LogWarning("Database is not ready yet. Retrying in {Delay}s...", delayMilliseconds / 1000);
+            await Task.Delay(delayMilliseconds);
+        }
+    }
+}
+
+// 5. Middleware Pipeline
+app.UseMiddleware<CorrelationIdMiddleware>(); 
+app.UseMiddleware<GlobalExceptionMiddleware>(); 
+app.UseMiddleware<SecurityHeadersMiddleware>(); 
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+app.UseSerilogRequestLogging(); 
+app.UseRateLimiter(); 
+
 app.UseCors("NextJsPolicy");
 app.UseHttpsRedirection();
 
-// IMPORTANT ORDER: Authentication -> Custom Validation -> Authorization
 app.UseAuthentication();
-app.UseMiddleware<backend.Middleware.TokenValidationMiddleware>();
+app.UseMiddleware<TokenValidationMiddleware>(); 
 app.UseAuthorization();
+
+// Health Check Endpoints
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready");
 
 app.MapControllers();
 app.MapGet("/", () => "NeighborHelp API is running...");

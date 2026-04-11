@@ -2,6 +2,7 @@ using backend.Data;
 using backend.Models.Entities;
 using backend.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace backend.Services;
@@ -9,10 +10,12 @@ namespace backend.Services;
 public class BidService : IBidService
 {
     private readonly NeighbourHelpDbContext _context;
+    private readonly ILogger<BidService> _logger;
 
-    public BidService(NeighbourHelpDbContext context)
+    public BidService(NeighbourHelpDbContext context, ILogger<BidService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 10)
@@ -114,6 +117,7 @@ public class BidService : IBidService
         _context.Notifications.Add(notification);
 
         await _context.SaveChangesAsync();
+        _logger.LogInformation("Bid {BidId} created for Job {JobId} by Handyman {UserId}", bid.Id, jobId, userId);
 
         var createdBid = await _context.Bids
             .Include(b => b.Handyman_User)
@@ -135,11 +139,9 @@ public class BidService : IBidService
         if (bid == null)
             throw new KeyNotFoundException($"Bid with id {bidId} not found");
 
-        // Verify user is the job owner (for homeowner role)
         if (userRole == "homeowner" && bid.Job.Posted_By_User_Id != userId)
             throw new UnauthorizedAccessException("You are not the owner of this job");
 
-        // Verify bid is pending
         if (bid.Status != "pending")
             throw new ArgumentException($"Cannot accept a bid with status '{bid.Status}'. Bid must be pending.");
 
@@ -227,10 +229,12 @@ public class BidService : IBidService
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+                _logger.LogInformation("Bid {BidId} accepted by User {UserId}. Job {JobId} is now in_progress.", bidId, userId, bid.Job_Id);
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to accept bid {BidId}", bidId);
                 throw;
             }
         }
@@ -255,11 +259,9 @@ public class BidService : IBidService
         if (bid == null)
             throw new KeyNotFoundException($"Bid with id {bidId} not found");
 
-        // Verify user is the job owner (for homeowner role)
         if (userRole == "homeowner" && bid.Job.Posted_By_User_Id != userId)
             throw new UnauthorizedAccessException("You are not the owner of this job");
 
-        // Verify bid is pending
         if (bid.Status != "pending")
             throw new ArgumentException($"Cannot reject a bid with status '{bid.Status}'. Bid must be pending.");
 
@@ -296,6 +298,7 @@ public class BidService : IBidService
         _context.Notifications.Add(notification);
 
         await _context.SaveChangesAsync();
+        _logger.LogInformation("Bid {BidId} rejected by User {UserId}", bidId, userId);
 
         return MapBidToDto(bid);
     }
@@ -337,6 +340,7 @@ public class BidService : IBidService
         _context.Bids.Remove(bid);
 
         await _context.SaveChangesAsync();
+        _logger.LogInformation("Bid {BidId} deleted by Handyman {UserId}", bidId, userId);
     }
 
     private BidDto MapBidToDto(Bid bid)

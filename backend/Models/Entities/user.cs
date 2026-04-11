@@ -7,12 +7,13 @@ namespace backend.Models.Entities;
 
 public partial class User
 {
+    [Key]
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "homeowner";
-    public bool IsActive { get; set; } = true; // Maps to account_status in SQL
+    public bool IsActive { get; set; } = true; 
     public bool Must_Reset_Password { get; set; }
     public string? AvatarUrl { get; set; }
     public decimal? Rating { get; set; }

@@ -33,18 +33,6 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT chk_users_rating_range CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))
 );
 
--- Seed default admin account during initialization (created before any other account)
-INSERT INTO users (name, email, password_hash, role, account_status, must_reset_password)
-VALUES (
-  'System Admin',
-  'admin@neighborhelp.test',
-  crypt('Password123!', gen_salt('bf')),
-  'admin',
-  TRUE,
-  FALSE
-)
-ON CONFLICT (email) DO NOTHING;
-
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

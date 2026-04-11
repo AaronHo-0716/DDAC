@@ -2,6 +2,7 @@ using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace backend.Services;
 
-public class AdminService(NeighbourHelpDbContext context) : IAdminService
+public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger) : IAdminService
 {
     public async Task<AdminOverviewResponse> GetOverviewAsync()
     {
@@ -83,7 +84,10 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
     public async Task<BlockedUserResponse?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken)
     {
         if (block && targetId == adminIdFromToken)
+        {
+            logger.LogWarning("Admin {AdminId} attempted to block themselves.", adminIdFromToken);
             throw new InvalidOperationException("Critical Security Error: Self-blocking is prohibited.");
+        }
 
         var user = await context.Users.FirstOrDefaultAsync(u => u.Id == targetId) 
             ?? throw new KeyNotFoundException("User not found");
@@ -105,6 +109,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
 
         if (block)
         {
+            logger.LogInformation("User {UserId} was blocked by Admin {AdminId}. Reason: {Reason}", targetId, adminIdFromToken, reason);
             return new BlockedUserResponse(
                 Message: "User has been successfully blocked.",
                 Reason: user.Blocked_Reason ?? "No reason specified.",
@@ -112,6 +117,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
             );
         }
 
+        logger.LogInformation("User {UserId} was unblocked by Admin {AdminId}", targetId, adminIdFromToken);
         return null;
     }
 
@@ -141,6 +147,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
         });
 
         await context.SaveChangesAsync();
+        logger.LogInformation("Handyman verification {VerId} set to {Status} by Admin {AdminId}", id, ver.Status, adminId);
     }
 
     public async Task<IEnumerable<JobDto>> GetEmergencyJobsAsync()
@@ -167,6 +174,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
         });
 
         await context.SaveChangesAsync();
+        logger.LogInformation("Job {JobId} force-assigned to Handyman {HandymanId} by Admin {AdminId}", jobId, handymanUserId, adminId);
     }
 
     public async Task<IEnumerable<BidTransactionDto>> GetBidTransactionsAsync(string? eventType = null)
@@ -204,6 +212,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
         });
 
         await context.SaveChangesAsync();
+        logger.LogInformation("Admin {AdminId} performed {Action} on Bid {BidId}", adminId, actionType, bidId);
     }
 
     public async Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync()

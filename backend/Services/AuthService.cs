@@ -3,6 +3,8 @@ using backend.Models.DTOs;
 using backend.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -11,7 +13,7 @@ using System.Security.Cryptography;
 
 namespace backend.Services;
 
-public class AuthService(NeighbourHelpDbContext context, IConfiguration config) : IAuthService
+public class AuthService(NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger) : IAuthService
 {
     private static readonly string[] AllowedRoles = ["handyman", "homeowner", "admin"];
 
@@ -24,14 +26,19 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
             .FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        {
+            logger.LogWarning("Failed login attempt for email: {Email}", request.Email);
             throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
+        }
 
         if (!user.IsActive)
         {
+            logger.LogInformation("Blocked user {UserId} attempted login.", user.Id);
             var reason = string.IsNullOrEmpty(user.Blocked_Reason) ? "No reason provided by administrator." : user.Blocked_Reason;
             throw new HttpRequestException($"BLOCKED_USER_ERROR:{reason}", null, HttpStatusCode.BadRequest);
         }
 
+        logger.LogInformation("User {Email} logged in successfully.", user.Email);
         return await GenerateAuthResponse(user);
     }
 
@@ -64,6 +71,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         context.Users.Add(newUser);
         await context.SaveChangesAsync();
 
+        logger.LogInformation("New user registered: {UserId} with role {Role}", newUser.Id, newUser.Role);
         return await GenerateAuthResponse(newUser);
     }
 
@@ -74,7 +82,10 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
             .FirstOrDefaultAsync(t => t.Token_Hash == token);
 
         if (existingToken == null || !existingToken.IsActive)
+        {
+            logger.LogWarning("Invalid or expired refresh token used.");
             throw new HttpRequestException("Invalid or expired refresh token.", null, HttpStatusCode.Unauthorized);
+        }
 
         existingToken.User.TokenVersion++;
         var newRefreshTokenStr = GenerateSecureRandomString();
@@ -89,6 +100,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         context.Refresh_Tokens.Add(newRefreshToken);
         await context.SaveChangesAsync();
 
+        logger.LogInformation("Token rotated for user {UserId}", existingToken.User_Id);
         var (accessToken, expiresIn) = CreateJwtToken(existingToken.User);
         return new AuthResponse(MapToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
     }
@@ -104,7 +116,11 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         }
 
         var user = await context.Users.FindAsync(userId);
-        if (user != null) user.TokenVersion++;
+        if (user != null)
+        {
+            user.TokenVersion++;
+            logger.LogInformation("User {UserId} logged out. Token version incremented.", userId);
+        }
 
         await context.SaveChangesAsync();
     }

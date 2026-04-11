@@ -15,19 +15,15 @@ public class TokenValidationMiddleware(RequestDelegate next)
 
             if (Guid.TryParse(userIdClaim, out var userId) && int.TryParse(tokenVersionClaim, out var tokenVersion))
             {
-                // Check the DB for the current version
-                var userVersion = await dbContext.Users
+                var user = await dbContext.Users
                     .AsNoTracking()
-                    .Where(u => u.Id == userId)
-                    .Select(u => u.TokenVersion)
-                    .FirstOrDefaultAsync();
+                    .Select(u => new { u.Id, u.IsActive, u.TokenVersion })
+                    .FirstOrDefaultAsync(u => u.Id == userId);
 
-                // If the version in the Access Token is older than the DB version, 
-                // the user has logged out or refreshed, so we block the request.
-                if (userVersion != tokenVersion)
+                if (user == null || !user.IsActive || user.TokenVersion != tokenVersion)
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsJsonAsync(new { message = "Session expired. Please log in again." });
+                    await context.Response.WriteAsJsonAsync(new { message = "Session invalidated. Please log in again." });
                     return;
                 }
             }

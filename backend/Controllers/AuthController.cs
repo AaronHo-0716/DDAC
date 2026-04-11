@@ -2,15 +2,20 @@ using Microsoft.AspNetCore.Mvc;
 using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 
+namespace backend.Controllers;
+
 [ApiController]
 [Route("api/auth")]
-public class AuthController(IAuthService authService) : ControllerBase
+public class AuthController(IAuthService authService, ILogger<AuthController> logger) : ControllerBase
 {
     [HttpPost("register")]
+    [EnableRateLimiting("auth_policy")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {
         try
@@ -26,13 +31,10 @@ public class AuthController(IAuthService authService) : ControllerBase
         {
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An internal server error occurred.", details = ex.Message });
-        }
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth_policy")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
         try
@@ -53,31 +55,23 @@ public class AuthController(IAuthService authService) : ControllerBase
         {
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An internal server error occurred.", details = ex.Message });
-        }
     }
 
     [Authorize]
     [HttpGet("me")]
     public async Task<ActionResult<UserDto>> GetMe()
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
         try
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-
             var user = await authService.GetUserById(Guid.Parse(userId));
             return Ok(user);
         }
         catch (HttpRequestException ex)
         {
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, new { message = "An error occurred while fetching your profile." });
         }
     }
 
@@ -108,20 +102,12 @@ public class AuthController(IAuthService authService) : ControllerBase
         if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
 
         var userId = Guid.Parse(userIdClaim);
+        await authService.Logout(request, userId);
 
-        try
-        {
-            await authService.Logout(request, userId);
-
-            return Ok(new 
-            { 
-                message = "Logged out successfully. All active access tokens for this account have been invalidated.",
-                serverTime = DateTime.UtcNow 
-            });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An error occurred during logout.", details = ex.Message });
-        }
+        return Ok(new 
+        { 
+            message = "Logged out successfully. All active access tokens for this account have been invalidated.",
+            serverTime = DateTime.UtcNow 
+        });
     }
 }

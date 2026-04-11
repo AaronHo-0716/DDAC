@@ -2,6 +2,7 @@ using backend.Models.DTOs;
 using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -12,7 +13,7 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/admin")]
 [Authorize(Roles = "admin")]
-public class AdminController(IAdminService adminService) : ControllerBase
+public class AdminController(IAdminService adminService, ILogger<AdminController> logger) : ControllerBase
 {
     private Guid AdminId 
     {
@@ -26,13 +27,30 @@ public class AdminController(IAdminService adminService) : ControllerBase
     }
 
     [HttpGet("overview")]
-    public async Task<ActionResult<AdminOverviewResponse>> GetOverview() => Ok(await adminService.GetOverviewAsync());
+    public async Task<ActionResult<AdminOverviewResponse>> GetOverview()
+    {
+        logger.LogInformation("Admin {AdminId} requested overview stats.", AdminId);
+        return Ok(await adminService.GetOverviewAsync());
+    }
 
     [HttpGet("users")]
-    public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers([FromQuery] UserSearchRequest request) => Ok(await adminService.GetAllUsers(request));
+    public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers([FromQuery] UserSearchRequest request)
+    {
+        return Ok(await adminService.GetAllUsers(request));
+    }
 
     [HttpGet("users/{id}")]
-    public async Task<ActionResult<UserDto>> GetUser(Guid id) => Ok(await adminService.GetUserByIdAsync(id));
+    public async Task<ActionResult<UserDto>> GetUser(Guid id)
+    {
+        try
+        {
+            return Ok(await adminService.GetUserByIdAsync(id));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
 
     [HttpPatch("users/{id}/block")]
     public async Task<IActionResult> BlockUser(Guid id, [FromBody] BlockUserRequest request)

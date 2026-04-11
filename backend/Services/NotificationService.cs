@@ -2,6 +2,7 @@ using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace backend.Services;
 
-public class NotificationService(NeighbourHelpDbContext context) : INotificationService
+public class NotificationService(NeighbourHelpDbContext context, ILogger<NotificationService> logger) : INotificationService
 {
     public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId)
     {
@@ -38,10 +39,14 @@ public class NotificationService(NeighbourHelpDbContext context) : INotification
             .FirstOrDefaultAsync(n => n.Id == notificationId && n.User_Id == userId);
 
         if (notification == null)
+        {
+            logger.LogWarning("Notification {NotificationId} not found for User {UserId}", notificationId, userId);
             throw new KeyNotFoundException("Notification not found");
+        }
 
         notification.Is_Read = true;
         await context.SaveChangesAsync();
+        logger.LogInformation("Notification {NotificationId} marked as read by User {UserId}", notificationId, userId);
     }
 
     public async Task MarkAllAsReadAsync(Guid userId)
@@ -56,5 +61,6 @@ public class NotificationService(NeighbourHelpDbContext context) : INotification
         }
 
         await context.SaveChangesAsync();
+        logger.LogInformation("All notifications marked as read for User {UserId}", userId);
     }
 }

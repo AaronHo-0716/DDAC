@@ -2,6 +2,7 @@ using backend.Models.DTOs;
 using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -12,7 +13,7 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/notifications")]
 [Authorize] 
-public class NotificationController(INotificationService notificationService) : ControllerBase
+public class NotificationController(INotificationService notificationService, ILogger<NotificationController> logger) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 

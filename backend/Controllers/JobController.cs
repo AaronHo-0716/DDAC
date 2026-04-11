@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using backend.Services;
 using backend.Models.DTOs;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 
 namespace backend.Controllers;
@@ -9,7 +10,7 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/jobs")]
 [Authorize]
-public class JobController(IJobService jobService, IBidService bidService) : ControllerBase
+public class JobController(IJobService jobService, IBidService bidService, ILogger<JobController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<JobListResponse>> GetJobs(
@@ -69,37 +70,26 @@ public class JobController(IJobService jobService, IBidService bidService) : Con
     [HttpPost]
     public async Task<ActionResult<JobDto>> CreateJob([FromBody] CreateJobRequest request)
     {
-        try
-        {
-            var userId = GetUserIdFromClaims();
-            if (userId == null)
-                return Unauthorized("User ID not found in token");
+        var userId = GetUserIdFromClaims();
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
 
-            var job = await jobService.CreateJobAsync(request, userId.Value);
-            return CreatedAtAction(nameof(GetJobById), new { id = job.Id }, job);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
-        }
+        var job = await jobService.CreateJobAsync(request, userId.Value);
+        return CreatedAtAction(nameof(GetJobById), new { id = job.Id }, job);
     }
 
     [Authorize]
     [HttpPut("{id}")]
     public async Task<ActionResult<JobDto>> UpdateJob(Guid id, [FromBody] UpdateJobRequest request)
     {
+        var userId = GetUserIdFromClaims();
+        var userRole = GetUserRoleFromClaims();
+
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
+
         try
         {
-            var userId = GetUserIdFromClaims();
-            var userRole = GetUserRoleFromClaims();
-
-            if (userId == null)
-                return Unauthorized("User ID not found in token");
-
             var job = await jobService.UpdateJobAsync(id, request, userId.Value, userRole);
             return Ok(job);
         }
@@ -115,24 +105,20 @@ public class JobController(IJobService jobService, IBidService bidService) : Con
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
-        }
     }
 
     [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteJob(Guid id)
     {
+        var userId = GetUserIdFromClaims();
+        var userRole = GetUserRoleFromClaims();
+
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
+
         try
         {
-            var userId = GetUserIdFromClaims();
-            var userRole = GetUserRoleFromClaims();
-
-            if (userId == null)
-                return Unauthorized("User ID not found in token");
-
             await jobService.DeleteJobAsync(id, userId.Value, userRole);
             return NoContent();
         }
@@ -143,10 +129,6 @@ public class JobController(IJobService jobService, IBidService bidService) : Con
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
         }
     }
 
@@ -165,24 +147,20 @@ public class JobController(IJobService jobService, IBidService bidService) : Con
         {
             return NotFound(new { message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
-        }
     }
 
     [Authorize]
     [HttpPost("{jobId}/bids")]
     public async Task<ActionResult<BidDto>> CreateBid(Guid jobId, [FromBody] CreateBidRequest request)
     {
+        var userId = GetUserIdFromClaims();
+        var userRole = GetUserRoleFromClaims();
+
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
+
         try
         {
-            var userId = GetUserIdFromClaims();
-            var userRole = GetUserRoleFromClaims();
-
-            if (userId == null)
-                return Unauthorized("User ID not found in token");
-
             var bid = await bidService.CreateBidAsync(jobId, request, userId.Value, userRole);
             return CreatedAtAction(nameof(GetBidsByJobId), new { jobId = jobId }, bid);
         }
@@ -197,10 +175,6 @@ public class JobController(IJobService jobService, IBidService bidService) : Con
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = ex.Message });
         }
     }
 
