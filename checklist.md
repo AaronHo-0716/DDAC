@@ -70,33 +70,6 @@ The backend demonstrates a solid foundation with core authentication, job CRUD, 
 
 **Risk:** Admin bootstrap flow is incomplete.
 
-### 2.4 Observability & Logging ⚠️
-
-**Status:** Basic logging infrastructure absent
-
-| Requirement | Status | Notes |
-|---|---|---|
-| **Structured Logging (Serilog)** | ❌ Missing | Not in Program.cs or services |
-| **Correlation IDs** | ❌ Missing | No request ID middleware |
-| **Request Tracing** | ❌ Missing | No tracing infrastructure |
-| **Health Endpoints** | ❌ Missing | No `/health/live` or `/health/ready` |
-| **Metrics (bid conversion, time-to-first-bid)** | ❌ Missing | No metrics collection |
-
-**Note:** Not critical for MVP but recommended for production readiness.
-
----
-
-### 2.5 Rate Limiting ⚠️
-
-**Status:** Not implemented
-
-| Requirement | Status | Notes |
-|---|---|---|
-| **Rate Limit on /auth/login** | ❌ Missing | No RateLimitMiddleware |
-| **Rate Limit on /auth/register** | ❌ Missing | No RateLimitMiddleware |
-
-**Gap:** Vulnerable to brute force attacks in current state.
-
 ---
 
 ## 3. MISSING REQUIREMENTS
@@ -124,28 +97,6 @@ The backend demonstrates a solid foundation with core authentication, job CRUD, 
 | **Distance-based filtering** | 5.2 | Filters by coordinate presence only, no haversine calculation | Feature incomplete |
 
 ---
-
-### 3.3 Missing Middleware & Validation ❌
-
-| Component | Status | Gap |
-|---|---|---|
-| **TokenVersion Validation** | Token field exists | Not checked in `TokenValidationMiddleware` |
-| **Rate Limiting** | None | Needed on auth endpoints |
-| **Input Validation (FluentValidation)** | Not used | Manual validation only |
-| **Error Middleware** | Basic ProblemDetails | No global exception handler |
-| **CORS** | ✅ Configured | Only localhost:3000 |
-| **Security Headers** | Missing | CSP, X-Frame-Options, etc. |
-
----
-
-### 3.4 Missing Seeding & Configuration ❌
-
-| Item | Status | Notes |
-|---|---|---|
-| **Bootstrap Admin Account** | ❌ Missing | No code to seed initial admin |
-| **Seed Script** | ⚠️ Uncertain | `backend/sql/init.sql` exists but not reviewed |
-| **Environment Configuration** | ⚠️ Partial | JWT settings in appsettings.json, AWS not visible |
-| **Database Indices** | ⚠️ Uncertain | Plan specifies indices (Jobs, Bids, Notifications, JobImages) - not reviewed in migrations |
 
 ---
 
@@ -189,35 +140,6 @@ The backend demonstrates a solid foundation with core authentication, job CRUD, 
 
 ---
 
-### 5.6 Middleware & Pipeline Issues 🟡
-
-**Issue 1: TokenVersion Not Validated**
-- **Location:** Program.cs line 123 middleware added but not implemented
-- **Check:** `TokenValidationMiddleware` exists but doesn't validate TokenVersion claim
-- **Impact:** Token revocation unreliable
-- **File:** `backend/Middleware/TokenValidationMiddleware.cs` (size 1486 bytes - needs inspection)
-- **Severity:** MEDIUM
-
-**Issue 2: No Rate Limiting**
-- **Gap:** Auth endpoints (login/register) vulnerable to brute force
-- **Missing:** AspNetCoreRateLimit or custom rate limit middleware
-- **Severity:** MEDIUM (security)
-
-**Issue 3: Missing Global Exception Handler**
-- **Current:** Individual try-catch in controllers
-- **Best Practice:** Global middleware for consistent error responses
-- **Severity:** LOW (code quality)
-
----
-
-### 5.7 Database Schema Issues ⚠️
-
-**Uncertain Items (not fully reviewed):**
-- ✓ Index definitions for common queries (plan specifies indices - EF Core attributes or migrations?)
-- ✓ Database indices on `Jobs(Status, Category, IsEmergency, CreatedAtUtc)` and others
-- ✓ Cascading delete rules
-- ✓ Unique constraints (email, etc.)
-
 ---
 
 ## 7. SUMMARY: ACTION CHECKLIST (PRIORITIZED)
@@ -236,11 +158,6 @@ The backend demonstrates a solid foundation with core authentication, job CRUD, 
 - [ ] Return appropriate response
 - **Effort:** 30 minutes
 
-**[P0-4] Blocked User Token Revocation**
-- [ ] Add `user.IsActive` check in `AuthService.RefreshToken()`
-- [ ] Revoke immediately if user becomes inactive
-- **Effort:** 30 minutes
-
 **[P0-5] Handyman Verification Check Before Bidding**
 - [ ] Add verification check in `BidService.CreateBidAsync()` line 62
 - [ ] Deny bid if not approved
@@ -248,39 +165,11 @@ The backend demonstrates a solid foundation with core authentication, job CRUD, 
 
 ### 🟡 HIGH (Should Fix for MVP)
 
-**[P1-3] TokenVersion Middleware Validation**
-- [ ] Implement actual validation in `TokenValidationMiddleware`
-- [ ] Compare claim version to database
-- [ ] File: `backend/Middleware/TokenValidationMiddleware.cs`
-- **Effort:** 1 hour
-
-**[P1-4] Rate Limiting on Auth Endpoints**
-- [ ] Add rate limit middleware (e.g., `AspNetCoreRateLimit`)
-- [ ] Configure limits: 5 attempts/5 minutes on login
-- [ ] File: `Program.cs`
-- **Effort:** 2-3 hours
-
-**[P1-6] Structured Logging**
-- [ ] Add Serilog configuration
-- [ ] Add correlation ID middleware
-- [ ] Log key events (auth, bids, admin actions)
-- **Effort:** 2-3 hours
 
 ### 🟢 MEDIUM (Nice to Have)
-
-**[P2-1] Health Endpoints**
-- [ ] Implement `/health/live` and `/health/ready`
-- [ ] File: New `HealthController.cs`
-- **Effort:** 1 hour
-
 **[P2-2] Clean Up Dead Code**
 - [ ] Remove stub patterns in admin endpoints
 - **Effort:** 15 minutes
-
-**[P2-5] Security Headers**
-- [ ] Add CSP, X-Frame-Options, X-Content-Type-Options
-- [ ] File: `Program.cs` or middleware
-- **Effort:** 1 hour
 
 ---
 
@@ -292,7 +181,6 @@ The backend demonstrates a solid foundation with core authentication, job CRUD, 
 |---|---|---|---|
 | **Admin bootstrap incomplete** | Cannot deploy without manual DB seeding | HIGH | Complete admin endpoints (P0-1, P0-2) |
 | **Handyman verification broken** | Unverified users can bid | HIGH | Fix stub endpoints (P0-3) |
-| **No rate limiting** | Brute force attacks on auth | MEDIUM | Add rate limit (P1-4) |
-| **Token revocation unreliable** | Blocked users retain access | MEDIUM | Fix RefreshToken check (P0-4) |
+
 
 ---
