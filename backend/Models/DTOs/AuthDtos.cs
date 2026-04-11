@@ -1,14 +1,18 @@
+using System;
+
 namespace backend.Models.DTOs;
 
 public record UserDto(
     Guid Id,
     string Name,
     string Email,
-    string Role, // "homeowner", "handyman", or "admin"
+    string Role, 
     string? AvatarUrl,
     decimal? Rating,
     DateTime CreatedAt,
-    bool IsActive = true
+    bool IsActive = true,
+    string? BlockedReason = null,
+    DateTime? BlockedAtUtc = null
 );
 
 public record TokenDto(
@@ -20,6 +24,12 @@ public record TokenDto(
 public record AuthResponse(
     UserDto User,
     TokenDto Tokens
+);
+
+public record BlockedUserResponse(
+    string Message,
+    string Reason,
+    DateTime? BlockedAt
 );
 
 public record LoginRequest(string Email, string Password);

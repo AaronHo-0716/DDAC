@@ -15,7 +15,6 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
     public async Task<AdminOverviewResponse> GetOverviewAsync()
     {
         var today = DateTime.UtcNow.Date;
-
         return new AdminOverviewResponse(
             UsersCreatedToday: await context.Users.CountAsync(u => u.CreatedAtUtc >= today),
             JobsPostedToday: await context.Jobs.CountAsync(j => j.Created_At_Utc >= today),
@@ -49,54 +48,71 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
             .Take(request.PageSize)
             .ToListAsync();
 
-        return users.Select(u => new UserDto(u.Id, u.Name, u.Email, u.Role, u.AvatarUrl, u.Rating, u.CreatedAtUtc, u.IsActive));
+        return users.Select(u => new UserDto(
+            u.Id, 
+            u.Name, 
+            u.Email, 
+            u.Role, 
+            u.AvatarUrl, 
+            u.Rating, 
+            u.CreatedAtUtc, 
+            u.IsActive,
+            u.Blocked_Reason,
+            u.Blocked_At_Utc
+        ));
     }
 
     public async Task<UserDto> GetUserByIdAsync(Guid id)
     {
         var u = await context.Users.FindAsync(id) ?? throw new KeyNotFoundException("User not found");
-        return new UserDto(u.Id, u.Name, u.Email, u.Role, u.AvatarUrl, u.Rating, u.CreatedAtUtc, u.IsActive);
+        
+        return new UserDto(
+            u.Id, 
+            u.Name, 
+            u.Email, 
+            u.Role, 
+            u.AvatarUrl, 
+            u.Rating, 
+            u.CreatedAtUtc, 
+            u.IsActive,
+            u.Blocked_Reason,
+            u.Blocked_At_Utc
+        );
     }
 
-    public async Task UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken)
+    public async Task<BlockedUserResponse?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken)
     {
-        // 1. FINAL GUARD: Ensure ID in URL is not the ID in the Token
         if (block && targetId == adminIdFromToken)
-        {
             throw new InvalidOperationException("Critical Security Error: Self-blocking is prohibited.");
-        }
-    
+
         var user = await context.Users.FirstOrDefaultAsync(u => u.Id == targetId) 
             ?? throw new KeyNotFoundException("User not found");
-    
-        // 2. Double check the database just in case the ID from token belongs to this user
-        if (block && user.Id == adminIdFromToken)
-        {
-            throw new InvalidOperationException("Critical Security Error: Self-blocking detected via database check.");
-        }
-    
+
         user.IsActive = !block;
         user.Blocked_Reason = block ? reason : null;
         user.Blocked_At_Utc = block ? DateTime.UtcNow : null;
         user.Blocked_By_User_Id = block ? adminIdFromToken : null;
-        
-        // Increment version to kill current token
         user.TokenVersion++;
-    
-        // Record the audit log
-        context.Admin_Actions.Add(new Admin_Action
-        {
-            Id = Guid.NewGuid(),
-            Admin_User_Id = adminIdFromToken,
+
+        context.Admin_Actions.Add(new Admin_Action {
+            Id = Guid.NewGuid(), Admin_User_Id = adminIdFromToken,
             Action_Type = block ? "BLOCK_USER" : "UNBLOCK_USER",
-            Target_Type = "USER",
-            Target_Id = targetId,
-            Reason = reason,
-            Payload = "{}",
-            Created_At_Utc = DateTime.UtcNow
+            Target_Type = "USER", Target_Id = targetId, Reason = reason,
+            Payload = "{}", Created_At_Utc = DateTime.UtcNow
         });
-    
+
         await context.SaveChangesAsync();
+
+        if (block)
+        {
+            return new BlockedUserResponse(
+                Message: "User has been successfully blocked.",
+                Reason: user.Blocked_Reason ?? "No reason specified.",
+                BlockedAt: user.Blocked_At_Utc
+            );
+        }
+
+        return null;
     }
 
     public async Task<IEnumerable<HandymanVerificationDto>> GetPendingVerificationsAsync()

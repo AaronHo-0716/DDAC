@@ -42,9 +42,17 @@ public class AuthController(IAuthService authService) : ControllerBase
             var result = await authService.Login(request);
             return Ok(result);
         }
+        catch (HttpRequestException ex) when (ex.Message.StartsWith("BLOCKED_USER_ERROR:"))
+        {
+            var reason = ex.Message.Replace("BLOCKED_USER_ERROR:", "");
+            return BadRequest(new BlockedUserResponse(
+                Message: "Your account is currently blocked. Please contact support.",
+                Reason: reason,
+                BlockedAt: null 
+            ));
+        }
         catch (HttpRequestException ex)
         {
-            // Catches 401 (Unauthorized) or 400 (Bad Request)
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
         catch (Exception ex)

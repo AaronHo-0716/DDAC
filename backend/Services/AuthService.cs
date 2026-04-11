@@ -26,6 +26,12 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
 
+        if (!user.IsActive)
+        {
+            var reason = string.IsNullOrEmpty(user.Blocked_Reason) ? "No reason provided by administrator." : user.Blocked_Reason;
+            throw new HttpRequestException($"BLOCKED_USER_ERROR:{reason}", null, HttpStatusCode.BadRequest);
+        }
+
         return await GenerateAuthResponse(user);
     }
 
@@ -38,13 +44,19 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         if (await context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("Email already exists.", null, HttpStatusCode.Conflict);
 
+        var roleLower = request.Role?.ToLower().Trim();
+        if (string.IsNullOrEmpty(roleLower) || !AllowedRoles.Contains(roleLower))
+        {
+            throw new HttpRequestException($"Invalid role. Choose from: {string.Join(", ", AllowedRoles)}", null, HttpStatusCode.BadRequest);
+        }
+
         var newUser = new User
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Email = emailLower,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Role = request.Role?.ToLower().Trim() ?? "homeowner",
+            Role = roleLower,  
             IsActive = true,
             TokenVersion = 1
         };
@@ -64,19 +76,14 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
         if (existingToken == null || !existingToken.IsActive)
             throw new HttpRequestException("Invalid or expired refresh token.", null, HttpStatusCode.Unauthorized);
 
-        // Rotation: kill Access Token A by incrementing version
         existingToken.User.TokenVersion++;
-
         var newRefreshTokenStr = GenerateSecureRandomString();
         existingToken.Revoked_At_Utc = DateTime.UtcNow;
         existingToken.Replaced_By_Token_Hash = newRefreshTokenStr;
 
-        var newRefreshToken = new Refresh_Token
-        {
-            Id = Guid.NewGuid(),
-            User_Id = existingToken.User_Id,
-            Token_Hash = newRefreshTokenStr,
-            Expires_At_Utc = DateTime.UtcNow.AddDays(7)
+        var newRefreshToken = new Refresh_Token {
+            Id = Guid.NewGuid(), User_Id = existingToken.User_Id, Token_Hash = newRefreshTokenStr,
+            Expires_At_Utc = DateTime.UtcNow.AddDays(7), Created_At_Utc = DateTime.UtcNow
         };
 
         context.Refresh_Tokens.Add(newRefreshToken);
@@ -88,22 +95,16 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
 
     public async Task Logout(LogoutRequest request, Guid userId)
     {
-        // Even if the token is "fake" or missing, we still increment TokenVersion 
-        // to kill the current Access Token for security.
         var tokenEntry = await context.Refresh_Tokens
             .FirstOrDefaultAsync(t => t.Token_Hash == request.RefreshToken && t.User_Id == userId);
 
-        if (tokenEntry != null)
-        {
+        if (tokenEntry != null) {
             tokenEntry.Revoked_At_Utc = DateTime.UtcNow;
             tokenEntry.Replaced_By_Token_Hash = "LOGOUT";
         }
 
         var user = await context.Users.FindAsync(userId);
-        if (user != null)
-        {
-            user.TokenVersion++; // This is what actually kills the current session
-        }
+        if (user != null) user.TokenVersion++;
 
         await context.SaveChangesAsync();
     }
@@ -119,19 +120,12 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
     {
         var (accessToken, expiresIn) = CreateJwtToken(user);
         var refreshTokenStr = GenerateSecureRandomString();
-
-        var refreshToken = new Refresh_Token
-        {
-            Id = Guid.NewGuid(),
-            User_Id = user.Id,
-            Token_Hash = refreshTokenStr,
-            Expires_At_Utc = DateTime.UtcNow.AddDays(7),
-            Created_At_Utc = DateTime.UtcNow
+        var refreshToken = new Refresh_Token {
+            Id = Guid.NewGuid(), User_Id = user.Id, Token_Hash = refreshTokenStr,
+            Expires_At_Utc = DateTime.UtcNow.AddDays(7), Created_At_Utc = DateTime.UtcNow
         };
-
         context.Refresh_Tokens.Add(refreshToken);
         await context.SaveChangesAsync();
-
         return new AuthResponse(MapToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
     }
 
@@ -142,16 +136,12 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
             new(ClaimTypes.Role, user.Role.Trim()),
             new("TokenVersion", user.TokenVersion.ToString()) 
         };
-
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]!));
         var token = new JwtSecurityToken(
-            issuer: config["Jwt:Issuer"],
-            audience: config["Jwt:Audience"],
-            claims: claims,
+            issuer: config["Jwt:Issuer"], audience: config["Jwt:Audience"], claims: claims,
             expires: DateTime.UtcNow.AddMinutes(config.GetValue<int>("Jwt:ExpiryInMinutes", 60)),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
         );
-
         return (new JwtSecurityTokenHandler().WriteToken(token), 3600);
     }
 
@@ -164,7 +154,16 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config) 
     }
 
     private static UserDto MapToDto(User user) => new(
-        user.Id, user.Name.Trim(), user.Email.Trim(), user.Role.Trim(), user.AvatarUrl, user.Rating, user.CreatedAtUtc, user.IsActive
+        user.Id, 
+        user.Name.Trim(), 
+        user.Email.Trim(), 
+        user.Role.Trim(), 
+        user.AvatarUrl, 
+        user.Rating, 
+        user.CreatedAtUtc, 
+        user.IsActive,
+        user.Blocked_Reason,
+        user.Blocked_At_Utc
     );
 
     private static bool IsValidEmail(string email)
