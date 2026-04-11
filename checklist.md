@@ -116,6 +116,7 @@ The backend demonstrates a solid foundation with core authentication, job CRUD, 
 ### 3.2 Missing Business Logic ❌
 
 | Requirement | Section | Gap | Risk |
+|---|---|---|---|
 | **No direct `Open -> Completed`** | 15 | Not enforced | Policy bypass possible |
 | **Admin job assignment creates accepted bid** | 5.5 | `AssignJobAsync` only moves job to in_progress, doesn't create/accept a bid | Incomplete workflow |
 | **Bid lock prevents modifications** | 5.5, 15 | `Bid_Lock` entity exists but not checked in bid operations | Lock unenforceable |
