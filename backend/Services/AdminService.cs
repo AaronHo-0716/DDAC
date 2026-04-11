@@ -30,7 +30,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
 
         if (!string.IsNullOrWhiteSpace(request.Name))
             query = query.Where(u => u.Name.ToLower().Contains(request.Name.ToLower()));
-        
+
         if (!string.IsNullOrWhiteSpace(request.Email))
             query = query.Where(u => u.Email.ToLower().Contains(request.Email.ToLower()));
 
@@ -49,13 +49,13 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
             .ToListAsync();
 
         return users.Select(u => new UserDto(
-            u.Id, 
-            u.Name, 
-            u.Email, 
-            u.Role, 
-            u.AvatarUrl, 
-            u.Rating, 
-            u.CreatedAtUtc, 
+            u.Id,
+            u.Name,
+            u.Email,
+            u.Role,
+            u.AvatarUrl,
+            u.Rating,
+            u.CreatedAtUtc,
             u.IsActive,
             u.Blocked_Reason,
             u.Blocked_At_Utc
@@ -65,15 +65,15 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
     public async Task<UserDto> GetUserByIdAsync(Guid id)
     {
         var u = await context.Users.FindAsync(id) ?? throw new KeyNotFoundException("User not found");
-        
+
         return new UserDto(
-            u.Id, 
-            u.Name, 
-            u.Email, 
-            u.Role, 
-            u.AvatarUrl, 
-            u.Rating, 
-            u.CreatedAtUtc, 
+            u.Id,
+            u.Name,
+            u.Email,
+            u.Role,
+            u.AvatarUrl,
+            u.Rating,
+            u.CreatedAtUtc,
             u.IsActive,
             u.Blocked_Reason,
             u.Blocked_At_Utc
@@ -159,7 +159,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
     {
         var job = await context.Jobs.FindAsync(jobId) ?? throw new KeyNotFoundException("Job not found");
         job.Status = "in_progress"; 
-        
+
         context.Admin_Actions.Add(new Admin_Action {
             Id = Guid.NewGuid(), Admin_User_Id = adminId, Action_Type = "FORCE_ASSIGN_JOB",
             Target_Type = "JOB", Target_Id = jobId, Reason = "Admin assigned",

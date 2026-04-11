@@ -24,12 +24,10 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
         catch (HttpRequestException ex)
         {
-            // Catches 400 (Bad Request) or 409 (Conflict) from the service
             return StatusCode((int)(ex.StatusCode ?? HttpStatusCode.InternalServerError), new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            // Catches unexpected server crashes
             return StatusCode(500, new { message = "An internal server error occurred.", details = ex.Message });
         }
     }
@@ -84,6 +82,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request)
     {
         try
@@ -105,7 +104,6 @@ public class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
-        // Extract User ID from the valid JWT claims
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
 
@@ -123,7 +121,6 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
         catch (Exception ex)
         {
-            // Log internal errors but don't expose DB details
             return StatusCode(500, new { message = "An error occurred during logout.", details = ex.Message });
         }
     }

@@ -16,8 +16,6 @@ if (!builder.Environment.IsDevelopment())
 }
 
 // --- 1. SERVICE REGISTRATION ---
-
-
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -102,13 +100,11 @@ builder.Services.AddProblemDetails(options =>
     };
 });
 
-
 // --- 2. BUILD THE APP ---
 var app = builder.Build();
 
 
 // --- 3. MIDDLEWARE PIPELINE ---
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

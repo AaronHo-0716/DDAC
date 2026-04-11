@@ -37,11 +37,9 @@ public class AdminController(IAdminService adminService) : ControllerBase
     [HttpPatch("users/{id}/block")]
     public async Task<IActionResult> BlockUser(Guid id, [FromBody] BlockUserRequest request)
     {
-        // 1. Validate Admin Identity
         if (AdminId == Guid.Empty) 
             return Unauthorized(new { message = "Could not identify admin session." });
 
-        // 2. Prevent Self-Blocking
         if (id == AdminId) 
             return BadRequest(new { message = "Security Policy: You are not allowed to block your own account." });
 
@@ -77,11 +75,13 @@ public class AdminController(IAdminService adminService) : ControllerBase
     }
 
     // --- Handyman Verification ---
+    [Obsolete("This endpoint is currently not in use. ")]
     [HttpGet("handymen/pending-verification")]
     public async Task<ActionResult<IEnumerable<HandymanVerificationDto>>> GetPendingVerifications() 
         => Ok(await adminService.GetPendingVerificationsAsync());
 
     [HttpPatch("handymen/{id}/approve")]
+    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<IActionResult> ApproveHandyman(Guid id, [FromBody] string notes)
     {
         if (AdminId == Guid.Empty) return Unauthorized();
@@ -90,6 +90,7 @@ public class AdminController(IAdminService adminService) : ControllerBase
     }
 
     [HttpPatch("handymen/{id}/reject")]
+    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<IActionResult> RejectHandyman(Guid id, [FromBody] string notes)
     {
         if (AdminId == Guid.Empty) return Unauthorized();
@@ -141,6 +142,7 @@ public class AdminController(IAdminService adminService) : ControllerBase
 
     // --- Audit ---
     [HttpGet("audit-log")]
+    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<ActionResult<IEnumerable<AdminActionDto>>> GetAuditLogs() 
         => Ok(await adminService.GetAuditLogsAsync());
 }

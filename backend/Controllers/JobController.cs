@@ -8,7 +8,7 @@ namespace backend.Controllers;
 
 [ApiController]
 [Route("api/jobs")]
-[Authorize(Roles = "admin, handyman, homeowner")]
+[Authorize]
 public class JobController(IJobService jobService, IBidService bidService) : ControllerBase
 {
     [HttpGet]

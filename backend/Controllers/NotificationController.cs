@@ -11,7 +11,7 @@ namespace backend.Controllers;
 
 [ApiController]
 [Route("api/notifications")]
-[Authorize] // All notification endpoints require the user to be logged in
+[Authorize] 
 public class NotificationController(INotificationService notificationService) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -38,6 +38,7 @@ public class NotificationController(INotificationService notificationService) : 
     }
 
     [HttpPatch("read-all")]
+    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<IActionResult> MarkAllAsRead()
     {
         await notificationService.MarkAllAsReadAsync(UserId);
