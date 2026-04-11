@@ -58,31 +58,44 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
         return new UserDto(u.Id, u.Name, u.Email, u.Role, u.AvatarUrl, u.Rating, u.CreatedAtUtc, u.IsActive);
     }
 
-    public async Task UpdateUserBlockStatusAsync(Guid id, bool block, string? reason, Guid adminId)
+    public async Task UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken)
     {
-        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id) 
+        // 1. FINAL GUARD: Ensure ID in URL is not the ID in the Token
+        if (block && targetId == adminIdFromToken)
+        {
+            throw new InvalidOperationException("Critical Security Error: Self-blocking is prohibited.");
+        }
+    
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == targetId) 
             ?? throw new KeyNotFoundException("User not found");
-
+    
+        // 2. Double check the database just in case the ID from token belongs to this user
+        if (block && user.Id == adminIdFromToken)
+        {
+            throw new InvalidOperationException("Critical Security Error: Self-blocking detected via database check.");
+        }
+    
         user.IsActive = !block;
         user.Blocked_Reason = block ? reason : null;
         user.Blocked_At_Utc = block ? DateTime.UtcNow : null;
-        user.Blocked_By_User_Id = block ? adminId : null;
+        user.Blocked_By_User_Id = block ? adminIdFromToken : null;
         
-        // Security: Increment TokenVersion to instantly invalidate all their current Access Tokens
+        // Increment version to kill current token
         user.TokenVersion++;
-
+    
+        // Record the audit log
         context.Admin_Actions.Add(new Admin_Action
         {
             Id = Guid.NewGuid(),
-            Admin_User_Id = adminId,
+            Admin_User_Id = adminIdFromToken,
             Action_Type = block ? "BLOCK_USER" : "UNBLOCK_USER",
             Target_Type = "USER",
-            Target_Id = id,
+            Target_Id = targetId,
             Reason = reason,
-            Payload = JsonSerializer.Serialize(new { userId = id, timestamp = DateTime.UtcNow }),
+            Payload = "{}",
             Created_At_Utc = DateTime.UtcNow
         });
-
+    
         await context.SaveChangesAsync();
     }
 
@@ -116,8 +129,6 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
 
     public async Task<IEnumerable<JobDto>> GetEmergencyJobsAsync()
     {
-        // Internal helper logic (Note: This normally uses JobService, but as requested, 
-        // we are keeping logic contained in Admin related files)
         var jobs = await context.Jobs
             .Include(j => j.Posted_By_User)
             .Where(j => j.Is_Emergency && j.Status == "open")
@@ -131,7 +142,7 @@ public class AdminService(NeighbourHelpDbContext context) : IAdminService
     public async Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId)
     {
         var job = await context.Jobs.FindAsync(jobId) ?? throw new KeyNotFoundException("Job not found");
-        job.Status = "in_progress"; // Simplified logic for admin override
+        job.Status = "in_progress"; 
         
         context.Admin_Actions.Add(new Admin_Action {
             Id = Guid.NewGuid(), Admin_User_Id = adminId, Action_Type = "FORCE_ASSIGN_JOB",
