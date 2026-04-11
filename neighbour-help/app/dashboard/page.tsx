@@ -13,11 +13,13 @@ import JobCard from "../components/ui/JobCard";
 import type { Job } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
 import { jobsService } from "../lib/api/jobs";
+import { notificationsService } from "../lib/api/notifications";
 
 export default function DashboardPage() {
   const { authorized, loading } = useRequireRole("homeowner");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!authorized) return;
@@ -43,6 +45,33 @@ export default function DashboardPage() {
     };
   }, [authorized]);
 
+  useEffect(() => {
+    if (!authorized) return;
+
+    let ignore = false;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await notificationsService.getNotifications();
+        if (!ignore) setUnreadCount(response.unreadCount);
+      } catch {
+        if (!ignore) setUnreadCount(0);
+      }
+    };
+
+    const onNotificationsUpdated = () => {
+      void fetchUnreadCount();
+    };
+
+    void fetchUnreadCount();
+    window.addEventListener("nh_notifications_updated", onNotificationsUpdated);
+
+    return () => {
+      ignore = true;
+      window.removeEventListener("nh_notifications_updated", onNotificationsUpdated);
+    };
+  }, [authorized]);
+
   if (loading || !authorized) {
     return null;
   }
@@ -50,6 +79,12 @@ export default function DashboardPage() {
   const open = jobs.filter((j) => j.status === "open").length;
   const inProgress = jobs.filter((j) => j.status === "in-progress").length;
   const completed = jobs.filter((j) => j.status === "completed").length;
+  const notificationsSubtext =
+    unreadCount === null
+      ? "Checking alerts..."
+      : unreadCount === 0
+      ? "No unread alerts"
+      : `${unreadCount} unread alert${unreadCount === 1 ? "" : "s"}`;
   const recentJobs = [...jobs]
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 2);
@@ -120,11 +155,11 @@ export default function DashboardPage() {
                   sub: "Get quotes in minutes",
                 },
                 {
-                  href: "#",
+                  href: "/notifications",
                   icon: <Bell className="w-4 h-4 text-amber-500" />,
                   bg: "bg-amber-50",
                   label: "Notifications",
-                  sub: "2 unread alerts",
+                  sub: notificationsSubtext,
                 },
                 {
                   href: "/support",
