@@ -15,6 +15,10 @@ Non-goals for v1:
 - AI recommendation engine (defer to v1.2)
 - Multi-language localization
 
+Messaging scope note:
+- Direct homeowner-handyman messaging is not designed for v1 in this document (no chat endpoints/tables in current schema).
+- If needed, define a dedicated v1.1 messaging module (conversations, participants, messages, read receipts).
+
 ## 2. Recommended Stack
 
 - Framework: ASP.NET Core 8 Web API
@@ -149,6 +153,9 @@ Base path: `/api`
 - `POST /api/auth/login`
 - `POST /api/auth/admin/login`
 - `POST /api/auth/admin/force-reset-password`
+- `POST /api/auth/password/otp/request`
+- `POST /api/auth/password/otp/verify`
+- `POST /api/auth/password/reset`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
@@ -161,6 +168,19 @@ Admin account provisioning:
 - Seed one bootstrap admin account during environment initialization.
 - Set `MustResetPassword=true` for bootstrap admin account.
 - Disallow public self-registration for admin role.
+
+Password reset via OTP (AWS SES):
+- Provider: Amazon SES (AWS SDK for .NET), using a verified sender identity/domain.
+- OTP format: 6-digit numeric code.
+- OTP lifetime: 10 minutes (configurable).
+- Rate limits:
+  - resend cooldown per email: 60 seconds
+  - max OTP requests per email per hour: 5
+  - max OTP verify attempts per OTP: 5
+- Anti-enumeration: request endpoint must return a generic success response even if email is not registered.
+- Persist only hashed OTP and hashed reset token (never plaintext).
+- Reset endpoint must revoke active refresh tokens and increment token version for the user.
+- Email sending should be asynchronous (background queue/job) with retry and structured failure logging.
 
 ## 5.2 Jobs
 
@@ -249,6 +269,7 @@ Authorization policies:
 Security controls:
 - BCrypt/Argon2 for password hashing
 - Rate limiting on login/register endpoints
+- Rate limiting on password reset endpoints (`otp/request`, `otp/verify`, `password/reset`)
 - CORS restricted to frontend origins
 - Standard headers (CSP, X-Content-Type-Options, X-Frame-Options)
 - Input validation and output encoding
@@ -324,6 +345,17 @@ Required env vars:
 - `AWS__Region`
 - `AWS__AccessKeyId` (local/dev only; prefer IAM role in AWS)
 - `AWS__SecretAccessKey` (local/dev only; prefer IAM role in AWS)
+- `Email__Provider=Ses`
+- `Email__FromAddress` (verified SES sender)
+- `Email__FromName`
+- `Email__SesConfigurationSet` (optional)
+- `Auth__PasswordResetOtpLength=6`
+- `Auth__PasswordResetOtpMinutes=10`
+- `Auth__PasswordResetOtpCooldownSeconds=60`
+- `Auth__PasswordResetOtpMaxAttempts=5`
+- `Auth__PasswordResetRequestLimitPerHour=5`
+- `Security__OtpPepper` (secret used for OTP hashing)
+- `Security__ResetTokenPepper` (secret used for reset token hashing)
 
 Containerization notes:
 - Build and run API as a stateless .NET 8 container image (multi-stage Dockerfile)
@@ -375,6 +407,7 @@ Unit tests:
 Integration tests (with Testcontainers PostgreSQL):
 - register/login/refresh/logout
 - create job -> submit bid -> accept bid -> notifications generated
+- forgot password flow -> request OTP -> verify OTP -> reset password -> old refresh tokens revoked
 - forbidden access for wrong roles
 
 Contract tests:
@@ -479,6 +512,34 @@ Observability and governance:
   - Admin-only endpoint for first-login reset flow
   - On success set `MustResetPassword=false`
 
+- `POST /api/auth/password/otp/request`
+  - Accepts: `{ email }`
+  - Always returns generic 200 response (`If the account exists, an OTP has been sent`)
+  - If user exists and account is eligible:
+    - enforce resend cooldown and per-hour request quota
+    - generate 6-digit OTP using cryptographically secure RNG
+    - store `otp_hash`, expiry, attempt limits, request metadata
+    - send OTP email through AWS SES
+
+- `POST /api/auth/password/otp/verify`
+  - Accepts: `{ email, otp }`
+  - Validates latest active OTP record (not expired, not consumed, attempts remaining)
+  - On success:
+    - mark OTP as verified/consumed
+    - create one-time password reset token and persist hashed token with TTL
+    - return `{ verified: true, resetToken }`
+  - On failure:
+    - increment attempt count
+    - return generic invalid/expired response
+
+- `POST /api/auth/password/reset`
+  - Accepts: `{ email, resetToken, newPassword }`
+  - Validates reset token record (hash match, not expired, not consumed)
+  - Updates `users.password_hash`
+  - Consumes reset token
+  - Revokes all active `refresh_tokens` for the user
+  - Increments token version to invalidate issued access tokens
+
 - `POST /api/auth/refresh`
   - Validates refresh token status and rotation chain
   - Revokes compromised/reused tokens
@@ -568,6 +629,20 @@ Each write endpoint must define exact table mutations:
   - read/write `RefreshTokens`
   - read `Users`
 
+- Request password OTP:
+  - read `Users` by normalized email
+  - write `PasswordResetOtps`
+  - enqueue/send email via AWS SES
+
+- Verify password OTP:
+  - read/update `PasswordResetOtps`
+  - write `PasswordResetTokens`
+
+- Reset password:
+  - read/update `PasswordResetTokens`
+  - update `Users.password_hash`
+  - update/revoke `RefreshTokens`
+
 - Create job:
   - write `Jobs`
   - write `JobImages` (if image URLs submitted)
@@ -605,6 +680,7 @@ Definition of done for backend:
   - homeowner create job -> handyman bid -> homeowner accept
   - admin block/unblock user
   - admin force-reject/lock/flag bid
+  - forgot password OTP request/verify/reset flow
   - blocked user denied auth and writes
 
 ## 19. Complete PostgreSQL Schema (PK/FK Blueprint)
@@ -625,6 +701,7 @@ CREATE TYPE job_category AS ENUM ('plumbing', 'electrical', 'carpentry', 'applia
 CREATE TYPE job_status AS ENUM ('open', 'in_progress', 'completed');
 CREATE TYPE bid_status AS ENUM ('pending', 'accepted', 'rejected');
 CREATE TYPE notification_type AS ENUM ('bid_received', 'bid_accepted', 'handyman_arriving', 'job_completed');
+CREATE TYPE password_reset_token_type AS ENUM ('otp', 'reset_token');
 CREATE TYPE bid_tx_event_type AS ENUM (
   'created', 'updated', 'accepted', 'rejected', 'retracted',
   'force_rejected', 'locked', 'unlocked', 'flagged', 'unflagged'
@@ -673,6 +750,51 @@ CREATE TABLE refresh_tokens (
 
 CREATE UNIQUE INDEX uq_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX ix_refresh_tokens_user_created ON refresh_tokens(user_id, created_at_utc DESC);
+
+CREATE TABLE password_reset_otps (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  email VARCHAR(320) NOT NULL,
+  otp_hash TEXT NOT NULL,
+  token_type password_reset_token_type NOT NULL DEFAULT 'otp',
+  attempt_count INT NOT NULL DEFAULT 0,
+  max_attempts INT NOT NULL DEFAULT 5,
+  expires_at_utc TIMESTAMPTZ NOT NULL,
+  verified_at_utc TIMESTAMPTZ,
+  consumed_at_utc TIMESTAMPTZ,
+  requested_ip VARCHAR(64),
+  user_agent TEXT,
+  ses_message_id TEXT,
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_password_reset_otp_attempts CHECK (attempt_count >= 0 AND max_attempts > 0)
+);
+
+CREATE TABLE password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email VARCHAR(320) NOT NULL,
+  token_hash TEXT NOT NULL,
+  token_type password_reset_token_type NOT NULL DEFAULT 'reset_token',
+  expires_at_utc TIMESTAMPTZ NOT NULL,
+  consumed_at_utc TIMESTAMPTZ,
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_password_reset_otps_email_created
+  ON password_reset_otps(email, created_at_utc DESC);
+CREATE INDEX ix_password_reset_otps_user_created
+  ON password_reset_otps(user_id, created_at_utc DESC);
+
+CREATE UNIQUE INDEX uq_password_reset_tokens_token_hash
+  ON password_reset_tokens(token_hash);
+CREATE INDEX ix_password_reset_tokens_user_created
+  ON password_reset_tokens(user_id, created_at_utc DESC);
+
+CREATE INDEX ix_password_reset_otps_email_expires
+  ON password_reset_otps(email, expires_at_utc DESC);
+
+CREATE INDEX ix_password_reset_tokens_email_expires
+  ON password_reset_tokens(email, expires_at_utc DESC);
 ```
 
 ### 19.3 Job and Bid Domain Tables
@@ -820,6 +942,8 @@ CREATE INDEX ix_admin_actions_target ON admin_actions(target_type, target_id, cr
 - `users (1) -> (many) notifications` via `notifications.user_id`
 - `jobs (0..1) <- (many) notifications` via `notifications.related_job_id`
 - `users (1) -> (many) refresh_tokens` via `refresh_tokens.user_id`
+- `users (1) -> (many) password_reset_otps` via `password_reset_otps.user_id`
+- `users (1) -> (many) password_reset_tokens` via `password_reset_tokens.user_id`
 - `users (1) -> (0..1) handyman_verifications` via `handyman_verifications.user_id`
 - `bids (1) -> (many) bid_transactions` via `bid_transactions.bid_id`
 - `users (1) -> (many) admin_actions` via `admin_actions.admin_user_id`
@@ -829,7 +953,7 @@ CREATE INDEX ix_admin_actions_target ON admin_actions(target_type, target_id, cr
 1. Create enums
 2. Create `users`
 3. Seed bootstrap admin user (`role=admin`, `must_reset_password=true`)
-4. Create auth and domain tables (`refresh_tokens`, `jobs`, `job_images`, `bids`, `notifications`)
+4. Create auth and domain tables (`refresh_tokens`, `password_reset_otps`, `password_reset_tokens`, `jobs`, `job_images`, `bids`, `notifications`)
 5. Create admin tables (`handyman_verifications`, `bid_transactions`, `bid_locks`, `admin_actions`)
 6. Create all indexes and partial indexes
 7. Seed minimal lookup/demo data for local development only
@@ -840,6 +964,7 @@ CREATE INDEX ix_admin_actions_target ON admin_actions(target_type, target_id, cr
 - one accepted bid per job (partial unique index)
 - admin actions append-only (do not update/delete in normal flow)
 - bid transaction events append-only (immutable ledger pattern)
+- password reset OTP and reset tokens are hashed, short-lived, and one-time use
 - blocked user state stored in `users.account_status` and checked by API for login and writes
 
 ---

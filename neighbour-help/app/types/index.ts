@@ -35,6 +35,27 @@ export interface LogoutRequest {
   refreshToken?: string | null;
 }
 
+export interface ForgotPasswordOtpRequest {
+  email: string;
+}
+
+export interface ForgotPasswordOtpResponse {
+  message: string;
+  expiresInSeconds?: number;
+  cooldownSeconds?: number;
+}
+
+export interface VerifyPasswordOtpRequest {
+  email: string;
+  otp: string;
+}
+
+export interface VerifyPasswordOtpResponse {
+  verified: boolean;
+  message?: string;
+  resetToken?: string;
+}
+
 export interface AuthResponse {
   user: User;
   tokens: AuthTokens;

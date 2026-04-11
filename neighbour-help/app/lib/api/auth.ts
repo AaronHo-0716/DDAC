@@ -1,6 +1,8 @@
 import {
   AuthResponse,
   ChangePasswordRequest,
+  ForgotPasswordOtpRequest,
+  ForgotPasswordOtpResponse,
   LoginRequest,
   LogoutRequest,
   RegisterRequest,
@@ -8,6 +10,8 @@ import {
   UpdateUserSettingsRequest,
   User,
   UserSettings,
+  VerifyPasswordOtpRequest,
+  VerifyPasswordOtpResponse,
 } from "@/app/types";
 import {
   apiClient,
@@ -140,6 +144,34 @@ export const authService = {
     void data;
     throw new Error(
       "Password change is not available yet. Current backend plan does not expose /api/account/change-password."
+    );
+  },
+
+  /**
+   * POST /api/auth/password/otp/request
+   * Sends a one-time password to the email address for password-reset verification.
+   */
+  async requestPasswordResetOtp(
+    data: ForgotPasswordOtpRequest
+  ): Promise<ForgotPasswordOtpResponse> {
+    return apiClient.post<ForgotPasswordOtpResponse>(
+      "/auth/password/otp/request",
+      data,
+      { authenticated: false }
+    );
+  },
+
+  /**
+   * POST /api/auth/password/otp/verify
+   * Verifies the one-time password sent to the email address.
+   */
+  async verifyPasswordResetOtp(
+    data: VerifyPasswordOtpRequest
+  ): Promise<VerifyPasswordOtpResponse> {
+    return apiClient.post<VerifyPasswordOtpResponse>(
+      "/auth/password/otp/verify",
+      data,
+      { authenticated: false }
     );
   },
 
