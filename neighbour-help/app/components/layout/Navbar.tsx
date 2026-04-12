@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Bell, ChevronDown, Wrench, Menu, X } from "lucide-react";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import NotificationsPanel from "@/app/components/ui/NotificationsPanel";
@@ -64,6 +64,18 @@ export default function Navbar() {
       window.removeEventListener("nh_notifications_updated", listener);
     };
   }, [user]);
+
+  const handleSignOut = useCallback(async () => {
+    setDropdownOpen(false);
+    setMobileOpen(false);
+    setNotificationsOpen(false);
+    await logout();
+
+    if (typeof window !== "undefined") {
+      // Full navigation guarantees app state is reset and user lands on homepage.
+      window.location.replace("/");
+    }
+  }, [logout]);
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB] shadow-sm">
@@ -132,7 +144,9 @@ export default function Navbar() {
                         Settings
                       </Link>
                       <button
-                        onClick={() => { setDropdownOpen(false); logout(); }}
+                        onClick={() => {
+                          void handleSignOut();
+                        }}
                         className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
                       >
                         Sign Out
@@ -202,8 +216,7 @@ export default function Navbar() {
             <div className="border-t border-[#E5E7EB] pt-2 mt-2 space-y-1 px-4">
               <button
                 onClick={() => {
-                  setMobileOpen(false);
-                  logout();
+                  void handleSignOut();
                 }}
                 className="block w-full text-left px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               >

@@ -29,26 +29,44 @@ interface BidCardProps {
 export default function BidCard({ bid, onAccept, onMessage }: BidCardProps) {
   const arrival = new Date(bid.estimatedArrival);
   const accepted = bid.status === "accepted";
+  const pending = bid.status === "pending";
+  const rejected = bid.status === "rejected";
 
   return (
     <div
       className={`p-4 rounded-xl border-2 transition-all ${
-        bid.isRecommended && !accepted
+        bid.isRecommended && pending
           ? "border-[#0B74FF] bg-blue-50/30"
           : accepted
           ? "border-green-400 bg-green-50/30"
+          : rejected
+          ? "border-red-200 bg-red-50/20"
           : "border-[#E5E7EB] bg-white"
       }`}
     >
-      {bid.isRecommended && !accepted && (
-        <div className="flex items-center gap-1.5 mb-3">
-          <StatusBadge status="recommended" />
-          <span className="text-xs text-[#0B74FF]">Best value for this job</span>
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+        <StatusBadge status={bid.status} />
+        {bid.isRecommended && pending && (
+          <>
+            <StatusBadge status="recommended" />
+            <span className="text-xs text-[#0B74FF]">Best value for this job</span>
+          </>
+        )}
+      </div>
+
+      {accepted && (
+        <div className="mb-3">
+          <p className="text-xs text-green-700 font-medium">
+            This bid is currently selected for the job.
+          </p>
         </div>
       )}
-      {accepted && (
-        <div className="flex items-center gap-1.5 mb-3 text-green-700 text-xs font-medium">
-          <Check className="w-3.5 h-3.5" /> Bid Accepted
+
+      {rejected && (
+        <div className="mb-3">
+          <p className="text-xs text-red-700 font-medium">
+            This bid has been rejected.
+          </p>
         </div>
       )}
 
@@ -77,7 +95,7 @@ export default function BidCard({ bid, onAccept, onMessage }: BidCardProps) {
 
       <p className="text-sm text-[#6B7280] mb-4 line-clamp-3">{bid.message}</p>
 
-      {!accepted && (
+      {pending && (
         <div className="flex gap-2">
           <button
             onClick={() => onMessage?.(bid.id)}
