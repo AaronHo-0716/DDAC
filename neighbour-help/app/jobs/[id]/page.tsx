@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Trash2, X } from "lucide-react";
@@ -12,6 +12,7 @@ import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import StatusBadge from "@/app/components/ui/StatusBadge";
 import BidCard from "@/app/components/ui/BidCard";
 import SubmitBidModal from "@/app/components/ui/SubmitBidModal";
+import { useChatWidget } from "@/app/lib/context/ChatWidgetContext";
 
 const ALL_CATEGORIES: JobCategory[] = [
   "Plumbing",
@@ -45,6 +46,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const { id } = use(params);
   const router = useRouter();
   const { user } = useAuth();
+  const { openForBidChat } = useChatWidget();
 
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
@@ -218,6 +220,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       setBidActionLoadingId(null);
     }
   };
+
+  const handleMessageBid = useCallback((bidId: string) => {
+    if (!job) return;
+
+    const target = bids.find((bid) => bid.id === bidId);
+    if (!target) return;
+
+    openForBidChat({
+      jobId: job.id,
+      bidId: target.id,
+      otherUserId: target.handyman.id,
+      otherUserName: target.handyman.name,
+    });
+  }, [bids, job, openForBidChat]);
 
   if (loading) {
     return (
@@ -459,7 +475,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <div className="space-y-4">
                 {visibleBids.map((bid) => (
                   <div key={bid.id} className="space-y-2">
-                    <BidCard bid={bid} onAccept={handleAcceptBid} />
+                    <BidCard
+                      bid={bid}
+                      onAccept={handleAcceptBid}
+                      onMessage={handleMessageBid}
+                    />
                     {bid.status === "pending" && (
                       <div className="flex justify-end">
                         <button

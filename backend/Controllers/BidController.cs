@@ -9,7 +9,7 @@ namespace backend.Controllers;
 
 [ApiController]
 [Route("api/bids")]
-[Authorize(Roles = "admin, handyman")]
+[Authorize]
 public class BidController(IBidService bidService, ILogger<BidController> logger) : ControllerBase
 {
     [Authorize]

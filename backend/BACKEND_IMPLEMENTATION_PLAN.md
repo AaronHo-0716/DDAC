@@ -254,6 +254,45 @@ Server-side validation:
 - max file size (10 MB)
 - antivirus scan hook (stub for v1, real scanner in v1.1)
 
+## 5.7 Messaging (v1.1)
+
+Messaging scope:
+- Homeowner-handyman chat is allowed when there is a valid bid between participants on the job.
+- Admin support conversations are separate from normal job chat.
+- Read receipts are out of scope for this phase.
+
+Conversation types:
+- `job_chat`
+- `admin_support`
+
+Core endpoints:
+- `POST /api/messages/conversations/job`
+  - Create-or-open a job chat conversation
+  - Requires `jobId`, `bidId`, `otherUserId`
+- `POST /api/messages/conversations/support`
+  - Create-or-open an admin support conversation
+- `GET /api/messages/conversations`
+- `GET /api/messages/conversations/{conversationId}`
+- `GET /api/messages/conversations/{conversationId}/messages`
+- `POST /api/messages/conversations/{conversationId}/messages`
+- `PATCH /api/messages/conversations/{conversationId}/read`
+- `GET /api/messages/unread-count`
+- `GET /api/messages/unread-by-conversation`
+
+Admin moderation endpoints:
+- `PATCH /api/admin/messages/conversations/{conversationId}/lock`
+- `PATCH /api/admin/messages/conversations/{conversationId}/unlock`
+- `PATCH /api/admin/messages/messages/{messageId}/hide`
+- `PATCH /api/admin/messages/messages/{messageId}/unhide`
+- `POST /api/admin/messages/messages/{messageId}/flag`
+- `GET /api/admin/messages/moderation-actions`
+
+Design notes:
+- Persist canonical chat history in PostgreSQL.
+- Use participant-level `unreadCount` and `lastReadMessageId` (no message-level receipt table in v1.1).
+- Keep moderation immutable via dedicated message moderation action rows and existing admin audit strategy.
+- Real-time transport is optional in this phase; polling-compatible REST contract is required.
+
 ## 6. Security and Authorization
 
 Authentication:
@@ -270,6 +309,7 @@ Security controls:
 - BCrypt/Argon2 for password hashing
 - Rate limiting on login/register endpoints
 - Rate limiting on password reset endpoints (`otp/request`, `otp/verify`, `password/reset`)
+- Rate limiting on message send and conversation create endpoints
 - CORS restricted to frontend origins
 - Standard headers (CSP, X-Content-Type-Options, X-Frame-Options)
 - Input validation and output encoding
@@ -617,6 +657,52 @@ Observability and governance:
 - `PATCH /api/admin/bid-transactions/{bidId}/force-reject`
   - Each action appends `BidTransactions` event row and `AdminActions` row
 
+### 16.5 Messaging Endpoints (v1.1)
+
+- `POST /api/messages/conversations/job`
+  - Create or return existing `job_chat` conversation
+  - Requires valid bid relation between requester and `otherUserId` on `jobId`
+  - Allowed for homeowner/handyman participants only
+
+- `POST /api/messages/conversations/support`
+  - Create or return existing `admin_support` conversation
+  - Admin can start against any user
+  - User can open support conversation with admin queue/assignment policy
+
+- `GET /api/messages/conversations`
+  - Returns current user's conversations with unread counts and last message preview
+  - Supports pagination and optional `type`/`status` filter
+
+- `GET /api/messages/conversations/{conversationId}`
+  - Returns canonical conversation metadata and participants
+  - Access only for conversation participants or admin moderation access
+
+- `GET /api/messages/conversations/{conversationId}/messages`
+  - Returns paginated message history (newest-first or cursor-based)
+  - Excludes hidden messages for non-admin users
+
+- `POST /api/messages/conversations/{conversationId}/messages`
+  - Sends message in conversation if not locked and sender is participant
+  - Supports idempotency via `clientMessageId` unique in conversation scope
+  - On success increments `unreadCount` for other active participants
+
+- `PATCH /api/messages/conversations/{conversationId}/read`
+  - Marks conversation as read for current user
+  - Sets participant `unreadCount=0` and updates `lastReadMessageId`
+
+- `GET /api/messages/unread-count`
+  - Returns aggregate unread message count for current user
+
+- `GET /api/messages/unread-by-conversation`
+  - Returns unread counts grouped by conversation id for badges/sidebar
+
+- `PATCH /api/admin/messages/conversations/{conversationId}/lock`
+- `PATCH /api/admin/messages/conversations/{conversationId}/unlock`
+- `PATCH /api/admin/messages/messages/{messageId}/hide`
+- `PATCH /api/admin/messages/messages/{messageId}/unhide`
+- `POST /api/admin/messages/messages/{messageId}/flag`
+  - Each moderation action appends a message moderation row and an `AdminActions` row
+
 ## 17. API-to-DB Write Mapping (Critical)
 
 Each write endpoint must define exact table mutations:
@@ -642,6 +728,31 @@ Each write endpoint must define exact table mutations:
   - read/update `PasswordResetTokens`
   - update `Users.password_hash`
   - update/revoke `RefreshTokens`
+
+- Create/open job conversation:
+  - read `Bids`, `Jobs`, `Users`
+  - read/write `Conversations`
+  - write `ConversationParticipants` (if newly created)
+
+- Create/open support conversation:
+  - read `Users`
+  - read/write `Conversations`
+  - write `ConversationParticipants` (if newly created)
+
+- Send message:
+  - read `Conversations`, `ConversationParticipants`
+  - write `Messages`
+  - update `Conversations.last_message_at_utc`
+  - update `ConversationParticipants.unread_count` for recipients
+  - optional write `Notifications` for offline/in-app badge support
+
+- Mark conversation read:
+  - update `ConversationParticipants.unread_count`, `last_read_message_id`
+
+- Admin message moderation:
+  - update `Messages` or `Conversations` lock state where applicable
+  - write `MessageModerationActions`
+  - write `AdminActions`
 
 - Create job:
   - write `Jobs`
@@ -681,6 +792,8 @@ Definition of done for backend:
   - admin block/unblock user
   - admin force-reject/lock/flag bid
   - forgot password OTP request/verify/reset flow
+  - homeowner-handyman message flow after bid submission
+  - admin support conversation flow and message moderation audit trail
   - blocked user denied auth and writes
 
 ## 19. Complete PostgreSQL Schema (PK/FK Blueprint)
@@ -702,6 +815,10 @@ CREATE TYPE job_status AS ENUM ('open', 'in_progress', 'completed');
 CREATE TYPE bid_status AS ENUM ('pending', 'accepted', 'rejected');
 CREATE TYPE notification_type AS ENUM ('bid_received', 'bid_accepted', 'handyman_arriving', 'job_completed');
 CREATE TYPE password_reset_token_type AS ENUM ('otp', 'reset_token');
+CREATE TYPE conversation_type AS ENUM ('job_chat', 'admin_support');
+CREATE TYPE conversation_status AS ENUM ('active', 'locked', 'closed');
+CREATE TYPE message_type AS ENUM ('text', 'system', 'admin_note');
+CREATE TYPE message_moderation_action_type AS ENUM ('flag', 'hide', 'unhide', 'lock_conversation', 'unlock_conversation');
 CREATE TYPE bid_tx_event_type AS ENUM (
   'created', 'updated', 'accepted', 'rejected', 'retracted',
   'force_rejected', 'locked', 'unlocked', 'flagged', 'unflagged'
@@ -944,6 +1061,11 @@ CREATE INDEX ix_admin_actions_target ON admin_actions(target_type, target_id, cr
 - `users (1) -> (many) refresh_tokens` via `refresh_tokens.user_id`
 - `users (1) -> (many) password_reset_otps` via `password_reset_otps.user_id`
 - `users (1) -> (many) password_reset_tokens` via `password_reset_tokens.user_id`
+- `conversations (1) -> (many) conversation_participants` via `conversation_participants.conversation_id`
+- `users (1) -> (many) conversation_participants` via `conversation_participants.user_id`
+- `conversations (1) -> (many) messages` via `messages.conversation_id`
+- `users (1) -> (many) messages` via `messages.sender_user_id`
+- `messages (1) -> (many) message_moderation_actions` via `message_moderation_actions.message_id`
 - `users (1) -> (0..1) handyman_verifications` via `handyman_verifications.user_id`
 - `bids (1) -> (many) bid_transactions` via `bid_transactions.bid_id`
 - `users (1) -> (many) admin_actions` via `admin_actions.admin_user_id`
@@ -954,9 +1076,10 @@ CREATE INDEX ix_admin_actions_target ON admin_actions(target_type, target_id, cr
 2. Create `users`
 3. Seed bootstrap admin user (`role=admin`, `must_reset_password=true`)
 4. Create auth and domain tables (`refresh_tokens`, `password_reset_otps`, `password_reset_tokens`, `jobs`, `job_images`, `bids`, `notifications`)
-5. Create admin tables (`handyman_verifications`, `bid_transactions`, `bid_locks`, `admin_actions`)
-6. Create all indexes and partial indexes
-7. Seed minimal lookup/demo data for local development only
+5. Create messaging tables (`conversations`, `conversation_participants`, `messages`, `message_moderation_actions`)
+6. Create admin tables (`handyman_verifications`, `bid_transactions`, `bid_locks`, `admin_actions`)
+7. Create all indexes and partial indexes
+8. Seed minimal lookup/demo data for local development only
 
 ### 19.8 Non-Negotiable DB Constraints
 
@@ -965,7 +1088,102 @@ CREATE INDEX ix_admin_actions_target ON admin_actions(target_type, target_id, cr
 - admin actions append-only (do not update/delete in normal flow)
 - bid transaction events append-only (immutable ledger pattern)
 - password reset OTP and reset tokens are hashed, short-lived, and one-time use
+- one participant row per user per conversation (`UNIQUE(conversation_id, user_id)`)
+- message idempotency key uniqueness in conversation scope (`UNIQUE(conversation_id, client_message_id)` when provided)
 - blocked user state stored in `users.account_status` and checked by API for login and writes
+
+### 19.9 Messaging Tables (v1.1, No Read Receipts)
+
+```sql
+CREATE TABLE conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type conversation_type NOT NULL,
+  related_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
+  related_bid_id UUID REFERENCES bids(id) ON DELETE SET NULL,
+  created_by_user_id UUID NOT NULL REFERENCES users(id),
+  status conversation_status NOT NULL DEFAULT 'active',
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_message_at_utc TIMESTAMPTZ,
+  closed_at_utc TIMESTAMPTZ,
+  CONSTRAINT chk_conversations_job_chat_requires_job
+    CHECK (type <> 'job_chat' OR related_job_id IS NOT NULL)
+);
+
+CREATE TABLE conversation_participants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id),
+  participant_role user_role NOT NULL,
+  joined_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  left_at_utc TIMESTAMPTZ,
+  is_muted BOOLEAN NOT NULL DEFAULT FALSE,
+  muted_until_utc TIMESTAMPTZ,
+  unread_count INT NOT NULL DEFAULT 0,
+  last_read_message_id UUID,
+  CONSTRAINT uq_conversation_participant UNIQUE (conversation_id, user_id),
+  CONSTRAINT chk_conversation_participants_unread_nonnegative CHECK (unread_count >= 0)
+);
+
+CREATE TABLE messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_user_id UUID NOT NULL REFERENCES users(id),
+  message_type message_type NOT NULL DEFAULT 'text',
+  body_text TEXT NOT NULL,
+  metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+  edited_at_utc TIMESTAMPTZ,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  deleted_at_utc TIMESTAMPTZ,
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  client_message_id VARCHAR(100)
+);
+
+ALTER TABLE conversation_participants
+  ADD CONSTRAINT fk_conversation_participants_last_read_message
+  FOREIGN KEY (last_read_message_id) REFERENCES messages(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX uq_messages_conversation_client_message
+  ON messages(conversation_id, client_message_id)
+  WHERE client_message_id IS NOT NULL;
+
+CREATE TABLE message_moderation_actions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  admin_user_id UUID NOT NULL REFERENCES users(id),
+  action_type message_moderation_action_type NOT NULL,
+  reason TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_conversations_type_status_last_message
+  ON conversations(type, status, last_message_at_utc DESC NULLS LAST);
+
+CREATE INDEX ix_conversation_participants_user_unread
+  ON conversation_participants(user_id, unread_count DESC);
+
+CREATE INDEX ix_conversation_participants_conversation
+  ON conversation_participants(conversation_id);
+
+CREATE INDEX ix_messages_conversation_created
+  ON messages(conversation_id, created_at_utc DESC);
+
+CREATE INDEX ix_messages_sender_created
+  ON messages(sender_user_id, created_at_utc DESC);
+
+CREATE INDEX ix_message_moderation_actions_conversation_created
+  ON message_moderation_actions(conversation_id, created_at_utc DESC);
+
+CREATE INDEX ix_message_moderation_actions_message_created
+  ON message_moderation_actions(message_id, created_at_utc DESC);
+```
+
+Unread strategy (without read receipts):
+- Store unread state per participant row (`unread_count`, `last_read_message_id`).
+- On message send: increment unread count for other active participants.
+- On mark-read endpoint: set unread count to zero and update `last_read_message_id`.
 
 ---
 

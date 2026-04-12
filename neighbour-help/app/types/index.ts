@@ -237,3 +237,69 @@ export interface NotificationListResponse {
   notifications: Notification[];
   unreadCount: number;
 }
+
+// ─── Messaging ───────────────────────────────────────────────────────────────
+
+export type ConversationType = "job_chat" | "admin_support";
+export type ConversationStatus = "active" | "locked" | "closed";
+export type MessageType = "text" | "system" | "admin_note";
+
+export interface ConversationParticipant {
+  userId: string;
+  name: string;
+  role: UserRole;
+  avatarUrl?: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  type: ConversationType;
+  status: ConversationStatus;
+  relatedJobId?: string;
+  relatedBidId?: string;
+  lastMessagePreview?: string;
+  lastMessageAt?: string;
+  unreadCount: number;
+  participants: ConversationParticipant[];
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderUserId: string;
+  senderName?: string;
+  messageType: MessageType;
+  bodyText: string;
+  createdAt: string;
+  isDeleted?: boolean;
+}
+
+export interface ConversationListResponse {
+  conversations: ConversationSummary[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+
+export interface MessageListResponse {
+  messages: ChatMessage[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+
+export interface CreateOrOpenJobConversationRequest {
+  jobId: string;
+  bidId: string;
+  otherUserId: string;
+}
+
+export interface SendMessageRequest {
+  bodyText: string;
+  messageType?: MessageType;
+  clientMessageId?: string;
+}
+
+export interface UnreadCountResponse {
+  unreadCount: number;
+}
