@@ -14,16 +14,14 @@ public partial class User
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "homeowner";
     public bool IsActive { get; set; } = true; 
-    // public bool Must_Reset_Password { get; set; }
+    public bool Must_Reset_Password { get; set; }
     public string? AvatarUrl { get; set; }
     public decimal? Rating { get; set; }
     public string? Blocked_Reason { get; set; }
     public DateTime? Blocked_At_Utc { get; set; }
-    // public Guid? Blocked_By_User_Id { get; set; }
-    // public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
-    // public DateTime Updated_At_Utc { get; set; } = DateTime.UtcNow;
-    public int TokenVersion { get; set; } = 1; 
-
+    public Guid? Blocked_By_User_Id { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime Updated_At_Utc { get; set; } = DateTime.UtcNow;
 
     public virtual ICollection<User> Inverse_Blocked_By_User { get; set; } = new List<User>();
     public virtual ICollection<Admin_Action> Admin_Actions { get; set; } = new List<Admin_Action>();
@@ -38,6 +36,7 @@ public partial class User
     public virtual ICollection<Job> Jobs { get; set; } = new List<Job>();
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public virtual ICollection<Refresh_Token> Refresh_Tokens { get; set; } = new List<Refresh_Token>();
+    public int TokenVersion { get; set; } = 1; 
 
     public uint xmin { get; set; }
 }

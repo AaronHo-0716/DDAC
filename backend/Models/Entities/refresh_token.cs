@@ -19,9 +19,9 @@ public partial class Refresh_Token
 
     public string? Replaced_By_Token_Hash { get; set; }
 
-    // public string? User_Agent { get; set; }
+    public string? User_Agent { get; set; }
 
-    // public string? Ip_Address { get; set; }
+    public string? Ip_Address { get; set; }
 
     public DateTime Created_At_Utc { get; set; }
 
