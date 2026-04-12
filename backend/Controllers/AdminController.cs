@@ -160,4 +160,27 @@ public class AdminController(IAdminService adminService, ILogger<AdminController
     [Obsolete("This endpoint is currently not in use. ")]
     public async Task<ActionResult<IEnumerable<AdminActionDto>>> GetAuditLogs() 
         => Ok(await adminService.GetAuditLogsAsync());
+
+    // --- Report ---
+    [HttpGet("reports")]
+    public async Task<ActionResult<IEnumerable<UserReportDto>>> GetReports([FromQuery] ReportStatusFilter? status)
+    {
+        return Ok(await adminService.GetAllReportsAsync(status));
+    }
+    
+    [HttpPatch("reports/{id}/resolve")]
+    public async Task<IActionResult> ResolveReport(Guid id, [FromBody] string notes)
+    {
+        if (AdminId == Guid.Empty) return Unauthorized();
+        
+        try
+        {
+            await adminService.ResolveReportAsync(id, notes, AdminId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
 }

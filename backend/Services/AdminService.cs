@@ -245,4 +245,48 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             .Select(a => new AdminActionDto(a.Id, a.Admin_User_Id, a.Action_Type, a.Target_Type, a.Target_Id, a.Reason, a.Created_At_Utc))
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatusFilter? status = null)
+    {
+        var query = context.User_Reports
+            .Include(r => r.Reporter)
+            .Include(r => r.Target_User)
+            .AsNoTracking();
+    
+        // Convert enum to string for DB filtering
+        if (status.HasValue)
+        {
+            var statusStr = status.Value.ToString().ToLower();
+            query = query.Where(r => r.Status == statusStr);
+        }
+    
+        var reports = await query.OrderByDescending(r => r.Created_At_Utc).ToListAsync();
+    
+        return reports.Select(r => new UserReportDto(
+            r.Id,
+            r.Reporter_Id,
+            r.Reporter.Name,
+            r.Target_User_Id,
+            r.Target_User.Name,
+            r.Reason,
+            r.Description,
+            r.Status,
+            r.Created_At_Utc,
+            r.Admin_Notes
+        ));
+    }
+
+    public async Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId)
+    {
+        var report = await context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
+            ?? throw new KeyNotFoundException("Report not found.");
+
+        report.Status = "resolved";
+        report.Admin_Notes = adminNotes;
+        report.Reviewed_At_Utc = DateTime.UtcNow;
+        report.Reviewed_By_Admin_Id = adminId;
+
+        await context.SaveChangesAsync();
+        logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
+    }
 }

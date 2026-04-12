@@ -22,6 +22,7 @@ public partial class NeighbourHelpDbContext : DbContext
     public virtual DbSet<Notification> Notifications { get; set; }
     public virtual DbSet<Refresh_Token> Refresh_Tokens { get; set; }
     public virtual DbSet<User> Users { get; set; }
+    public virtual DbSet<User_Report> User_Reports { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -210,6 +211,40 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Sort_Order).HasColumnName("sort_order");
             entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
             entity.HasOne(d => d.Job).WithMany(p => p.Job_Images).HasForeignKey(d => d.Job_Id);
+        });
+
+        // --- 11. USER REPORTS ---
+        modelBuilder.Entity<User_Report>(entity =>
+        {
+            entity.ToTable("user_reports");
+            entity.HasKey(e => e.Id).HasName("user_reports_pkey");
+        
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Reporter_Id).HasColumnName("reporter_id");
+            entity.Property(e => e.Target_User_Id).HasColumnName("target_user_id");
+            entity.Property(e => e.Reason).HasColumnName("reason");
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.Status).HasColumnName("status").HasDefaultValue("pending");
+            entity.Property(e => e.Reviewed_By_Admin_Id).HasColumnName("reviewed_by_admin_id");
+            entity.Property(e => e.Reviewed_At_Utc).HasColumnName("reviewed_at_utc");
+            entity.Property(e => e.Admin_Notes).HasColumnName("admin_notes");
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+        
+            // Relationships
+            entity.HasOne(d => d.Reporter)
+                .WithMany()
+                .HasForeignKey(d => d.Reporter_Id)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting user if they have filed reports
+        
+            entity.HasOne(d => d.Target_User)
+                .WithMany()
+                .HasForeignKey(d => d.Target_User_Id)
+                .OnDelete(DeleteBehavior.Cascade); // If user is deleted, their reports are deleted
+        
+            entity.HasOne(d => d.Reviewed_By_Admin)
+                .WithMany()
+                .HasForeignKey(d => d.Reviewed_By_Admin_Id)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);

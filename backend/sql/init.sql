@@ -149,6 +149,32 @@ CREATE TABLE IF NOT EXISTS admin_actions (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE user_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reporter_id UUID NOT NULL,
+    target_user_id UUID NOT NULL,
+    reason TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    reviewed_by_admin_id UUID,
+    reviewed_at_utc TIMESTAMPTZ,
+    admin_notes TEXT,
+    created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Foreign Key Constraints
+    CONSTRAINT fk_user_reports_reporter 
+        FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE RESTRICT,
+    
+    CONSTRAINT fk_user_reports_target 
+        FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    
+    CONSTRAINT fk_user_reports_admin 
+        FOREIGN KEY (reviewed_by_admin_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- Index for performance (Admins will filter by status often)
+CREATE INDEX idx_user_reports_status ON user_reports(status);
+
 CREATE INDEX IF NOT EXISTS ix_users_role_status ON users(role, account_status);
 CREATE INDEX IF NOT EXISTS ix_users_created ON users(created_at_utc DESC);
 

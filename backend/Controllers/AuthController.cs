@@ -110,4 +110,42 @@ public class AuthController(IAuthService authService, ILogger<AuthController> lo
             serverTime = DateTime.UtcNow 
         });
     }
+
+    [HttpPost("report")]
+    [Authorize]
+    [EnableRateLimiting("auth_policy")]
+    public async Task<IActionResult> Report([FromBody] CreateReportRequest request)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+    
+        try
+        {
+            await authService.CreateReportAsync(request, Guid.Parse(userIdClaim));
+            return Ok(new { message = "Report submitted successfully. Administrators will review it shortly." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "An error occurred while processing your report.", details = ex.Message });
+        }
+    }
+
+    [HttpGet("reports")]
+    [Authorize]
+    public async Task<ActionResult<IEnumerable<UserReportDto>>> GetMyReports()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        var reports = await authService.GetMyReportsAsync(Guid.Parse(userIdClaim));
+        return Ok(reports);
+    }
 }
