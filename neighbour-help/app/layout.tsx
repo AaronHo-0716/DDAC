@@ -4,6 +4,8 @@ import "./globals.css";
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
 import { AuthProvider } from "./lib/context/AuthContext";
+import { ChatWidgetProvider } from "./lib/context/ChatWidgetContext";
+import ChatWidget from "./components/ui/ChatWidget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,9 +27,12 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} antialiased min-h-screen flex flex-col`}>
         <AuthProvider>
-          <Navbar />
-          <main className="flex-1">{children}</main>
-          <Footer />
+          <ChatWidgetProvider>
+            <Navbar />
+            <main className="flex-1">{children}</main>
+            <Footer />
+            <ChatWidget />
+          </ChatWidgetProvider>
         </AuthProvider>
       </body>
     </html>
