@@ -18,7 +18,6 @@ var builder = WebApplication.CreateBuilder(args);
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
-    .Enrich.WithCorrelationId()
     .WriteTo.Console()
     .CreateLogger();
 
@@ -164,7 +163,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 // 5. Middleware Pipeline
-app.UseMiddleware<CorrelationIdMiddleware>(); 
 app.UseMiddleware<GlobalExceptionMiddleware>(); 
 app.UseMiddleware<SecurityHeadersMiddleware>(); 
 

@@ -27,7 +27,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
         {
             Status = context.Response.StatusCode,
             Title = "Server Error",
-            Detail = "An unexpected error occurred. Please use the Correlation ID to contact support.",
+            Detail = "An unexpected error occurred. ",
             Instance = context.Request.Path
         };
 
