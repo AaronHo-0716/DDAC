@@ -112,13 +112,6 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         user.Blocked_By_User_Id = block ? adminIdFromToken : null;
         user.TokenVersion++;
 
-        context.Admin_Actions.Add(new Admin_Action {
-            Id = Guid.NewGuid(), Admin_User_Id = adminIdFromToken,
-            Action_Type = block ? "BLOCK_USER" : "UNBLOCK_USER",
-            Target_Type = "USER", Target_Id = targetId, Reason = reason,
-            Payload = "{}", Created_At_Utc = DateTime.UtcNow
-        });
-
         await context.SaveChangesAsync();
 
         if (block)
@@ -190,12 +183,6 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         var job = await context.Jobs.FindAsync(jobId) ?? throw new KeyNotFoundException("Job not found");
         job.Status = "in_progress"; 
 
-        context.Admin_Actions.Add(new Admin_Action {
-            Id = Guid.NewGuid(), Admin_User_Id = adminId, Action_Type = "FORCE_ASSIGN_JOB",
-            Target_Type = "JOB", Target_Id = jobId, Reason = "Admin assigned",
-            Payload = JsonSerializer.Serialize(new { handymanId = handymanUserId }), Created_At_Utc = DateTime.UtcNow
-        });
-
         await context.SaveChangesAsync();
         logger.LogInformation("Job {JobId} force-assigned to Handyman {HandymanId} by Admin {AdminId}", jobId, handymanUserId, adminId);
     }
@@ -229,11 +216,6 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             Event_Reason = reason, Event_Metadata = "{}", Created_At_Utc = DateTime.UtcNow
         });
 
-        context.Admin_Actions.Add(new Admin_Action {
-            Id = Guid.NewGuid(), Admin_User_Id = adminId, Action_Type = actionType,
-            Target_Type = "BID", Target_Id = bidId, Reason = reason, Payload = "{}", Created_At_Utc = DateTime.UtcNow
-        });
-
         await context.SaveChangesAsync();
         logger.LogInformation("Admin {AdminId} performed {Action} on Bid {BidId}", adminId, actionType, bidId);
     }
@@ -253,7 +235,6 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             .Include(r => r.Target_User)
             .AsNoTracking();
     
-        // Convert enum to string for DB filtering
         if (status.HasValue)
         {
             var statusStr = status.Value.ToString().ToLower();
@@ -300,20 +281,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             report.Status = "reviewed";
             report.Reviewed_By_Admin_Id = adminId;
             report.Reviewed_At_Utc = DateTime.UtcNow;
-    
-            // Optional: Log this action in the Admin_Actions audit table
-            context.Admin_Actions.Add(new Admin_Action
-            {
-                Id = Guid.NewGuid(),
-                Admin_User_Id = adminId,
-                Action_Type = "REPORT_REVIEW_START",
-                Target_Type = "REPORT",
-                Target_Id = reportId,
-                Reason = "Admin started reviewing the report",
-                Payload = "{}",
-                Created_At_Utc = DateTime.UtcNow
-            });
-    
+   
             await context.SaveChangesAsync();
             logger.LogInformation("Report {ReportId} status changed to 'reviewed' by Admin {AdminId}", reportId, adminId);
         }
