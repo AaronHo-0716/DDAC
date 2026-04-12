@@ -183,4 +183,20 @@ public class AdminController(IAdminService adminService, ILogger<AdminController
             return NotFound(new { message = ex.Message });
         }
     }
+
+    [HttpPatch("reports/{id}/review")]
+    public async Task<IActionResult> ReviewReport(Guid id)
+    {
+        if (AdminId == Guid.Empty) return Unauthorized();
+
+        try
+        {
+            await adminService.ReviewReportAsync(id, AdminId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
 }

@@ -289,4 +289,33 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         await context.SaveChangesAsync();
         logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
     }
+
+    public async Task ReviewReportAsync(Guid reportId, Guid adminId)
+    {
+        var report = await context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
+            ?? throw new KeyNotFoundException("Report not found.");
+    
+        if (report.Status == "pending")
+        {
+            report.Status = "reviewed";
+            report.Reviewed_By_Admin_Id = adminId;
+            report.Reviewed_At_Utc = DateTime.UtcNow;
+    
+            // Optional: Log this action in the Admin_Actions audit table
+            context.Admin_Actions.Add(new Admin_Action
+            {
+                Id = Guid.NewGuid(),
+                Admin_User_Id = adminId,
+                Action_Type = "REPORT_REVIEW_START",
+                Target_Type = "REPORT",
+                Target_Id = reportId,
+                Reason = "Admin started reviewing the report",
+                Payload = "{}",
+                Created_At_Utc = DateTime.UtcNow
+            });
+    
+            await context.SaveChangesAsync();
+            logger.LogInformation("Report {ReportId} status changed to 'reviewed' by Admin {AdminId}", reportId, adminId);
+        }
+    }
 }

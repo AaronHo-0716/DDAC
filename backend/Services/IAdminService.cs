@@ -21,4 +21,5 @@ public interface IAdminService
     Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync();
     Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatusFilter? status = null);
     Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId);
+    Task ReviewReportAsync(Guid reportId, Guid adminId);
 }
