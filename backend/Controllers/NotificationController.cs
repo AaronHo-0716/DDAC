@@ -39,7 +39,6 @@ public class NotificationController(INotificationService notificationService, IL
     }
 
     [HttpPatch("read-all")]
-    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<IActionResult> MarkAllAsRead()
     {
         await notificationService.MarkAllAsReadAsync(UserId);

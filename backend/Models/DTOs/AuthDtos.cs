@@ -11,6 +11,7 @@ public record UserDto(
     decimal? Rating,
     DateTime CreatedAt,
     bool IsActive = true,
+    bool Verification = false,
     string? BlockedReason = null,
     DateTime? BlockedAtUtc = null
 );

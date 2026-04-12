@@ -69,6 +69,41 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
         };
 
         context.Users.Add(newUser);
+
+        if (roleLower == AllowedRoles[0])
+        {
+            // 1. Create Verification Record
+            context.Handyman_Verifications.Add(new Handyman_Verification
+            {
+                Id = Guid.NewGuid(),
+                User_Id = newUser.Id,
+                Status = "pending",
+                Created_At_Utc = DateTime.UtcNow,
+                Updated_At_Utc = DateTime.UtcNow
+            });
+    
+            // 2. Optimized Batch Notification for all Admins
+            var adminIds = await context.Users
+                .Where(u => u.Role == "admin")
+                .Select(u => u.Id)
+                .ToListAsync();
+    
+            if (adminIds.Any())
+            {
+                var adminNotifications = adminIds.Select(adminId => new Notification
+                {
+                    Id = Guid.NewGuid(),
+                    User_Id = adminId,
+                    Type = "new_handyman_registration",
+                    Message = $"New handyman {newUser.Name} requires verification.",
+                    Is_Read = false,
+                    Created_At_Utc = DateTime.UtcNow
+                });
+    
+                context.Notifications.AddRange(adminNotifications);
+            }
+        }
+
         await context.SaveChangesAsync();
 
         logger.LogInformation("New user registered: {UserId} with role {Role}", newUser.Id, newUser.Role);
@@ -102,7 +137,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
 
         logger.LogInformation("Token rotated for user {UserId}", existingToken.User_Id);
         var (accessToken, expiresIn) = CreateJwtToken(existingToken.User);
-        return new AuthResponse(MapToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
+        return new AuthResponse(await MapToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
     }
 
     public async Task Logout(LogoutRequest request, Guid userId)
@@ -129,7 +164,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
     {
         var user = await context.Users.FindAsync(userId);
         if (user == null) throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
-        return MapToDto(user);
+        return await MapToDto(user);
     }
 
     private async Task<AuthResponse> GenerateAuthResponse(User user)
@@ -142,7 +177,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
         };
         context.Refresh_Tokens.Add(refreshToken);
         await context.SaveChangesAsync();
-        return new AuthResponse(MapToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
+        return new AuthResponse(await MapToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
     }
 
     private (string Token, int ExpiresIn) CreateJwtToken(User user)
@@ -169,18 +204,29 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
         return Convert.ToBase64String(randomNumber);
     }
 
-    private static UserDto MapToDto(User user) => new(
-        user.Id, 
-        user.Name.Trim(), 
-        user.Email.Trim(), 
-        user.Role.Trim(), 
-        user.AvatarUrl, 
-        user.Rating, 
-        user.CreatedAtUtc, 
-        user.IsActive,
-        user.Blocked_Reason,
-        user.Blocked_At_Utc
-    );
+    private async Task<UserDto> MapToDto(User user)
+    {
+        bool isVerified = true;
+        if (user.Role == "handyman")
+        {
+            isVerified = await context.Handyman_Verifications
+                .AnyAsync(v => v.User_Id == user.Id && v.Status == "approved");
+        }
+
+        return new UserDto(
+            user.Id, 
+            user.Name.Trim(), 
+            user.Email.Trim(), 
+            user.Role.Trim(), 
+            user.AvatarUrl, 
+            user.Rating, 
+            user.CreatedAtUtc, 
+            user.IsActive,
+            isVerified,
+            user.Blocked_Reason,
+            user.Blocked_At_Utc
+        );
+    }
 
     private static bool IsValidEmail(string email)
     {

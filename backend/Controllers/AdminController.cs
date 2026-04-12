@@ -93,13 +93,11 @@ public class AdminController(IAdminService adminService, ILogger<AdminController
     }
 
     // --- Handyman Verification ---
-    [Obsolete("This endpoint is currently not in use. ")]
     [HttpGet("handymen/pending-verification")]
     public async Task<ActionResult<IEnumerable<HandymanVerificationDto>>> GetPendingVerifications() 
         => Ok(await adminService.GetPendingVerificationsAsync());
 
     [HttpPatch("handymen/{id}/approve")]
-    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<IActionResult> ApproveHandyman(Guid id, [FromBody] string notes)
     {
         if (AdminId == Guid.Empty) return Unauthorized();
@@ -108,7 +106,6 @@ public class AdminController(IAdminService adminService, ILogger<AdminController
     }
 
     [HttpPatch("handymen/{id}/reject")]
-    [Obsolete("This endpoint is currently not in use. ")]
     public async Task<IActionResult> RejectHandyman(Guid id, [FromBody] string notes)
     {
         if (AdminId == Guid.Empty) return Unauthorized();
