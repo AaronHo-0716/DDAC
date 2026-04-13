@@ -102,6 +102,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const canEdit = !!job && isOwner;
   const canSubmitBid =
     !!job &&
+    job.status === "open" &&
     user?.role === "handyman" &&
     user.id !== job.postedBy.id &&
     isVerifiedHandyman;
