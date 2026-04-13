@@ -15,7 +15,7 @@ namespace backend.Services;
 
 public class AuthService(NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger) : IAuthService
 {
-    private static readonly string[] AllowedRoles = ["handyman", "homeowner", "admin"];
+    private static readonly string[] AllowedRoles = ["handyman", "homeowner"];
 
     public async Task<AuthResponse> Login(LoginRequest request)
     {

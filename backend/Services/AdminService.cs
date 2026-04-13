@@ -8,6 +8,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Configuration;
+using System.Text;
+using System.Net;
 
 namespace backend.Services;
 
@@ -22,6 +27,48 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             BidsCreatedToday: await context.Bids.CountAsync(b => b.Created_At_Utc >= today),
             OpenEmergencies: await context.Jobs.CountAsync(j => j.Is_Emergency && j.Status == "open"),
             BlockedAccountCount: await context.Users.CountAsync(u => !u.IsActive)
+        );
+    }
+
+    public async Task<UserDto> CreateAdminAsync(RegisterRequest request)
+    {
+        if (!IsValidEmail(request.Email))
+            throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
+
+        var emailLower = request.Email.ToLower().Trim();
+        if (await context.Users.AnyAsync(u => u.Email == emailLower))
+            throw new HttpRequestException("Email already exists.", null, HttpStatusCode.Conflict);
+
+
+        var newUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Name = request.Name.Trim(),
+            Email = emailLower,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            Role = "admin",
+            IsActive = true,
+            TokenVersion = 1
+        };
+
+        context.Users.Add(newUser);
+
+        await context.SaveChangesAsync();
+
+        logger.LogInformation("New admin added with email: {Email}", request.Email);
+
+        return new UserDto(
+            newUser.Id,
+            newUser.Name,
+            newUser.Email,
+            newUser.Role,
+            newUser.AvatarUrl,
+            newUser.Rating,
+            newUser.CreatedAtUtc,
+            newUser.IsActive,
+            true,
+            newUser.Blocked_Reason,
+            newUser.Blocked_At_Utc
         );
     }
 
@@ -286,5 +333,11 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             await context.SaveChangesAsync();
             logger.LogInformation("Report {ReportId} status changed to 'reviewed' by Admin {AdminId}", reportId, adminId);
         }
+    }
+    
+    private static bool IsValidEmail(string email)
+    {
+        try { return new System.Net.Mail.MailAddress(email).Address == email; }
+        catch { return false; }
     }
 }

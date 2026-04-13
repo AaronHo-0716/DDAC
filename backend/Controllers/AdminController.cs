@@ -7,6 +7,9 @@ using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Net;
+using Microsoft.EntityFrameworkCore;
 
 namespace backend.Controllers;
 
@@ -31,6 +34,27 @@ public class AdminController(IAdminService adminService, ILogger<AdminController
     {
         logger.LogInformation("Admin {AdminId} requested overview stats.", AdminId);
         return Ok(await adminService.GetOverviewAsync());
+    }
+
+    [HttpPost("new-admin")]
+    [EnableRateLimiting("auth_policy")]
+    public async Task<ActionResult<UserDto>> AddNewAdmin([FromBody] RegisterRequest request)
+    {
+        if (AdminId == Guid.Empty) return Unauthorized();
+
+        try
+        {
+            var result = await adminService.CreateAdminAsync(request);
+            return Ok(result);
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = "A user with this email already exists." });
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode((int)(ex.StatusCode ?? System.Net.HttpStatusCode.InternalServerError), new { message = ex.Message });
+        }
     }
 
     [HttpGet("users")]

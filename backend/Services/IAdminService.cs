@@ -8,6 +8,7 @@ namespace backend.Services;
 public interface IAdminService
 {
     Task<AdminOverviewResponse> GetOverviewAsync();
+    Task<UserDto> CreateAdminAsync(RegisterRequest request);
     Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request);
     Task<UserDto> GetUserByIdAsync(Guid id);
     Task<BlockedUserResponse?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken);
