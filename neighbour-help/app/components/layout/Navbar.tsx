@@ -10,12 +10,14 @@ import { notificationsService } from "@/app/lib/api/notifications";
 const homeownerNavLinks = [
   { label: "My Jobs", href: "/my-jobs" },
   { label: "Dashboard", href: "/dashboard" },
+  { label: "My Reports", href: "/reports" },
   { label: "Post Job", href: "/create-job" },
 ];
 
 const handymanNavLinks = [
   { label: "Browse Jobs", href: "/handyman" },
   { label: "My Bids", href: "/handyman/bids" },
+  { label: "My Reports", href: "/reports" },
   { label: "Active Jobs", href: "/handyman/active-jobs" },
 ];
 

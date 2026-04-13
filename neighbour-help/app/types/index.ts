@@ -325,3 +325,9 @@ export interface UserReport {
   reviewAtUtc?: string;
   adminNotes?: string;
 }
+
+export interface CreateReportRequest {
+  targetUserId: string;
+  reason: string;
+  description: string;
+}

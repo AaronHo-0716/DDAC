@@ -24,9 +24,10 @@ interface BidCardProps {
   bid: Bid;
   onAccept?: (id: string) => void;
   onMessage?: (id: string) => void;
+  onReport?: (id: string) => void;
 }
 
-export default function BidCard({ bid, onAccept, onMessage }: BidCardProps) {
+export default function BidCard({ bid, onAccept, onMessage, onReport }: BidCardProps) {
   const arrival = new Date(bid.estimatedArrival);
   const accepted = bid.status === "accepted";
   const pending = bid.status === "pending";
@@ -94,6 +95,17 @@ export default function BidCard({ bid, onAccept, onMessage }: BidCardProps) {
       </div>
 
       <p className="text-sm text-[#6B7280] mb-4 line-clamp-3">{bid.message}</p>
+
+      {onReport && (
+        <div className="mb-3">
+          <button
+            onClick={() => onReport(bid.id)}
+            className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline"
+          >
+            Report this user
+          </button>
+        </div>
+      )}
 
       {pending && (
         <div className="flex gap-2">

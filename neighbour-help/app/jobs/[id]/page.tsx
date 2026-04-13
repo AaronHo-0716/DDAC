@@ -108,6 +108,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     user?.role === "handyman" &&
     user.id !== job.postedBy.id &&
     isVerifiedHandyman;
+  const canReportHomeowner =
+    !!job &&
+    user?.role === "handyman" &&
+    user.id !== job.postedBy.id;
   const showUnverifiedBidWarning =
     !!job &&
     user?.role === "handyman" &&
@@ -248,6 +252,22 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     });
   }, [bids, job, openForBidChat]);
 
+  const handleReportUser = useCallback((targetUserId: string, targetUserName: string) => {
+    const query = new URLSearchParams({
+      targetUserId,
+      targetName: targetUserName,
+    });
+
+    router.push(`/reports?${query.toString()}`);
+  }, [router]);
+
+  const handleReportBidUser = useCallback((bidId: string) => {
+    const target = bids.find((bid) => bid.id === bidId);
+    if (!target) return;
+
+    handleReportUser(target.handyman.id, target.handyman.name);
+  }, [bids, handleReportUser]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
@@ -308,7 +328,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         )}
 
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-          <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-center gap-2 flex-wrap">
               <StatusBadge status={job.status} />
               {job.isEmergency && <StatusBadge status="emergency" />}
@@ -317,15 +337,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </span>
             </div>
 
-            {(canEdit || canSubmitBid) && !editing && (
-              <div className="flex items-center gap-2">
-                {canSubmitBid && (
-                  <PrimaryButton size="sm" onClick={() => setShowBidModal(true)}>
-                    Submit Bid
-                  </PrimaryButton>
+            {(canEdit || canReportHomeowner) && !editing && (
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                {canReportHomeowner && (
+                  <button
+                    onClick={() => handleReportUser(job.postedBy.id, job.postedBy.name)}
+                    className="inline-flex items-center gap-1.5 self-start rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-100 sm:self-auto"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Report homeowner
+                  </button>
                 )}
+
                 {canEdit && (
-                  <>
+                  <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
                     <PrimaryButton size="sm" variant="secondary" onClick={() => setEditing(true)}>
                       <Pencil className="w-3.5 h-3.5" /> Edit
                     </PrimaryButton>
@@ -338,7 +363,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     >
                       <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Deleting..." : "Delete"}
                     </PrimaryButton>
-                  </>
+                  </div>
                 )}
               </div>
             )}
@@ -366,6 +391,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </div>
 
               <p className="text-sm text-[#374151] leading-relaxed whitespace-pre-wrap">{job.description}</p>
+
+              {canSubmitBid && (
+                <div className="mt-6 flex justify-end">
+                  <PrimaryButton size="sm" onClick={() => setShowBidModal(true)}>
+                    Submit Bid
+                  </PrimaryButton>
+                </div>
+              )}
             </>
           ) : (
             <div className="space-y-4">
@@ -505,6 +538,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       bid={bid}
                       onAccept={handleAcceptBid}
                       onMessage={handleMessageBid}
+                      onReport={handleReportBidUser}
                     />
                     {bid.status === "pending" && (
                       <div className="flex justify-end">
