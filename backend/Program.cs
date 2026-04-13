@@ -125,6 +125,7 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IBidService, BidService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
 
 var app = builder.Build();
 
