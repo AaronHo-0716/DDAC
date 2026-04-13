@@ -1,6 +1,7 @@
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export type UserRole = "homeowner" | "handyman" | "admin";
+export type VerificationStatus = "pending" | "approved" | "rejected";
 
 export interface User {
   id: string;
@@ -11,7 +12,7 @@ export interface User {
   rating?: number;
   createdAt: string;
   isActive?: boolean;
-  verification?: boolean;
+  verification?: VerificationStatus;
 }
 
 export interface AuthTokens {

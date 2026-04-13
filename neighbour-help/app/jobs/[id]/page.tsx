@@ -98,7 +98,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     return user.role === "homeowner" && user.id === job.postedBy.id;
   }, [job, user]);
 
-  const isVerifiedHandyman = user?.role !== "handyman" || user.verification !== false;
+  const verificationStatus = user?.verification ?? "pending";
+  const isVerifiedHandyman =
+    user?.role !== "handyman" || verificationStatus === "approved";
   const canEdit = !!job && isOwner;
   const canSubmitBid =
     !!job &&
@@ -297,8 +299,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                Your handyman account is pending verification. You can view this job,
-                but bid submission is disabled until your verification is approved.
+                {verificationStatus === "rejected"
+                  ? "Your handyman verification was rejected. You can view this job, but bid submission is disabled. Please contact support or an admin."
+                  : "Your handyman account is pending verification. You can view this job, but bid submission is disabled until your verification is approved."}
               </p>
             </div>
           </div>
