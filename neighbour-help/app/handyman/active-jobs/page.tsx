@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Clock3, Hammer, ArrowRight } from "lucide-react";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import StatusBadge from "@/app/components/ui/StatusBadge";
 import type { Job } from "@/app/types";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
+import { bidsService } from "@/app/lib/api/bids";
+import { jobsService } from "@/app/lib/api/jobs";
 
 function SectionCard({
   title,
@@ -60,11 +63,70 @@ function SectionCard({
 
 export default function HandymanActiveJobsPage() {
   const { authorized, loading } = useRequireRole("handyman");
-  const jobs: Job[] = [];
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authorized) return;
+
+    let isCancelled = false;
+
+    const loadActiveJobs = async () => {
+      setIsLoadingJobs(true);
+      setErrorMessage(null);
+
+      try {
+        const bidResponse = await bidsService.getMyBids({ page: 1, pageSize: 100 });
+        const acceptedJobIds = [...new Set(
+          bidResponse.bids
+            .filter((bid) => bid.status === "accepted")
+            .map((bid) => bid.jobId)
+            .filter((jobId) => jobId.length > 0)
+        )];
+
+        if (acceptedJobIds.length === 0) {
+          if (!isCancelled) setJobs([]);
+          return;
+        }
+
+        const fetchedJobs = await Promise.all(
+          acceptedJobIds.map(async (jobId) => {
+            try {
+              return await jobsService.getJobById(jobId);
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        if (!isCancelled) {
+          const validJobs = fetchedJobs.filter((job): job is Job => job !== null);
+          validJobs.sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
+          setJobs(validJobs);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setJobs([]);
+          setErrorMessage(error instanceof Error ? error.message : "Failed to load active jobs.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingJobs(false);
+        }
+      }
+    };
+
+    void loadActiveJobs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [authorized]);
 
   if (loading || !authorized) return null;
 
-  const accepted = jobs.filter((job) => job.status === "open");
+  const accepted = jobs;
   const inProgress = jobs.filter((job) => job.status === "in-progress");
   const completed = jobs.filter((job) => job.status === "completed");
 
@@ -84,6 +146,18 @@ export default function HandymanActiveJobsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-5">
+          {errorMessage && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
+
+          {isLoadingJobs && (
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-10 text-center">
+              <p className="text-[#6B7280] text-sm">Loading active jobs...</p>
+            </div>
+          )}
+
           <SectionCard
             title="Accepted"
             icon={<Clock3 className="w-4 h-4 text-amber-500" />}

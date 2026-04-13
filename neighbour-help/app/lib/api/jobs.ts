@@ -80,7 +80,7 @@ function toJobCategory(value?: string | null): JobCategory {
 }
 
 function toJobStatus(value?: string | null): JobStatus {
-  const normalized = (value ?? "open").toLowerCase();
+  const normalized = (value ?? "open").toLowerCase().replace("_", "-");
   if (normalized === "in-progress") return "in-progress";
   if (normalized === "completed") return "completed";
   return "open";

@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Trash2, X } from "lucide-react";
 import type { Bid, Job, JobCategory } from "@/app/types";
 import { jobsService } from "@/app/lib/api/jobs";
 import { bidsService } from "@/app/lib/api/bids";
@@ -98,8 +98,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     return user.role === "homeowner" && user.id === job.postedBy.id;
   }, [job, user]);
 
+  const isVerifiedHandyman = user?.role !== "handyman" || user.verification !== false;
   const canEdit = !!job && isOwner;
-  const canSubmitBid = !!job && user?.role === "handyman" && user.id !== job.postedBy.id;
+  const canSubmitBid =
+    !!job &&
+    job.status === "open" &&
+    user?.role === "handyman" &&
+    user.id !== job.postedBy.id &&
+    isVerifiedHandyman;
+  const showUnverifiedBidWarning =
+    !!job &&
+    user?.role === "handyman" &&
+    user.id !== job.postedBy.id &&
+    !isVerifiedHandyman;
 
   useEffect(() => {
     if (!job || !isOwner) {
@@ -278,6 +289,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
+          </div>
+        )}
+
+        {showUnverifiedBidWarning && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                Your handyman account is pending verification. You can view this job,
+                but bid submission is disabled until your verification is approved.
+              </p>
+            </div>
           </div>
         )}
 

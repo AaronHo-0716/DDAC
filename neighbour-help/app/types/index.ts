@@ -11,6 +11,7 @@ export interface User {
   rating?: number;
   createdAt: string;
   isActive?: boolean;
+  verification?: boolean;
 }
 
 export interface AuthTokens {
