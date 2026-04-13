@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Ban, CheckCircle2, UserCheck, UserX } from "lucide-react";
+import { Ban, CheckCircle2, UserCheck, UserPlus, UserX } from "lucide-react";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import {
   adminService,
@@ -48,6 +48,12 @@ export default function AdminUsersPage() {
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | UserStatus>("all");
+  const [newAdminName, setNewAdminName] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
+  const [createAdminError, setCreateAdminError] = useState<string | null>(null);
+  const [createAdminSuccess, setCreateAdminSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authorized) return;
@@ -141,6 +147,38 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const name = newAdminName.trim();
+    const email = newAdminEmail.trim().toLowerCase();
+    const password = newAdminPassword;
+
+    if (!name || !email || !password) {
+      setCreateAdminError("Name, email, and password are required.");
+      setCreateAdminSuccess(null);
+      return;
+    }
+
+    setCreatingAdmin(true);
+    setCreateAdminError(null);
+    setCreateAdminSuccess(null);
+
+    try {
+      await adminService.createAdmin(name, email, password);
+      const users = await adminService.getUsers();
+      setRows(users);
+      setNewAdminName("");
+      setNewAdminEmail("");
+      setNewAdminPassword("");
+      setCreateAdminSuccess(`Admin account for ${email} created successfully.`);
+    } catch (err) {
+      setCreateAdminError(err instanceof Error ? err.message : "Failed to create admin account.");
+    } finally {
+      setCreatingAdmin(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
@@ -191,6 +229,56 @@ export default function AdminUsersPage() {
             {error}
           </div>
         )}
+
+        <div className="mb-5 rounded-2xl border border-[#E5E7EB] bg-white p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-[#0B74FF]" />
+            <h2 className="text-sm font-semibold text-[#111827]">Add New Admin</h2>
+          </div>
+
+          {createAdminError && (
+            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+              {createAdminError}
+            </div>
+          )}
+
+          {createAdminSuccess && (
+            <div className="mb-3 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+              {createAdminSuccess}
+            </div>
+          )}
+
+          <form onSubmit={handleCreateAdmin} className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <input
+              value={newAdminName}
+              onChange={(e) => setNewAdminName(e.target.value)}
+              placeholder="Account name"
+              className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+            />
+            <input
+              type="email"
+              value={newAdminEmail}
+              onChange={(e) => setNewAdminEmail(e.target.value)}
+              placeholder="Email address"
+              className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+            />
+            <input
+              type="password"
+              value={newAdminPassword}
+              onChange={(e) => setNewAdminPassword(e.target.value)}
+              placeholder="Password"
+              className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+            />
+            <button
+              type="submit"
+              disabled={creatingAdmin}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B74FF] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#065ed1] disabled:opacity-60"
+            >
+              <UserPlus className="h-4 w-4" />
+              {creatingAdmin ? "Creating..." : "Create Admin"}
+            </button>
+          </form>
+        </div>
 
         <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden">
           <div className="overflow-x-auto">

@@ -75,6 +75,17 @@ function toAdminUser(row: RawUserDto): AdminUserItem {
 }
 
 export const adminService = {
+  async createAdmin(name: string, email: string, password: string): Promise<AdminUserItem> {
+    const created = await apiClient.post<RawUserDto>("/admin/new-admin", {
+      name,
+      email,
+      password,
+      role: "admin",
+    });
+
+    return toAdminUser(created);
+  },
+
   async getUsers(): Promise<AdminUserItem[]> {
     const users = await apiClient.get<RawUserDto[]>("/admin/users?page=1&pageSize=200");
 
