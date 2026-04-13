@@ -198,7 +198,7 @@ CREATE INDEX IF NOT EXISTS ix_bid_tx_event_type_created ON bid_transactions(even
 CREATE INDEX IF NOT EXISTS ix_admin_actions_actor_created ON admin_actions(admin_user_id, created_at_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_admin_actions_target ON admin_actions(target_type, target_id, created_at_utc DESC);
 
-CREATE TABLE conversations (
+CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type conversation_type NOT NULL,
   related_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
@@ -212,7 +212,7 @@ CREATE TABLE conversations (
     CHECK (type <> 'job_chat' OR related_job_id IS NOT NULL)
 );
 
-CREATE TABLE conversation_participants (
+CREATE TABLE IF NOT EXISTS conversation_participants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id),
@@ -229,7 +229,7 @@ CREATE TABLE conversation_participants (
 
 );
 
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_user_id UUID NOT NULL REFERENCES users(id),
@@ -244,11 +244,11 @@ CREATE TABLE messages (
   client_message_id VARCHAR(100)
 );
 
-CREATE UNIQUE INDEX uq_messages_conversation_client_message
+CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_conversation_client_message
   ON messages(conversation_id, client_message_id)
   WHERE client_message_id IS NOT NULL;
 
-CREATE TABLE message_moderation_actions (
+CREATE TABLE IF NOT EXISTS message_moderation_actions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -259,23 +259,23 @@ CREATE TABLE message_moderation_actions (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX ix_conversations_type_status_last_message
+CREATE INDEX IF NOT EXISTS ix_conversations_type_status_last_message
   ON conversations(type, status, last_message_at_utc DESC NULLS LAST);
 
-CREATE INDEX ix_conversation_participants_user_unread
+CREATE INDEX IF NOT EXISTS ix_conversation_participants_user_unread
   ON conversation_participants(user_id, unread_count DESC);
 
-CREATE INDEX ix_conversation_participants_conversation
+CREATE INDEX IF NOT EXISTS ix_conversation_participants_conversation
   ON conversation_participants(conversation_id);
 
-CREATE INDEX ix_messages_conversation_created
+CREATE INDEX IF NOT EXISTS ix_messages_conversation_created
   ON messages(conversation_id, created_at_utc DESC);
 
-CREATE INDEX ix_messages_sender_created
+CREATE INDEX IF NOT EXISTS ix_messages_sender_created
   ON messages(sender_user_id, created_at_utc DESC);
 
-CREATE INDEX ix_message_moderation_actions_conversation_created
+CREATE INDEX IF NOT EXISTS ix_message_moderation_actions_conversation_created
   ON message_moderation_actions(conversation_id, created_at_utc DESC);
 
-CREATE INDEX ix_message_moderation_actions_message_created
+CREATE INDEX IF NOT EXISTS ix_message_moderation_actions_message_created
   ON message_moderation_actions(message_id, created_at_utc DESC);
