@@ -20,7 +20,4 @@ public interface IAdminService
     Task<BidTransactionDto> GetBidTransactionByIdAsync(Guid id);
     Task HandleBidActionAsync(Guid bidId, string actionType, string reason, Guid adminId);
     Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync();
-    Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatusFilter? status = null);
-    Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId);
-    Task ReviewReportAsync(Guid reportId, Guid adminId);
 }

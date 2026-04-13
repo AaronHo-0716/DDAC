@@ -11,6 +11,4 @@ public interface IAuthService
     Task<UserDto> GetUserById(Guid userId);
     Task<AuthResponse> RefreshToken(string token);
     Task Logout(LogoutRequest request, Guid userId);
-    Task CreateReportAsync(CreateReportRequest request, Guid reporterId);
-    Task<IEnumerable<UserReportDto>> GetMyReportsAsync(Guid userId);
 }

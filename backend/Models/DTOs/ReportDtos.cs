@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 namespace backend.Models.DTOs;
 
+public enum ReportStatusFilter { pending, reviewed, resolved }
+
 public record CreateReportRequest(
     Guid TargetUserId,
     string Reason,
@@ -19,13 +21,9 @@ public record UserReportDto(
     string Description,
     string Status,
     DateTime CreatedAtUtc,
+    Guid? AdminId,
+    string? AdminName,
+    DateTime? ReviewAtUtc,
     string? AdminNotes = null
 );
-
-public enum ReportStatusFilter
-{
-    pending,
-    reviewed,
-    resolved
-}
 
