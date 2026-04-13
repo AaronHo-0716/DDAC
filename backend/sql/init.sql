@@ -197,3 +197,85 @@ CREATE INDEX IF NOT EXISTS ix_bid_tx_event_type_created ON bid_transactions(even
 
 CREATE INDEX IF NOT EXISTS ix_admin_actions_actor_created ON admin_actions(admin_user_id, created_at_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_admin_actions_target ON admin_actions(target_type, target_id, created_at_utc DESC);
+
+CREATE TABLE conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type conversation_type NOT NULL,
+  related_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
+  related_bid_id UUID REFERENCES bids(id) ON DELETE SET NULL,
+  created_by_user_id UUID NOT NULL REFERENCES users(id),
+  status conversation_status NOT NULL DEFAULT 'active',
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_message_at_utc TIMESTAMPTZ,
+  closed_at_utc TIMESTAMPTZ,
+  CONSTRAINT chk_conversations_job_chat_requires_job
+    CHECK (type <> 'job_chat' OR related_job_id IS NOT NULL)
+);
+
+CREATE TABLE conversation_participants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id),
+  participant_role user_role NOT NULL,
+  joined_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  left_at_utc TIMESTAMPTZ,
+  is_muted BOOLEAN NOT NULL DEFAULT FALSE,
+  muted_until_utc TIMESTAMPTZ,
+  unread_count INT NOT NULL DEFAULT 0,
+  last_read_message_id UUID,
+  CONSTRAINT uq_conversation_participant UNIQUE (conversation_id, user_id),
+  CONSTRAINT chk_conversation_participants_unread_nonnegative CHECK (unread_count >= 0),
+  CONSTRAINT fk_conversation_participants_last_read_message FOREIGN KEY (last_read_message_id) REFERENCES messages(id) ON DELETE SET NULL
+
+);
+
+CREATE TABLE messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_user_id UUID NOT NULL REFERENCES users(id),
+  message_type message_type NOT NULL DEFAULT 'text',
+  body_text TEXT NOT NULL,
+  metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+  edited_at_utc TIMESTAMPTZ,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  deleted_at_utc TIMESTAMPTZ,
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  client_message_id VARCHAR(100)
+);
+
+CREATE UNIQUE INDEX uq_messages_conversation_client_message
+  ON messages(conversation_id, client_message_id)
+  WHERE client_message_id IS NOT NULL;
+
+CREATE TABLE message_moderation_actions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  admin_user_id UUID NOT NULL REFERENCES users(id),
+  action_type message_moderation_action_type NOT NULL,
+  reason TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_conversations_type_status_last_message
+  ON conversations(type, status, last_message_at_utc DESC NULLS LAST);
+
+CREATE INDEX ix_conversation_participants_user_unread
+  ON conversation_participants(user_id, unread_count DESC);
+
+CREATE INDEX ix_conversation_participants_conversation
+  ON conversation_participants(conversation_id);
+
+CREATE INDEX ix_messages_conversation_created
+  ON messages(conversation_id, created_at_utc DESC);
+
+CREATE INDEX ix_messages_sender_created
+  ON messages(sender_user_id, created_at_utc DESC);
+
+CREATE INDEX ix_message_moderation_actions_conversation_created
+  ON message_moderation_actions(conversation_id, created_at_utc DESC);
+
+CREATE INDEX ix_message_moderation_actions_message_created
+  ON message_moderation_actions(message_id, created_at_utc DESC);

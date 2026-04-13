@@ -23,6 +23,10 @@ public partial class NeighbourHelpDbContext : DbContext
     public virtual DbSet<Refresh_Token> Refresh_Tokens { get; set; }
     public virtual DbSet<User> Users { get; set; }
     public virtual DbSet<User_Report> User_Reports { get; set; }
+    public virtual DbSet<Conversation> Conversations { get; set; }
+    public virtual DbSet<Conversation_Participant> Conversation_Participants { get; set; }
+    public virtual DbSet<Message> Messages { get; set; }
+    public virtual DbSet<Message_Moderation_Action> Message_Moderation_Actions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -245,6 +249,101 @@ public partial class NeighbourHelpDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.Reviewed_By_Admin_Id)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // --- 12. CONVERSATIONS ---
+        modelBuilder.Entity<Conversation>(entity =>
+        {
+            entity.ToTable("conversations");
+            entity.HasKey(e => e.Id).HasName("conversations_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Type).HasColumnName("type");
+            entity.Property(e => e.Related_Job_Id).HasColumnName("related_job_id");
+            entity.Property(e => e.Related_Bid_Id).HasColumnName("related_bid_id");
+            entity.Property(e => e.Created_By_User_Id).HasColumnName("created_by_user_id");
+            entity.Property(e => e.Status).HasColumnName("status").HasDefaultValue("active");
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+            entity.Property(e => e.Last_Message_At_Utc).HasColumnName("last_message_at_utc");
+            entity.Property(e => e.Closed_At_Utc).HasColumnName("closed_at_utc");
+    
+            entity.HasOne(d => d.Created_By_User).WithMany().HasForeignKey(d => d.Created_By_User_Id).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(d => d.Related_Job).WithMany().HasForeignKey(d => d.Related_Job_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.Related_Bid).WithMany().HasForeignKey(d => d.Related_Bid_Id).OnDelete(DeleteBehavior.SetNull);
+    
+            entity.HasIndex(e => new { e.Type, e.Status, e.Last_Message_At_Utc }).HasDatabaseName("ix_conversations_type_status_last_message");
+        });
+    
+        // --- 13. CONVERSATION PARTICIPANTS ---
+        modelBuilder.Entity<Conversation_Participant>(entity =>
+        {
+            entity.ToTable("conversation_participants");
+            entity.HasKey(e => e.Id).HasName("conversation_participants_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Conversation_Id).HasColumnName("conversation_id");
+            entity.Property(e => e.User_Id).HasColumnName("user_id");
+            entity.Property(e => e.Participant_Role).HasColumnName("participant_role");
+            entity.Property(e => e.Joined_At_Utc).HasColumnName("joined_at_utc").HasDefaultValueSql("now()");
+            entity.Property(e => e.Left_At_Utc).HasColumnName("left_at_utc");
+            entity.Property(e => e.Is_Muted).HasColumnName("is_muted").HasDefaultValue(false);
+            entity.Property(e => e.Muted_Until_Utc).HasColumnName("muted_until_utc");
+            entity.Property(e => e.Unread_Count).HasColumnName("unread_count").HasDefaultValue(0);
+            entity.Property(e => e.Last_Read_Message_Id).HasColumnName("last_read_message_id");
+    
+            entity.HasOne(d => d.Conversation).WithMany(p => p.Participants).HasForeignKey(d => d.Conversation_Id).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.User).WithMany().HasForeignKey(d => d.User_Id).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(d => d.Last_Read_Message).WithMany().HasForeignKey(d => d.Last_Read_Message_Id).OnDelete(DeleteBehavior.SetNull);
+    
+            entity.HasIndex(e => new { e.Conversation_Id, e.User_Id }).IsUnique().HasDatabaseName("uq_conversation_participant");
+            entity.HasIndex(e => new { e.User_Id, e.Unread_Count }).HasDatabaseName("ix_conversation_participants_user_unread");
+        });
+    
+        // --- 14. MESSAGES ---
+        modelBuilder.Entity<Message>(entity =>
+        {
+            entity.ToTable("messages");
+            entity.HasKey(e => e.Id).HasName("messages_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Conversation_Id).HasColumnName("conversation_id");
+            entity.Property(e => e.Sender_User_Id).HasColumnName("sender_user_id");
+            entity.Property(e => e.Message_Type).HasColumnName("message_type").HasDefaultValue("text");
+            entity.Property(e => e.Body_Text).HasColumnName("body_text");
+            entity.Property(e => e.Metadata_Json).HasColumnName("metadata_json").HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
+            entity.Property(e => e.Is_Edited).HasColumnName("is_edited").HasDefaultValue(false);
+            entity.Property(e => e.Edited_At_Utc).HasColumnName("edited_at_utc");
+            entity.Property(e => e.Is_Deleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.Deleted_At_Utc).HasColumnName("deleted_at_utc");
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+            entity.Property(e => e.Client_Message_Id).HasColumnName("client_message_id").HasMaxLength(100);
+    
+            entity.HasOne(d => d.Conversation).WithMany(p => p.Messages).HasForeignKey(d => d.Conversation_Id).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.Sender_User).WithMany().HasForeignKey(d => d.Sender_User_Id).OnDelete(DeleteBehavior.Restrict);
+    
+            // Filtered Unique Index for ClientMessageId scope within Conversation
+            entity.HasIndex(e => new { e.Conversation_Id, e.Client_Message_Id })
+                  .IsUnique()
+                  .HasFilter("\"client_message_id\" IS NOT NULL")
+                  .HasDatabaseName("uq_messages_conversation_client_message");
+    
+            entity.HasIndex(e => new { e.Conversation_Id, e.Created_At_Utc }).HasDatabaseName("ix_messages_conversation_created");
+        });
+    
+        // --- 15. MESSAGE MODERATION ACTIONS ---
+        modelBuilder.Entity<Message_Moderation_Action>(entity =>
+        {
+            entity.ToTable("message_moderation_actions");
+            entity.HasKey(e => e.Id).HasName("message_moderation_actions_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Message_Id).HasColumnName("message_id");
+            entity.Property(e => e.Conversation_Id).HasColumnName("conversation_id");
+            entity.Property(e => e.Admin_User_Id).HasColumnName("admin_user_id");
+            entity.Property(e => e.Action_Type).HasColumnName("action_type");
+            entity.Property(e => e.Reason).HasColumnName("reason");
+            entity.Property(e => e.Payload).HasColumnName("payload").HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+    
+            entity.HasOne(d => d.Message).WithMany(p => p.Moderation_Actions).HasForeignKey(d => d.Message_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.Conversation).WithMany(p => p.Moderation_Actions).HasForeignKey(d => d.Conversation_Id).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.Admin_User).WithMany().HasForeignKey(d => d.Admin_User_Id).OnDelete(DeleteBehavior.Restrict);
         });
 
         OnModelCreatingPartial(modelBuilder);
