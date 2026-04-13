@@ -38,6 +38,7 @@ interface RawUserDto {
   email?: string | null;
   role?: string | null;
   isActive?: boolean | null;
+  verification?: string | null;
   createdAt?: string | null;
 }
 
@@ -55,40 +56,31 @@ function normalizeRole(value?: string | null): UserRole {
 }
 
 function toAdminUser(row: RawUserDto): AdminUserItem {
+  const role = normalizeRole(row.role);
+  const verification = (row.verification ?? "").toLowerCase();
+  const verificationStatus: VerificationStatus | undefined =
+    role === "handyman" && (verification === "pending" || verification === "approved" || verification === "rejected")
+      ? verification
+      : undefined;
+
   return {
     id: row.id ?? "",
     name: row.name ?? "Unknown user",
     email: row.email ?? "",
-    role: normalizeRole(row.role),
+    role,
     status: row.isActive === false ? "blocked" : "active",
+    verificationStatus,
     createdAt: row.createdAt ?? new Date(0).toISOString(),
   };
 }
 
 export const adminService = {
   async getUsers(): Promise<AdminUserItem[]> {
-    const [users, pendingVerifications] = await Promise.all([
-      apiClient.get<RawUserDto[]>("/admin/users?page=1&pageSize=200"),
-      apiClient
-        .get<RawHandymanVerificationDto[]>("/admin/handymen/pending-verification")
-        .catch(() => [] as RawHandymanVerificationDto[]),
-    ]);
-
-    const pendingByUserId = new Map(
-      (Array.isArray(pendingVerifications) ? pendingVerifications : [])
-        .filter((v) => v.userId && v.status?.toLowerCase() === "pending")
-        .map((v) => [v.userId as string, v])
-    );
+    const users = await apiClient.get<RawUserDto[]>("/admin/users?page=1&pageSize=200");
 
     if (!Array.isArray(users)) return [];
 
-    return users.map((row) => {
-      const user = toAdminUser(row);
-      if (user.role === "handyman" && pendingByUserId.has(user.id)) {
-        return { ...user, verificationStatus: "pending" as const };
-      }
-      return user;
-    });
+    return users.map((row) => toAdminUser(row));
   },
 
   async blockUser(userId: string): Promise<void> {

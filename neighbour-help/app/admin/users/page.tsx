@@ -237,7 +237,7 @@ export default function AdminUsersPage() {
                           </button>
                         )}
 
-                        {row.role === "handyman" && (
+                        {row.role === "handyman" && row.verificationStatus === "pending" && (
                           <>
                             <button
                               onClick={() => void updateVerification(row.id, "approved")}
