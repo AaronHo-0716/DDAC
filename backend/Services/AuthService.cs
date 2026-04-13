@@ -184,16 +184,24 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
     {
         var claims = new List<Claim> {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Email, user.Email.Trim()),
+            new(ClaimTypes.Name, user.Name.Trim()),
             new(ClaimTypes.Role, user.Role.Trim()),
-            new("TokenVersion", user.TokenVersion.ToString()) 
         };
+    
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]!));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+    
+        var expiryMinutes = config.GetValue<int>("Jwt:ExpiryInMinutes", 60);
         var token = new JwtSecurityToken(
-            issuer: config["Jwt:Issuer"], audience: config["Jwt:Audience"], claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(config.GetValue<int>("Jwt:ExpiryInMinutes", 60)),
-            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
+            issuer: config["Jwt:Issuer"],
+            audience: config["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(expiryMinutes),
+            signingCredentials: creds
         );
-        return (new JwtSecurityTokenHandler().WriteToken(token), 3600);
+    
+        return (new JwtSecurityTokenHandler().WriteToken(token), expiryMinutes * 60);
     }
 
     private string GenerateSecureRandomString()

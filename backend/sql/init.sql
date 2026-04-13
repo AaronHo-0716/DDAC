@@ -200,11 +200,11 @@ CREATE INDEX IF NOT EXISTS ix_admin_actions_target ON admin_actions(target_type,
 
 CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  type conversation_type NOT NULL,
+  type VARCHAR(50) NOT NULL,
   related_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
   related_bid_id UUID REFERENCES bids(id) ON DELETE SET NULL,
   created_by_user_id UUID NOT NULL REFERENCES users(id),
-  status conversation_status NOT NULL DEFAULT 'active',
+  status VARCHAR(50) NOT NULL DEFAULT 'active',
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_message_at_utc TIMESTAMPTZ,
   closed_at_utc TIMESTAMPTZ,
@@ -212,28 +212,11 @@ CREATE TABLE IF NOT EXISTS conversations (
     CHECK (type <> 'job_chat' OR related_job_id IS NOT NULL)
 );
 
-CREATE TABLE IF NOT EXISTS conversation_participants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id),
-  participant_role user_role NOT NULL,
-  joined_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  left_at_utc TIMESTAMPTZ,
-  is_muted BOOLEAN NOT NULL DEFAULT FALSE,
-  muted_until_utc TIMESTAMPTZ,
-  unread_count INT NOT NULL DEFAULT 0,
-  last_read_message_id UUID,
-  CONSTRAINT uq_conversation_participant UNIQUE (conversation_id, user_id),
-  CONSTRAINT chk_conversation_participants_unread_nonnegative CHECK (unread_count >= 0),
-  CONSTRAINT fk_conversation_participants_last_read_message FOREIGN KEY (last_read_message_id) REFERENCES messages(id) ON DELETE SET NULL
-
-);
-
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_user_id UUID NOT NULL REFERENCES users(id),
-  message_type message_type NOT NULL DEFAULT 'text',
+  message_type VARCHAR(50) NOT NULL DEFAULT 'text',
   body_text TEXT NOT NULL,
   metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   is_edited BOOLEAN NOT NULL DEFAULT FALSE,
@@ -248,12 +231,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_conversation_client_message
   ON messages(conversation_id, client_message_id)
   WHERE client_message_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS conversation_participants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id),
+  participant_role VARCHAR(50) NOT NULL,
+  joined_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  left_at_utc TIMESTAMPTZ,
+  is_muted BOOLEAN NOT NULL DEFAULT FALSE,
+  muted_until_utc TIMESTAMPTZ,
+  unread_count INT NOT NULL DEFAULT 0,
+  last_read_message_id UUID,
+  CONSTRAINT uq_conversation_participant UNIQUE (conversation_id, user_id),
+  CONSTRAINT chk_conversation_participants_unread_nonnegative CHECK (unread_count >= 0),
+  CONSTRAINT fk_conversation_participants_last_read_message FOREIGN KEY (last_read_message_id) REFERENCES messages(id) ON DELETE SET NULL
+
+);
+
 CREATE TABLE IF NOT EXISTS message_moderation_actions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   admin_user_id UUID NOT NULL REFERENCES users(id),
-  action_type message_moderation_action_type NOT NULL,
+  action_type VARCHAR(50) NOT NULL,
   reason TEXT,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
