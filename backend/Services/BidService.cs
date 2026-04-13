@@ -46,6 +46,30 @@ public class BidService : IBidService
         );
     }
 
+    public async Task<BidListResponse> GetMyBidsAsync(Guid userId, int page = 1, int pageSize = 10)
+    {
+        var query = _context.Bids
+            .Where(b => b.Handyman_User_Id == userId)
+            .OrderByDescending(b => b.Created_At_Utc);
+
+        var totalCount = await query.CountAsync();
+
+        var bids = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(b => b.Handyman_User)
+            .ToListAsync();
+
+        var bidDtos = bids.Select(MapBidToDto).ToList();
+
+        return new BidListResponse(
+            Bids: bidDtos,
+            Page: page,
+            PageSize: pageSize,
+            TotalCount: totalCount
+        );
+    }
+
     public async Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request, Guid userId, string userRole)
     {
         if (userRole != "handyman")
@@ -64,6 +88,11 @@ public class BidService : IBidService
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null || !user.IsActive)
             throw new UnauthorizedAccessException("User account is inactive or blocked");
+
+        var isHandymanVerified = await _context.Handyman_Verifications
+            .AnyAsync(v => v.User_Id == userId && v.Status == "approved");
+        if (!isHandymanVerified)
+            throw new ArgumentException("Your handyman account is not verified yet. You cannot place bids until your verification is approved.");
 
         var existingBid = await _context.Bids
             .FirstOrDefaultAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId);

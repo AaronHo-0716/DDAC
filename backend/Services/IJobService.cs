@@ -129,7 +129,16 @@ public class JobService : IJobService
 
         if (userRole == "handyman" && job.Status != "open")
         {
-            return null;
+            if (!userId.HasValue)
+                return null;
+
+            var hasAcceptedBid = await _context.Bids.AnyAsync(b =>
+                b.Job_Id == jobId &&
+                b.Handyman_User_Id == userId.Value &&
+                b.Status == "accepted");
+
+            if (!hasAcceptedBid)
+                return null;
         }
 
         if (userRole == "homeowner" && job.Status != "open" && job.Posted_By_User_Id != userId)

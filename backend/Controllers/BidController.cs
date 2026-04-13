@@ -13,6 +13,25 @@ namespace backend.Controllers;
 public class BidController(IBidService bidService, ILogger<BidController> logger) : ControllerBase
 {
     [Authorize]
+    [HttpGet("my")]
+    public async Task<ActionResult<BidListResponse>> GetMyBids(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        var userId = GetUserIdFromClaims();
+        var userRole = GetUserRoleFromClaims();
+
+        if (userId == null)
+            return Unauthorized("User ID not found in token");
+
+        if (userRole != "handyman")
+            return Forbid();
+
+        var result = await bidService.GetMyBidsAsync(userId.Value, page, pageSize);
+        return Ok(result);
+    }
+
+    [Authorize]
     [HttpPatch("{bidId}/accept")]
     public async Task<ActionResult<BidDto>> AcceptBid(Guid bidId)
     {

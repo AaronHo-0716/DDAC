@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   Clock,
   ChevronRight,
   Filter,
@@ -91,13 +92,14 @@ function JobFeedCard({
 }
 
 export default function HandymanPage() {
-  const { authorized, loading } = useRequireRole("handyman");
+  const { authorized, loading, user } = useRequireRole("handyman");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<JobCategory | "">("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const isVerified = user?.verification !== false;
 
   useEffect(() => {
     if (!authorized) return;
@@ -169,6 +171,21 @@ export default function HandymanPage() {
             )}
           </button>
         </div>
+
+        {!isVerified && (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="flex items-start gap-2 text-amber-900">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold">Account verification pending</p>
+                <p className="mt-1 text-sm">
+                  Your handyman account has not been verified yet. You can browse jobs,
+                  but you cannot place bids until verification is approved.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filter panel */}
         {showFilters && (
