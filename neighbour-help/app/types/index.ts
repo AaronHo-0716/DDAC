@@ -305,3 +305,23 @@ export interface SendMessageRequest {
 export interface UnreadCountResponse {
   unreadCount: number;
 }
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+export type ReportStatus = "pending" | "reviewed" | "resolved";
+
+export interface UserReport {
+  id: string;
+  reporterId: string;
+  reporterName: string;
+  targetUserId: string;
+  targetUserName: string;
+  reason: string;
+  description: string;
+  status: ReportStatus;
+  createdAtUtc: string;
+  adminId?: string;
+  adminName?: string;
+  reviewAtUtc?: string;
+  adminNotes?: string;
+}

@@ -172,6 +172,12 @@ export default function AdminPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
+              href="/admin/reports"
+              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
+            >
+              Reports
+            </Link>
+            <Link
               href="/admin/transactions/bids"
               className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
             >

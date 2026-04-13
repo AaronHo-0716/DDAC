@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { BidStatus, UserRole } from "@/app/types";
+import type { BidStatus, ReportStatus, UserReport, UserRole } from "@/app/types";
 import { bidsService } from "./bids";
 import { jobsService } from "./jobs";
 
@@ -48,6 +48,22 @@ interface RawHandymanVerificationDto {
   status?: string | null;
 }
 
+interface RawUserReportDto {
+  id?: string | null;
+  reporterId?: string | null;
+  reporterName?: string | null;
+  targetUserId?: string | null;
+  targetUserName?: string | null;
+  reason?: string | null;
+  description?: string | null;
+  status?: string | null;
+  createdAtUtc?: string | null;
+  adminId?: string | null;
+  adminName?: string | null;
+  reviewAtUtc?: string | null;
+  adminNotes?: string | null;
+}
+
 function normalizeRole(value?: string | null): UserRole {
   const normalized = (value ?? "homeowner").toLowerCase();
   if (normalized === "admin") return "admin";
@@ -71,6 +87,31 @@ function toAdminUser(row: RawUserDto): AdminUserItem {
     status: row.isActive === false ? "blocked" : "active",
     verificationStatus,
     createdAt: row.createdAt ?? new Date(0).toISOString(),
+  };
+}
+
+function normalizeReportStatus(value?: string | null): ReportStatus {
+  const normalized = (value ?? "pending").toLowerCase();
+  if (normalized === "reviewed") return "reviewed";
+  if (normalized === "resolved") return "resolved";
+  return "pending";
+}
+
+function toUserReport(row: RawUserReportDto): UserReport {
+  return {
+    id: row.id ?? "",
+    reporterId: row.reporterId ?? "",
+    reporterName: row.reporterName ?? "Unknown reporter",
+    targetUserId: row.targetUserId ?? "",
+    targetUserName: row.targetUserName ?? "Unknown user",
+    reason: row.reason ?? "",
+    description: row.description ?? "",
+    status: normalizeReportStatus(row.status),
+    createdAtUtc: row.createdAtUtc ?? new Date(0).toISOString(),
+    adminId: row.adminId ?? undefined,
+    adminName: row.adminName ?? undefined,
+    reviewAtUtc: row.reviewAtUtc ?? undefined,
+    adminNotes: row.adminNotes ?? undefined,
   };
 }
 
@@ -174,5 +215,25 @@ export const adminService = {
       `/admin/bid-transactions/${transactionId}/force-reject`,
       "Force rejected by admin"
     );
+  },
+
+  async getReports(status?: ReportStatus): Promise<UserReport[]> {
+    const query = new URLSearchParams();
+    if (status) query.set("status", status);
+
+    const suffix = query.toString();
+    const path = suffix ? `/admin/report?${suffix}` : "/admin/report";
+    const reports = await apiClient.get<RawUserReportDto[]>(path);
+
+    if (!Array.isArray(reports)) return [];
+    return reports.map((row) => toUserReport(row));
+  },
+
+  async resolveReport(reportId: string, notes: string): Promise<void> {
+    await apiClient.patch<void>(`/admin/report/${reportId}/resolve`, notes);
+  },
+
+  async reviewReport(reportId: string, notes: string): Promise<void> {
+    await apiClient.post<void>(`/admin/report/${reportId}/review`, notes);
   },
 };
