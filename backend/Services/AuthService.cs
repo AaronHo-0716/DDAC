@@ -268,11 +268,14 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
 
     private async Task<UserDto> MapToDto(User user)
     {
-        bool isVerified = true;
+        string verificationStatus = "approved";
+        
         if (user.Role == "handyman")
         {
-            isVerified = await context.Handyman_Verifications
-                .AnyAsync(v => v.User_Id == user.Id && v.Status == "approved");
+            verificationStatus = await context.Handyman_Verifications
+                .Where(v => v.User_Id == user.Id)
+                .Select(v => v.Status)
+                .FirstOrDefaultAsync() ?? "pending";
         }
 
         return new UserDto(
@@ -284,7 +287,7 @@ public class AuthService(NeighbourHelpDbContext context, IConfiguration config, 
             user.Rating, 
             user.CreatedAtUtc, 
             user.IsActive,
-            isVerified,
+            verificationStatus, 
             user.Blocked_Reason,
             user.Blocked_At_Utc
         );

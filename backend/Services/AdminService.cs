@@ -66,7 +66,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             newUser.Rating,
             newUser.CreatedAtUtc,
             newUser.IsActive,
-            true,
+            "approved",
             newUser.Blocked_Reason,
             newUser.Blocked_At_Utc
         );
@@ -91,15 +91,29 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         if (request.IsActive.HasValue)
             query = query.Where(u => u.IsActive == request.IsActive.Value);
 
+        if (!string.IsNullOrWhiteSpace(request.avatarUrl))
+            query = query.Where(u => u.AvatarUrl != null && u.AvatarUrl.Contains(request.avatarUrl));
+
+        if (request.rating.HasValue)
+            query = query.Where(u => u.Rating >= request.rating.Value);
+
+        if (request.Verification.HasValue)
+        {
+            var veriStr = request.Verification.Value.ToString().ToLower();
+            query = query.Where(u => context.Handyman_Verifications.Any(v => v.User_Id == u.Id && v.Status == veriStr));
+        }
+
         var users = await query
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync();
 
-        var approvedHandymanIds = await context.Handyman_Verifications
-            .Where(v => v.Status == "approved")
-            .Select(v => v.User_Id)
-            .ToListAsync();
+        // Optimized: Fetch verification statuses for all users on the current page
+        var pagedUserIds = users.Select(u => u.Id).ToList();
+
+        var verificationStatuses = await context.Handyman_Verifications
+            .Where(v => pagedUserIds.Contains(v.User_Id))
+            .ToDictionaryAsync(v => v.User_Id, v => v.Status);
 
         return users.Select(u => new UserDto(
             u.Id,
@@ -110,7 +124,9 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             u.Rating,
             u.CreatedAtUtc,
             u.IsActive,
-            u.Role != "handyman" || approvedHandymanIds.Contains(u.Id),
+            u.Role == "handyman" 
+                ? (verificationStatuses.GetValueOrDefault(u.Id) ?? "pending") 
+                : "approved",
             u.Blocked_Reason,
             u.Blocked_At_Utc
         ));
@@ -120,11 +136,13 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
     {
         var u = await context.Users.FindAsync(id) ?? throw new KeyNotFoundException("User not found");
 
-        bool isVerified = true;
+        string verificationStatus = "approved";
         if (u.Role == "handyman")
         {
-            isVerified = await context.Handyman_Verifications
-                .AnyAsync(v => v.User_Id == u.Id && v.Status == "approved");
+            verificationStatus = await context.Handyman_Verifications
+                .Where(v => v.User_Id == u.Id)
+                .Select(v => v.Status)
+                .FirstOrDefaultAsync() ?? "pending";
         }
 
         return new UserDto(
@@ -136,12 +154,11 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             u.Rating,
             u.CreatedAtUtc,
             u.IsActive,
-            isVerified,
+            verificationStatus,
             u.Blocked_Reason,
             u.Blocked_At_Utc
         );
     }
-
     public async Task<BlockedUserResponse?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken)
     {
         if (block && targetId == adminIdFromToken)
