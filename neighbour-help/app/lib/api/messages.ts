@@ -26,37 +26,21 @@ interface RawConversationDto {
   id?: string | null;
   type?: string | null;
   status?: string | null;
-  relatedJobId?: string | null;
-  relatedBidId?: string | null;
-  lastMessagePreview?: string | null;
-  lastMessageAt?: string | null;
+  createdAtUtc?: string | null;
+  lastMessageAtUtc?: string | null;
   unreadCount?: number | null;
+  lastMessage?: RawMessageDto | null;
   participants?: RawConversationParticipantDto[] | null;
-}
-
-interface RawConversationListResponse {
-  conversations?: RawConversationDto[] | null;
-  page?: number | null;
-  pageSize?: number | null;
-  totalCount?: number | null;
 }
 
 interface RawMessageDto {
   id?: string | null;
-  conversationId?: string | null;
-  senderUserId?: string | null;
-  senderName?: string | null;
+  senderId?: string | null;
   messageType?: string | null;
   bodyText?: string | null;
-  createdAt?: string | null;
+  createdAtUtc?: string | null;
   isDeleted?: boolean | null;
-}
-
-interface RawMessageListResponse {
-  messages?: RawMessageDto[] | null;
-  page?: number | null;
-  pageSize?: number | null;
-  totalCount?: number | null;
+  clientMessageId?: string | null;
 }
 
 const KNOWN_CONVERSATION_TYPES: ConversationType[] = ["job_chat", "admin_support"];
@@ -106,14 +90,16 @@ function normalizeParticipant(row: RawConversationParticipantDto): ConversationP
 }
 
 function normalizeConversation(row: RawConversationDto): ConversationSummary {
+  const lastMessageAt = row.lastMessageAtUtc ?? row.lastMessage?.createdAtUtc ?? undefined;
+
   return {
     id: row.id ?? "",
     type: normalizeConversationType(row.type),
     status: normalizeConversationStatus(row.status),
-    relatedJobId: row.relatedJobId ?? undefined,
-    relatedBidId: row.relatedBidId ?? undefined,
-    lastMessagePreview: row.lastMessagePreview ?? undefined,
-    lastMessageAt: row.lastMessageAt ?? undefined,
+    relatedJobId: undefined,
+    relatedBidId: undefined,
+    lastMessagePreview: row.lastMessage?.bodyText ?? undefined,
+    lastMessageAt,
     unreadCount: typeof row.unreadCount === "number" ? row.unreadCount : 0,
     participants: Array.isArray(row.participants)
       ? row.participants.map(normalizeParticipant)
@@ -121,42 +107,42 @@ function normalizeConversation(row: RawConversationDto): ConversationSummary {
   };
 }
 
-function normalizeConversationList(raw: RawConversationListResponse): ConversationListResponse {
-  const conversations = Array.isArray(raw.conversations)
-    ? raw.conversations.map(normalizeConversation)
+function normalizeConversationList(raw: RawConversationDto[]): ConversationListResponse {
+  const conversations = Array.isArray(raw)
+    ? raw.map(normalizeConversation)
     : [];
 
   return {
     conversations,
-    page: typeof raw.page === "number" ? raw.page : 1,
-    pageSize: typeof raw.pageSize === "number" ? raw.pageSize : conversations.length,
-    totalCount: typeof raw.totalCount === "number" ? raw.totalCount : conversations.length,
+    page: 1,
+    pageSize: conversations.length,
+    totalCount: conversations.length,
   };
 }
 
-function normalizeMessage(row: RawMessageDto): ChatMessage {
+function normalizeMessage(row: RawMessageDto, conversationId: string): ChatMessage {
   return {
     id: row.id ?? "",
-    conversationId: row.conversationId ?? "",
-    senderUserId: row.senderUserId ?? "",
-    senderName: row.senderName ?? undefined,
+    conversationId,
+    senderUserId: row.senderId ?? "",
+    senderName: undefined,
     messageType: normalizeMessageType(row.messageType),
     bodyText: row.bodyText ?? "",
-    createdAt: row.createdAt ?? new Date(0).toISOString(),
+    createdAt: row.createdAtUtc ?? new Date(0).toISOString(),
     isDeleted: !!row.isDeleted,
   };
 }
 
-function normalizeMessageList(raw: RawMessageListResponse): MessageListResponse {
-  const messages = Array.isArray(raw.messages)
-    ? raw.messages.map(normalizeMessage)
+function normalizeMessageList(raw: RawMessageDto[], conversationId: string): MessageListResponse {
+  const messages = Array.isArray(raw)
+    ? raw.map((message) => normalizeMessage(message, conversationId))
     : [];
 
   return {
     messages,
-    page: typeof raw.page === "number" ? raw.page : 1,
-    pageSize: typeof raw.pageSize === "number" ? raw.pageSize : messages.length,
-    totalCount: typeof raw.totalCount === "number" ? raw.totalCount : messages.length,
+    page: 1,
+    pageSize: messages.length,
+    totalCount: messages.length,
   };
 }
 
@@ -167,6 +153,14 @@ export const messagesService = {
     const response = await apiClient.post<RawConversationDto>(
       "/messages/conversations/job",
       data
+    );
+    return normalizeConversation(response);
+  },
+
+  async createOrOpenSupportConversation(targetUserId?: string): Promise<ConversationSummary> {
+    const response = await apiClient.post<RawConversationDto>(
+      "/messages/conversations/support",
+      { targetUserId: targetUserId ?? null }
     );
     return normalizeConversation(response);
   },
@@ -186,7 +180,7 @@ export const messagesService = {
       ? `/messages/conversations?${suffix}`
       : "/messages/conversations";
 
-    const response = await apiClient.get<RawConversationListResponse>(path);
+    const response = await apiClient.get<RawConversationDto[]>(path);
     return normalizeConversationList(response);
   },
 
@@ -210,8 +204,8 @@ export const messagesService = {
       ? `/messages/conversations/${conversationId}/messages?${suffix}`
       : `/messages/conversations/${conversationId}/messages`;
 
-    const response = await apiClient.get<RawMessageListResponse>(path);
-    return normalizeMessageList(response);
+    const response = await apiClient.get<RawMessageDto[]>(path);
+    return normalizeMessageList(response, conversationId);
   },
 
   async sendMessage(
@@ -222,16 +216,18 @@ export const messagesService = {
       `/messages/conversations/${conversationId}/messages`,
       data
     );
-    return normalizeMessage(response);
+    return normalizeMessage(response, conversationId);
   },
 
   async markConversationRead(conversationId: string, lastReadMessageId?: string): Promise<void> {
+    void lastReadMessageId;
     await apiClient.patch(`/messages/conversations/${conversationId}/read`, {
-      lastReadMessageId,
+      acknowledged: true,
     });
   },
 
   async getUnreadCount(): Promise<UnreadCountResponse> {
-    return apiClient.get<UnreadCountResponse>("/messages/unread-count");
+    const unreadCount = await apiClient.get<number>("/messages/unread-count");
+    return { unreadCount: typeof unreadCount === "number" ? unreadCount : 0 };
   },
 };

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/app/lib/context/AuthContext";
+import { useChatWidget } from "@/app/lib/context/ChatWidgetContext";
+import { messagesService } from "@/app/lib/api/messages";
 import {
   MessageCircle,
   Phone,
@@ -121,8 +124,12 @@ function FAQItem({ faq }: { faq: (typeof FAQS)[0] }) {
 }
 
 export default function SupportPage() {
+  const { user } = useAuth();
+  const { open, setActiveConversationId } = useChatWidget();
   const [search, setSearch] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [supportChatLoading, setSupportChatLoading] = useState(false);
+  const [supportChatError, setSupportChatError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -140,6 +147,27 @@ export default function SupportPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
+  };
+
+  const handleStartSupportChat = async () => {
+    if (!user) {
+      if (typeof window !== "undefined") {
+        window.location.href = "/login?next=/support";
+      }
+      return;
+    }
+
+    setSupportChatLoading(true);
+    setSupportChatError(null);
+    try {
+      const conversation = await messagesService.createOrOpenSupportConversation();
+      setActiveConversationId(conversation.id);
+      open();
+    } catch (err) {
+      setSupportChatError(err instanceof Error ? err.message : "Unable to start support chat.");
+    } finally {
+      setSupportChatLoading(false);
+    }
   };
 
   return (
@@ -212,6 +240,11 @@ export default function SupportPage() {
         {/* Contact channels */}
         <div>
           <h2 className="text-lg font-bold text-[#111827] mb-4">Contact Us</h2>
+          {supportChatError && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {supportChatError}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             {[
               {
@@ -255,8 +288,26 @@ export default function SupportPage() {
                 <p className="font-semibold text-[#111827] text-sm">{title}</p>
                 <p className="text-sm text-[#6B7280] mt-0.5">{desc}</p>
                 <p className="text-xs text-[#9CA3AF] mt-1 mb-4">{detail}</p>
-                <button className="px-4 py-2 text-xs font-semibold text-[#0B74FF] border border-[#0B74FF] rounded-lg hover:bg-blue-50 transition-colors">
-                  {action}
+                <button
+                  onClick={() => {
+                    if (title === "Live Chat") {
+                      void handleStartSupportChat();
+                      return;
+                    }
+
+                    if (title === "Email" && typeof window !== "undefined") {
+                      window.location.href = "mailto:support@neighbourhelp.my";
+                      return;
+                    }
+
+                    if (title === "Phone" && typeof window !== "undefined") {
+                      window.location.href = "tel:+60388887777";
+                    }
+                  }}
+                  disabled={title === "Live Chat" && supportChatLoading}
+                  className="px-4 py-2 text-xs font-semibold text-[#0B74FF] border border-[#0B74FF] rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-60"
+                >
+                  {title === "Live Chat" && supportChatLoading ? "Starting..." : action}
                 </button>
               </div>
             ))}
