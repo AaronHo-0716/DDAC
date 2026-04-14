@@ -25,8 +25,19 @@ services:
       - Jwt__Key=Your_Super_Secret_Fallback_Key_32_Chars_Long!
       - Jwt__Issuer=NeighborHelpApi
       - Jwt__Audience=NeighborHelpFrontend
+      - Storage__Provider=S3
+      - Storage__S3__BucketName=neighbourhelp-media
+      - Storage__S3__Region=ap-southeast-5
+      - Storage__S3__ServiceUrl=http://localstack:4566
+      - Storage__S3__PublicBaseUrl=http://localhost:4566
+      - Storage__S3__ForcePathStyle=true
+      - Storage__S3__AccessKey=test
+      - Storage__S3__SecretKey=test
+      - Storage__S3__AutoCreateBucket=true
+      - Storage__S3__MaxFileSizeMb=10
     depends_on:
       - db
+      - localstack
 
   adminer:
     image: adminer
@@ -38,13 +49,12 @@ services:
       - db
 
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:4.14.0
     container_name: neighbourhelp-localstack
     ports:
       - "4566:4566"
     environment:
       - SERVICES=s3
-      - AWS_DEFAULT_REGION=ap-southeast-5
 
 volumes:
   postgres_data:
