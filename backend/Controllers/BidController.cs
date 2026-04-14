@@ -11,7 +11,7 @@ namespace backend.Controllers;
 public class BidController(IBidService bidService) : BaseController
 {
     [HttpGet("my")]
-    [Authorize(Roles = "admin,homeowner")]
+    [Authorize(Roles = "admin,handyman")]
     public async Task<ActionResult<BidListResponse>> GetMyBids([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
         var userId = await GetCurrentUserIdAsync();
@@ -21,6 +21,7 @@ public class BidController(IBidService bidService) : BaseController
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
+    [Authorize(Roles = "admin,homeowner")]
     [HttpPatch("{bidId}/accept")]
     public async Task<ActionResult<BidDto>> AcceptBid(Guid bidId)
     {
@@ -31,6 +32,7 @@ public class BidController(IBidService bidService) : BaseController
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
+    [Authorize(Roles = "admin,homeowner")]
     [HttpPatch("{bidId}/reject")]
     public async Task<ActionResult<BidDto>> RejectBid(Guid bidId)
     {
@@ -41,6 +43,7 @@ public class BidController(IBidService bidService) : BaseController
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
+    [Authorize(Roles = "admin,handyman")]
     [HttpDelete("{bidId}")]
     public async Task<IActionResult> DeleteBid(Guid bidId)
     {
