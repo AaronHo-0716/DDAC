@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell, ChevronDown, Wrench, Menu, X } from "lucide-react";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import NotificationsPanel from "@/app/components/ui/NotificationsPanel";
+import ThemeToggle from "@/app/components/ui/ThemeToggle";
 import { notificationsService } from "@/app/lib/api/notifications";
 
 const homeownerNavLinks = [
@@ -43,7 +44,6 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!user) {
-      setUnreadCount(0);
       return;
     }
 
@@ -108,6 +108,7 @@ export default function Navbar() {
 
           {/* Right side */}
           <div className="hidden md:flex items-center gap-3">
+            <ThemeToggle />
             {user ? (
               <>
                 {/* Notification Bell */}
@@ -181,12 +182,15 @@ export default function Navbar() {
           </div>
 
           {/* Mobile menu button */}
-          <button
-            className="md:hidden w-9 h-9 flex items-center justify-center text-[#6B7280] hover:text-[#111827]"
-            onClick={() => setMobileOpen(!mobileOpen)}
-          >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          <div className="md:hidden flex items-center gap-2">
+            <ThemeToggle compact />
+            <button
+              className="w-9 h-9 flex items-center justify-center text-[#6B7280] hover:text-[#111827]"
+              onClick={() => setMobileOpen(!mobileOpen)}
+            >
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
 

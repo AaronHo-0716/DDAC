@@ -2,22 +2,22 @@ import { ClipboardList, TrendingUp, ShieldCheck } from "lucide-react";
 
 const features = [
   {
-    icon: <ClipboardList className="w-6 h-6 text-[#0B74FF]" />,
-    bg: "bg-blue-50",
+    icon: <ClipboardList className="w-6 h-6 text-[#0B74FF] dark:text-[#93C5FD]" />,
+    bg: "bg-blue-50 dark:bg-[#1E293B]",
     title: "Post a repair request",
     description:
       "Describe your home repair job, set a budget, and upload photos. Takes less than 2 minutes.",
   },
   {
-    icon: <TrendingUp className="w-6 h-6 text-purple-600" />,
-    bg: "bg-purple-50",
+    icon: <TrendingUp className="w-6 h-6 text-purple-600 dark:text-[#C4B5FD]" />,
+    bg: "bg-purple-50 dark:bg-[#1E293B]",
     title: "Receive competitive bids",
     description:
       "Local handymen send you their best price and estimated arrival time. Compare and choose freely.",
   },
   {
-    icon: <ShieldCheck className="w-6 h-6 text-green-600" />,
-    bg: "bg-green-50",
+    icon: <ShieldCheck className="w-6 h-6 text-green-600 dark:text-[#86EFAC]" />,
+    bg: "bg-green-50 dark:bg-[#1E293B]",
     title: "Hire trusted professionals",
     description:
       "Every handyman is background-checked and reviewed by real homeowners. Pay only when satisfied.",
@@ -26,17 +26,17 @@ const features = [
 
 export default function FeatureSection() {
   return (
-    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#F7F8FA]">
+    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#F7F8FA] dark:bg-[#0B1220]">
       <div className="max-w-7xl mx-auto">
         {/* Section header */}
         <div className="text-center mb-12">
-          <p className="text-sm font-semibold text-[#0B74FF] uppercase tracking-wider mb-3">
+          <p className="text-sm font-semibold text-[#0B74FF] dark:text-[#93C5FD] uppercase tracking-wider mb-3">
             How it works
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-[#111827] mb-4">
+          <h2 className="text-3xl sm:text-4xl font-bold text-[#111827] dark:text-[#F8FAFC] mb-4">
             Get your home fixed in 3 steps
           </h2>
-          <p className="text-[#6B7280] text-lg max-w-xl mx-auto">
+          <p className="text-[#6B7280] dark:text-[#CBD5E1] text-lg max-w-xl mx-auto">
             NeighbourHelp makes home repairs simple, transparent, and stress-free.
           </p>
         </div>
@@ -46,7 +46,7 @@ export default function FeatureSection() {
           {features.map((feature, i) => (
             <div
               key={i}
-              className="bg-white rounded-2xl p-7 border border-[#E5E7EB] shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200 group"
+              className="bg-white dark:bg-[#0F172A] rounded-2xl p-7 border border-[#E5E7EB] dark:border-[#334155] shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200 group"
             >
               <div className={`w-12 h-12 ${feature.bg} rounded-xl flex items-center justify-center mb-5`}>
                 {feature.icon}
@@ -55,9 +55,9 @@ export default function FeatureSection() {
                 <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#0B74FF] text-white text-xs font-bold flex items-center justify-center mt-0.5">
                   {i + 1}
                 </span>
-                <h3 className="text-lg font-semibold text-[#111827]">{feature.title}</h3>
+                <h3 className="text-lg font-semibold text-[#111827] dark:text-[#F8FAFC]">{feature.title}</h3>
               </div>
-              <p className="text-[#6B7280] text-sm leading-relaxed pl-7">
+              <p className="text-[#6B7280] dark:text-[#CBD5E1] text-sm leading-relaxed pl-7">
                 {feature.description}
               </p>
             </div>

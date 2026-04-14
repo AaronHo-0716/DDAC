@@ -10,26 +10,26 @@ export default function HeroSection() {
   const browseHref = user ? "/browse" : "/login?next=%2Fbrowse";
 
   return (
-    <section className="bg-white pt-20 pb-24 px-4 sm:px-6 lg:px-8 overflow-hidden relative">
+    <section className="bg-white dark:bg-[#0B1220] pt-20 pb-24 px-4 sm:px-6 lg:px-8 overflow-hidden relative">
       {/* Subtle background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/60 via-white to-white pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/60 via-white to-white dark:from-[#0F172A] dark:via-[#0B1220] dark:to-[#0B1220] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto relative">
         <div className="flex flex-col lg:flex-row items-center gap-16">
           {/* Text content */}
           <div className="flex-1 text-center lg:text-left">
             {/* Trust badge */}
-            <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-[#0B74FF] text-sm font-medium px-3 py-1.5 rounded-full mb-6">
+            <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-[#0F1D39] border border-blue-100 dark:border-[#1E3A8A]/40 text-[#0B74FF] dark:text-[#93C5FD] text-sm font-medium px-3 py-1.5 rounded-full mb-6">
               <Star className="w-3.5 h-3.5 fill-current" />
               <span>Trusted by 10,000+ homeowners</span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-[#111827] leading-tight tracking-tight mb-6">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-[#111827] dark:text-[#F8FAFC] leading-tight tracking-tight mb-6">
               Smart maintenance{" "}
-              <span className="text-[#0B74FF]">for every home</span>
+              <span className="text-[#0B74FF] dark:text-[#93C5FD]">for every home</span>
             </h1>
 
-            <p className="text-lg text-[#6B7280] leading-relaxed mb-8 max-w-xl mx-auto lg:mx-0">
+            <p className="text-lg text-[#6B7280] dark:text-[#CBD5E1] leading-relaxed mb-8 max-w-xl mx-auto lg:mx-0">
               Post your repair job, receive competitive bids from verified local
               handymen, and get the work done right — all in one place.
             </p>
@@ -62,13 +62,13 @@ export default function HeroSection() {
                     </div>
                   ))}
                 </div>
-                <span className="text-sm text-[#6B7280]">500+ handymen ready</span>
+                <span className="text-sm text-[#6B7280] dark:text-[#CBD5E1]">500+ handymen ready</span>
               </div>
               <div className="flex items-center gap-1">
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
                 ))}
-                <span className="text-sm text-[#6B7280] ml-1">4.9/5 rating</span>
+                <span className="text-sm text-[#6B7280] dark:text-[#CBD5E1] ml-1">4.9/5 rating</span>
               </div>
             </div>
           </div>
@@ -77,36 +77,36 @@ export default function HeroSection() {
           <div className="flex-1 w-full max-w-md lg:max-w-none">
             <div className="relative">
               {/* Main card */}
-              <div className="bg-white rounded-2xl shadow-xl border border-[#E5E7EB] p-6">
+              <div className="bg-white dark:bg-[#0F172A] rounded-2xl shadow-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl">
+                  <div className="w-12 h-12 bg-blue-100 dark:bg-[#1E293B] rounded-xl flex items-center justify-center text-2xl">
                     🔧
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-[#111827]">Leaky kitchen faucet</p>
-                    <p className="text-sm text-[#6B7280]">Plumbing · Posted 2h ago</p>
+                    <p className="font-semibold text-[#111827] dark:text-[#F8FAFC]">Leaky kitchen faucet</p>
+                    <p className="text-sm text-[#6B7280] dark:text-[#CBD5E1]">Plumbing · Posted 2h ago</p>
                   </div>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 dark:bg-[#1E293B] text-green-700 dark:text-[#86EFAC] border border-green-200 dark:border-[#334155]">
                     Open
                   </span>
                 </div>
-                <p className="text-sm text-[#6B7280] mb-4">
+                <p className="text-sm text-[#6B7280] dark:text-[#CBD5E1] mb-4">
                   My kitchen faucet has been dripping for a week. Looking for a fast fix…
                 </p>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#6B7280]">💰 Budget: RM 80 – RM 150</span>
-                  <span className="text-[#0B74FF] font-medium">4 bids received</span>
+                  <span className="text-[#6B7280] dark:text-[#CBD5E1]">💰 Budget: RM 80 – RM 150</span>
+                  <span className="text-[#0B74FF] dark:text-[#93C5FD] font-medium">4 bids received</span>
                 </div>
               </div>
 
               {/* Floating bid card */}
-              <div className="absolute -bottom-6 -right-4 bg-white rounded-xl shadow-lg border border-[#E5E7EB] p-4 w-52">
+              <div className="absolute -bottom-6 -right-4 bg-white dark:bg-[#0F172A] rounded-xl shadow-lg border border-[#E5E7EB] dark:border-[#334155] p-4 w-52">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded-full bg-[#0B74FF] text-white text-xs font-bold flex items-center justify-center">
                     M
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-[#111827]">Mike R.</p>
+                    <p className="text-xs font-semibold text-[#111827] dark:text-[#F8FAFC]">Mike R.</p>
                     <div className="flex items-center gap-0.5">
                       {[...Array(5)].map((_, i) => (
                         <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
@@ -114,8 +114,8 @@ export default function HeroSection() {
                     </div>
                   </div>
                 </div>
-                <p className="text-sm font-bold text-[#111827]">RM 95</p>
-                <p className="text-xs text-[#6B7280]">Available tomorrow</p>
+                <p className="text-sm font-bold text-[#111827] dark:text-[#F8FAFC]">RM 95</p>
+                <p className="text-xs text-[#6B7280] dark:text-[#CBD5E1]">Available tomorrow</p>
               </div>
 
               {/* Floating accepted badge */}
