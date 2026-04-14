@@ -1,11 +1,6 @@
-using Microsoft.AspNetCore.Http;
-
 namespace backend.Models.DTOs;
 
-public class UploadImageRequest
-{
-    public IFormFile? File { get; set; }
-}
+public record UploadImageRequest(IFormFile File);
 
 public record UploadImageResponse(
     string ObjectKey,

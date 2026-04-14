@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
-using System.Security.Claims;
-using System.Net;
 
 namespace backend.Controllers;
 

@@ -17,18 +17,13 @@ public class AuthService : BaseService, IAuthService
     private readonly NeighbourHelpDbContext _context;
     private readonly IConfiguration _config;
     private readonly ILogger _logger;
-    private readonly IStorageService _storageService;
 
     public AuthService(
-        NeighbourHelpDbContext context,
-        IConfiguration config,
-        ILogger<AuthService> logger,
-        IStorageService storageService) : base(context, logger)
+        NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger ) : base(context, logger)
     {
         _context = context;
         _config = config;
         _logger = logger;
-        _storageService = storageService;
     }
     
     public async Task<AuthResponse> Login(LoginRequest request)
@@ -153,20 +148,6 @@ public class AuthService : BaseService, IAuthService
     {
         var user = await _context.Users.FindAsync(userId) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
-        return await MapUserToDto(user);
-    }
-
-    public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken cancellationToken = default)
-    {
-        var user = await _context.Users.FindAsync(userId)
-            ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
-
-        var upload = await _storageService.UploadImageAsync(file, $"avatars/{user.Id}", cancellationToken);
-        user.AvatarUrl = upload.Url;
-
-        await _context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Profile picture updated for user {UserId}", user.Id);
-
         return await MapUserToDto(user);
     }
 

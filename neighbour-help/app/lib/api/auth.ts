@@ -131,7 +131,7 @@ export const authService = {
   async updateProfilePicture(file: File): Promise<User> {
     const formData = new FormData();
     formData.append("file", file);
-    return apiClient.postForm<User>("/auth/profile-picture", formData);
+    return apiClient.postForm<User>("/uploads/profile-picture", formData);
   },
 
   /**

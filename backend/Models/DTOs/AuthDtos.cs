@@ -1,5 +1,4 @@
-using backend.Constants;
-using Microsoft.AspNetCore.Http;
+// using backend.Constants;
 
 namespace backend.Models.DTOs;
 
@@ -38,8 +37,3 @@ public record LoginRequest(string Email, string Password);
 public record RegisterRequest(string Name, string Email, string Password, string Role);
 public record RefreshRequest(string RefreshToken);
 public record LogoutRequest(string RefreshToken);
-
-public class UpdateProfilePictureRequest
-{
-    public IFormFile? File { get; set; }
-}

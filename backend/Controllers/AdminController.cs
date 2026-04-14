@@ -1,6 +1,5 @@
 using backend.Models.DTOs;
 using backend.Services;
-using backend.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
