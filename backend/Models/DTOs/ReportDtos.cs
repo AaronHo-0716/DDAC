@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
+// using backend.Constants;
 
 namespace backend.Models.DTOs;
-
-public enum ReportStatusFilter { pending, reviewed, resolved }
 
 public record CreateReportRequest(
     Guid TargetUserId,
@@ -26,4 +23,3 @@ public record UserReportDto(
     DateTime? ReviewAtUtc,
     string? AdminNotes = null
 );
-

@@ -1,7 +1,9 @@
 using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
+using backend.Constants;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 
 namespace backend.Services;
 
@@ -9,48 +11,51 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
 {
     public async Task<ConversationDto> GetOrCreateJobConversationAsync(CreateJobChatRequest request, Guid userId)
     {
-        // 1. Security: Validate that the Bid and Job relation is legitimate
+        // 1. Security: Validate Job/Bid relation
         var bid = await context.Bids
             .Include(b => b.Job)
             .FirstOrDefaultAsync(b => b.Id == request.BidId && b.Job_Id == request.JobId)
-            ?? throw new KeyNotFoundException("The specified job/bid relation does not exist.");
+            ?? throw new HttpRequestException("The specified job/bid relation does not exist.", null, HttpStatusCode.NotFound);
 
         bool isAuthorized = (bid.Handyman_User_Id == userId && bid.Job.Posted_By_User_Id == request.OtherUserId) ||
                             (bid.Handyman_User_Id == request.OtherUserId && bid.Job.Posted_By_User_Id == userId);
 
-        if (!isAuthorized) throw new UnauthorizedAccessException("You are not authorized to start a chat for this bid.");
+        if (!isAuthorized) 
+            throw new HttpRequestException("You are not authorized to start a chat for this bid.", null, HttpStatusCode.Forbidden);
 
-        // 2. Check for existing conversation
+        // 2. Check existing
+        var dbType = ConversationType.JobChat.ToDbString();
         var existing = await context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
-            .FirstOrDefaultAsync(c => c.Type == "job_chat" && c.Related_Bid_Id == request.BidId);
+            .FirstOrDefaultAsync(c => c.Type == dbType && c.Related_Bid_Id == request.BidId);
 
         if (existing != null) return await MapToDto(existing, userId);
 
-        // 3. Create new if none exists
+        // 3. Create new
         var conversation = new Conversation
         {
             Id = Guid.NewGuid(),
-            Type = "job_chat",
+            Type = dbType,
             Related_Job_Id = request.JobId,
             Related_Bid_Id = request.BidId,
             Created_By_User_Id = userId,
-            Status = "active"
+            Status = ConversationStatus.Active.ToDbString()
         };
 
         context.Conversations.Add(conversation);
         
-        // Add both participants
         var participantIds = new[] { userId, request.OtherUserId };
         foreach (var pId in participantIds)
         {
-            var user = await context.Users.FindAsync(pId);
+            var user = await context.Users.FindAsync(pId) 
+                ?? throw new HttpRequestException($"User {pId} not found.", null, HttpStatusCode.NotFound);
+
             context.Conversation_Participants.Add(new Conversation_Participant
             {
                 Id = Guid.NewGuid(),
                 Conversation_Id = conversation.Id,
                 User_Id = pId,
-                Participant_Role = user!.Role
+                Participant_Role = user.Role
             });
         }
 
@@ -60,20 +65,26 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
 
     public async Task<ConversationDto> GetOrCreateSupportConversationAsync(CreateSupportChatRequest request, Guid userId, string userRole)
     {
-        Guid targetUserId = (userRole == "admin" && request.TargetUserId.HasValue) 
+        Guid targetUserId = (userRole == UserRole.Admin.ToDbString() && request.TargetUserId.HasValue) 
             ? request.TargetUserId.Value 
             : userId;
 
+        var dbType = ConversationType.AdminSupport.ToDbString();
         var existing = await context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
-            .FirstOrDefaultAsync(c => c.Type == "admin_support" && c.Participants.Any(p => p.User_Id == targetUserId));
+            .FirstOrDefaultAsync(c => c.Type == dbType && c.Participants.Any(p => p.User_Id == targetUserId));
 
         if (existing != null) return await MapToDto(existing, userId);
 
-        var conversation = new Conversation { Id = Guid.NewGuid(), Type = "admin_support", Created_By_User_Id = userId };
+        var conversation = new Conversation 
+        { 
+            Id = Guid.NewGuid(), 
+            Type = dbType, 
+            Created_By_User_Id = userId,
+            Status = ConversationStatus.Active.ToDbString()
+        };
         context.Conversations.Add(conversation);
         
-        // Logic: Add the user and a placeholder system/admin if needed, or just the user until an admin joins
         context.Conversation_Participants.Add(new Conversation_Participant { 
             Id = Guid.NewGuid(), Conversation_Id = conversation.Id, User_Id = targetUserId, Participant_Role = "customer" 
         });
@@ -87,12 +98,14 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
         var conversation = await context.Conversations
             .Include(c => c.Participants)
             .FirstOrDefaultAsync(c => c.Id == conversationId)
-            ?? throw new KeyNotFoundException("Conversation not found.");
+            ?? throw new HttpRequestException("Conversation not found.", null, HttpStatusCode.NotFound);
 
-        if (conversation.Status == "locked") throw new InvalidOperationException("Conversation is locked.");
-        if (!conversation.Participants.Any(p => p.User_Id == userId)) throw new UnauthorizedAccessException();
+        if (conversation.Status == ConversationStatus.Locked.ToDbString()) 
+            throw new HttpRequestException("Conversation is locked and cannot receive messages.", null, HttpStatusCode.BadRequest);
 
-        // Idempotency: prevent double-send
+        if (!conversation.Participants.Any(p => p.User_Id == userId)) 
+            throw new HttpRequestException("Access denied.", null, HttpStatusCode.Forbidden);
+
         if (!string.IsNullOrEmpty(request.ClientMessageId))
         {
             var existing = await context.Messages.FirstOrDefaultAsync(m => m.Conversation_Id == conversationId && m.Client_Message_Id == request.ClientMessageId);
@@ -105,14 +118,17 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
             Conversation_Id = conversationId,
             Sender_User_Id = userId,
             Body_Text = request.BodyText,
-            Client_Message_Id = request.ClientMessageId
+            Message_Type = MessageType.Text.ToDbString(),
+            Client_Message_Id = request.ClientMessageId,
+            Created_At_Utc = DateTime.UtcNow
         };
 
         context.Messages.Add(message);
         conversation.Last_Message_At_Utc = DateTime.UtcNow;
 
-        // Increment unread counts for others
-        var others = await context.Conversation_Participants.Where(p => p.Conversation_Id == conversationId && p.User_Id != userId).ToListAsync();
+        var others = await context.Conversation_Participants
+            .Where(p => p.Conversation_Id == conversationId && p.User_Id != userId)
+            .ToListAsync();
         others.ForEach(o => o.Unread_Count++);
 
         await context.SaveChangesAsync();
@@ -124,17 +140,16 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
         var participant = await context.Conversation_Participants
             .FirstOrDefaultAsync(p => p.Conversation_Id == conversationId && p.User_Id == userId);
 
-        if (participant != null)
-        {
-            participant.Unread_Count = 0;
-            participant.Last_Read_Message_Id = await context.Messages
-                .Where(m => m.Conversation_Id == conversationId)
-                .OrderByDescending(m => m.Created_At_Utc)
-                .Select(m => m.Id)
-                .FirstOrDefaultAsync();
+        if (participant == null) return;
 
-            await context.SaveChangesAsync();
-        }
+        participant.Unread_Count = 0;
+        participant.Last_Read_Message_Id = await context.Messages
+            .Where(m => m.Conversation_Id == conversationId)
+            .OrderByDescending(m => m.Created_At_Utc)
+            .Select(m => m.Id)
+            .FirstOrDefaultAsync();
+
+        await context.SaveChangesAsync();
     }
 
     public async Task<IEnumerable<ConversationDto>> GetUserConversationsAsync(Guid userId)
@@ -153,15 +168,16 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
 
     public async Task<IEnumerable<MessageDto>> GetConversationMessagesAsync(Guid conversationId, Guid userId, int limit = 50)
     {
-        if (!await context.Conversation_Participants.AnyAsync(p => p.Conversation_Id == conversationId && p.User_Id == userId))
-            throw new UnauthorizedAccessException();
+        var isParticipant = await context.Conversation_Participants.AnyAsync(p => p.Conversation_Id == conversationId && p.User_Id == userId);
+        if (!isParticipant) throw new HttpRequestException("Access denied.", null, HttpStatusCode.Forbidden);
 
-        return await context.Messages
+        var messages = await context.Messages
             .Where(m => m.Conversation_Id == conversationId && !m.Is_Deleted)
             .OrderByDescending(m => m.Created_At_Utc)
             .Take(limit)
-            .Select(m => MapToMessageDto(m))
             .ToListAsync();
+
+        return messages.Select(MapToMessageDto);
     }
 
     public async Task<ConversationDto> GetConversationByIdAsync(Guid conversationId, Guid userId)
@@ -169,7 +185,7 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
         var conv = await context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
             .FirstOrDefaultAsync(c => c.Id == conversationId)
-            ?? throw new KeyNotFoundException();
+            ?? throw new HttpRequestException("Conversation not found.", null, HttpStatusCode.NotFound);
 
         return await MapToDto(conv, userId);
     }
@@ -183,50 +199,25 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
             .Select(p => new UnreadGroupDto(p.Conversation_Id, p.Unread_Count))
             .ToListAsync();
 
-    private async Task<ConversationDto> MapToDto(Conversation c, Guid userId)
-    {
-        var lastMsg = await context.Messages
-            .Where(m => m.Conversation_Id == c.Id && !m.Is_Deleted)
-            .OrderByDescending(m => m.Created_At_Utc)
-            .FirstOrDefaultAsync();
-
-        var myParticipant = c.Participants.FirstOrDefault(p => p.User_Id == userId);
-
-        return new ConversationDto(
-            c.Id, c.Type, c.Status, c.Created_At_Utc, c.Last_Message_At_Utc,
-            myParticipant?.Unread_Count ?? 0,
-            lastMsg != null ? MapToMessageDto(lastMsg) : null,
-            c.Participants.Select(p => new ParticipantDto(p.User_Id, p.User.Name, p.User.Role, p.User.AvatarUrl)).ToList()
-        );
-    }
-
-    private static MessageDto MapToMessageDto(Message m) => new(
-        m.Id, m.Sender_User_Id, m.Message_Type, m.Is_Deleted ? "[Hidden]" : m.Body_Text,
-        m.Created_At_Utc, m.Is_Edited, m.Is_Deleted, m.Client_Message_Id
-    );
-
     public async Task LockConversationAsync(Guid conversationId, string reason, Guid adminId)
     {
         var conv = await context.Conversations.FindAsync(conversationId) 
-            ?? throw new KeyNotFoundException("Conversation not found.");
+            ?? throw new HttpRequestException("Conversation not found.", null, HttpStatusCode.NotFound);
 
         using var transaction = await context.Database.BeginTransactionAsync();
         
-        conv.Status = "locked";
+        conv.Status = ConversationStatus.Locked.ToDbString();
 
-        var modAction = new Message_Moderation_Action
+        context.Message_Moderation_Actions.Add(new Message_Moderation_Action
         {
             Id = Guid.NewGuid(),
             Conversation_Id = conversationId,
             Admin_User_Id = adminId,
-            Action_Type = "lock_conversation",
+            Action_Type = ModerationActionType.LockConversation.ToDbString(),
             Reason = reason,
             Created_At_Utc = DateTime.UtcNow
-        };
+        });
 
-        context.Message_Moderation_Actions.Add(modAction);
-
-        // Global Admin Audit
         context.Admin_Actions.Add(new Admin_Action
         {
             Id = Guid.NewGuid(),
@@ -246,16 +237,16 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
     public async Task UnlockConversationAsync(Guid conversationId, Guid adminId)
     {
         var conv = await context.Conversations.FindAsync(conversationId) 
-            ?? throw new KeyNotFoundException("Conversation not found.");
+            ?? throw new HttpRequestException("Conversation not found.", null, HttpStatusCode.NotFound);
 
-        conv.Status = "active";
+        conv.Status = ConversationStatus.Active.ToDbString();
 
         context.Message_Moderation_Actions.Add(new Message_Moderation_Action
         {
             Id = Guid.NewGuid(),
             Conversation_Id = conversationId,
             Admin_User_Id = adminId,
-            Action_Type = "unlock_conversation",
+            Action_Type = ModerationActionType.UnlockConversation.ToDbString(),
             Created_At_Utc = DateTime.UtcNow
         });
 
@@ -265,7 +256,7 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
     public async Task HideMessageAsync(Guid messageId, string reason, Guid adminId)
     {
         var msg = await context.Messages.FindAsync(messageId) 
-            ?? throw new KeyNotFoundException("Message not found.");
+            ?? throw new HttpRequestException("Message not found.", null, HttpStatusCode.NotFound);
 
         using var transaction = await context.Database.BeginTransactionAsync();
 
@@ -278,20 +269,8 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
             Message_Id = messageId,
             Conversation_Id = msg.Conversation_Id,
             Admin_User_Id = adminId,
-            Action_Type = "hide_message",
+            Action_Type = ModerationActionType.HideMessage.ToDbString(),
             Reason = reason,
-            Created_At_Utc = DateTime.UtcNow
-        });
-
-        context.Admin_Actions.Add(new Admin_Action
-        {
-            Id = Guid.NewGuid(),
-            Admin_User_Id = adminId,
-            Action_Type = "MESSAGE_HIDE",
-            Target_Type = "MESSAGE",
-            Target_Id = messageId,
-            Reason = reason,
-            Payload = "{}",
             Created_At_Utc = DateTime.UtcNow
         });
 
@@ -302,7 +281,7 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
     public async Task UnhideMessageAsync(Guid messageId, Guid adminId)
     {
         var msg = await context.Messages.FindAsync(messageId) 
-            ?? throw new KeyNotFoundException("Message not found.");
+            ?? throw new HttpRequestException("Message not found.", null, HttpStatusCode.NotFound);
 
         msg.Is_Deleted = false;
         msg.Deleted_At_Utc = null;
@@ -313,7 +292,7 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
             Message_Id = messageId,
             Conversation_Id = msg.Conversation_Id,
             Admin_User_Id = adminId,
-            Action_Type = "unhide_message",
+            Action_Type = ModerationActionType.UnhideMessage.ToDbString(),
             Created_At_Utc = DateTime.UtcNow
         });
 
@@ -323,7 +302,7 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
     public async Task FlagMessageAsync(Guid messageId, string reason, Guid adminId)
     {
         var msg = await context.Messages.FindAsync(messageId) 
-            ?? throw new KeyNotFoundException("Message not found.");
+            ?? throw new HttpRequestException("Message not found.", null, HttpStatusCode.NotFound);
 
         context.Message_Moderation_Actions.Add(new Message_Moderation_Action
         {
@@ -331,7 +310,7 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
             Message_Id = messageId,
             Conversation_Id = msg.Conversation_Id,
             Admin_User_Id = adminId,
-            Action_Type = "flag_message",
+            Action_Type = ModerationActionType.FlagMessage.ToDbString(),
             Reason = reason,
             Created_At_Utc = DateTime.UtcNow
         });
@@ -347,5 +326,37 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
                 a.Id, a.Message_Id, a.Conversation_Id, a.Admin_User_Id, a.Action_Type, a.Reason, a.Created_At_Utc
             ))
             .ToListAsync();
+    }
+
+    private async Task<ConversationDto> MapToDto(Conversation c, Guid userId)
+    {
+        var lastMsg = await context.Messages
+            .Where(m => m.Conversation_Id == c.Id && !m.Is_Deleted)
+            .OrderByDescending(m => m.Created_At_Utc)
+            .FirstOrDefaultAsync();
+
+        var myParticipant = c.Participants.FirstOrDefault(p => p.User_Id == userId);
+        
+        Enum.TryParse<ConversationType>(c.Type.Replace("_", ""), true, out var typeEnum);
+        Enum.TryParse<ConversationStatus>(c.Status, true, out var statusEnum);
+
+        return new ConversationDto(
+            c.Id, typeEnum.ToDbString(), statusEnum.ToDbString(), c.Created_At_Utc, c.Last_Message_At_Utc,
+            myParticipant?.Unread_Count ?? 0,
+            lastMsg != null ? MapToMessageDto(lastMsg) : null,
+            c.Participants.Select(p => {
+                Enum.TryParse<UserRole>(p.User.Role, true, out var r);
+                return new ParticipantDto(p.User_Id, p.User.Name, r, p.User.AvatarUrl);
+            }).ToList()
+        );
+    }
+
+    private static MessageDto MapToMessageDto(Message m)
+    {
+        Enum.TryParse<MessageType>(m.Message_Type, true, out var typeEnum);
+        return new MessageDto(
+            m.Id, m.Sender_User_Id, typeEnum.ToDbString(), m.Is_Deleted ? "[Hidden]" : m.Body_Text,
+            m.Created_At_Utc, m.Is_Edited, m.Is_Deleted, m.Client_Message_Id
+        );
     }
 }

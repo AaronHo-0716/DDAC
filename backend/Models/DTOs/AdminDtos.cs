@@ -1,19 +1,13 @@
-using System;
-using System.Collections.Generic;
+// using backend.Constants;
 
 namespace backend.Models.DTOs;
-
-public enum UserRoleFilter { Handyman, Homeowner, Admin }
-public enum VerificationStatus { Pending, Approved, Rejected }
 
 public record UserSearchRequest(
     string? Name = null,
     string? Email = null,
-    UserRoleFilter? Role = null,
+    string? Role = null,
     bool? IsActive = null,
-    VerificationStatus? Verification = null,
-    string? avatarUrl = null,
-    int? rating = null,
+    string? Verification = null,
     int Page = 1,
     int PageSize = 10
 );

@@ -1,187 +1,178 @@
 using backend.Models.DTOs;
 using backend.Services;
+using backend.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Security.Claims;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Net;
-using Microsoft.EntityFrameworkCore;
 
 namespace backend.Controllers;
 
 [ApiController]
 [Route("api/admin")]
 [Authorize(Roles = "admin")]
-public class AdminController(IAdminService adminService, ILogger<AdminController> logger) : ControllerBase
+public class AdminController(IAdminService adminService) : BaseController
 {
-    private Guid AdminId 
-    {
-        get 
-        {
-            var claimValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                             ?? User.FindFirst("sub")?.Value;
-
-            return Guid.TryParse(claimValue, out var id) ? id : Guid.Empty;
-        }
-    }
-
     [HttpGet("overview")]
     public async Task<ActionResult<AdminOverviewResponse>> GetOverview()
     {
-        logger.LogInformation("Admin {AdminId} requested overview stats.", AdminId);
-        return Ok(await adminService.GetOverviewAsync());
+        try { return Ok(await adminService.GetOverviewAsync()); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPost("new-admin")]
     [EnableRateLimiting("auth_policy")]
     public async Task<ActionResult<UserDto>> AddNewAdmin([FromBody] RegisterRequest request)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
+        var adminId = await GetCurrentUserIdAsync();
 
-        try
-        {
-            var result = await adminService.CreateAdminAsync(request);
-            return Ok(result);
-        }
-        catch (DbUpdateException)
-        {
-            return Conflict(new { message = "A user with this email already exists." });
-        }
-        catch (HttpRequestException ex)
-        {
-            return StatusCode((int)(ex.StatusCode ?? System.Net.HttpStatusCode.InternalServerError), new { message = ex.Message });
-        }
+        try { return Ok(await adminService.CreateAdminAsync(request)); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpGet("users")]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers([FromQuery] UserSearchRequest request)
     {
-        return Ok(await adminService.GetAllUsers(request));
+        try { return Ok(await adminService.GetAllUsers(request)); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpGet("users/{id}")]
     public async Task<ActionResult<UserDto>> GetUser(Guid id)
     {
-        try
-        {
-            return Ok(await adminService.GetUserByIdAsync(id));
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        try { return Ok(await adminService.GetUserByIdAsync(id)); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("users/{id}/block")]
     public async Task<IActionResult> BlockUser(Guid id, [FromBody] BlockUserRequest request)
     {
-        if (AdminId == Guid.Empty) 
-            return Unauthorized(new { message = "Could not identify admin session." });
-
-        if (id == AdminId) 
-            return BadRequest(new { message = "Security Policy: You are not allowed to block your own account." });
+        var adminId = await GetCurrentUserIdAsync();
 
         try 
         {
-            var result = await adminService.UpdateUserBlockStatusAsync(id, true, request.Reason, AdminId);
+            var result = await adminService.UpdateUserBlockStatusAsync(id, true, request.Reason, adminId);
             return Ok(result);
         }
-        catch (InvalidOperationException ex) 
-        { 
-            return BadRequest(new { message = ex.Message }); 
-        }
-        catch (KeyNotFoundException ex) 
-        { 
-            return NotFound(new { message = ex.Message }); 
-        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("users/{id}/unblock")]
     public async Task<IActionResult> UnblockUser(Guid id)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
+        var adminId = await GetCurrentUserIdAsync();
 
         try
         {
-            await adminService.UpdateUserBlockStatusAsync(id, false, null, AdminId);
+            await adminService.UpdateUserBlockStatusAsync(id, false, null, adminId);
             return NoContent();
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    // --- Handyman Verification ---
     [HttpGet("handymen/pending-verification")]
-    public async Task<ActionResult<IEnumerable<HandymanVerificationDto>>> GetPendingVerifications() 
-        => Ok(await adminService.GetPendingVerificationsAsync());
+    public async Task<ActionResult<IEnumerable<HandymanVerificationDto>>> GetPendingVerifications()
+    {
+        try { return Ok(await adminService.GetPendingVerificationsAsync()); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
 
     [HttpPatch("handymen/{id}/approve")]
     public async Task<IActionResult> ApproveHandyman(Guid id, [FromBody] string notes)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
-        await adminService.VerifyHandymanAsync(id, true, notes, AdminId);
-        return NoContent();
+        var adminId = await GetCurrentUserIdAsync();
+
+        try
+        {
+            await adminService.VerifyHandymanAsync(id, true, notes, adminId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("handymen/{id}/reject")]
     public async Task<IActionResult> RejectHandyman(Guid id, [FromBody] string notes)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
-        await adminService.VerifyHandymanAsync(id, false, notes, AdminId);
-        return NoContent();
+        var adminId = await GetCurrentUserIdAsync();
+
+        try
+        {
+            await adminService.VerifyHandymanAsync(id, false, notes, adminId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    // --- Jobs ---
     [HttpGet("jobs/emergency")]
-    public async Task<ActionResult<IEnumerable<JobDto>>> GetEmergencyJobs() 
-        => Ok(await adminService.GetEmergencyJobsAsync());
+    public async Task<ActionResult<IEnumerable<JobDto>>> GetEmergencyJobs()
+    {
+        try { return Ok(await adminService.GetEmergencyJobsAsync()); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
 
     [HttpPatch("jobs/{id}/assign")]
     public async Task<IActionResult> AssignJob(Guid id, [FromBody] AssignJobRequest request)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
-        await adminService.AssignJobAsync(id, request.HandymanUserId, AdminId);
-        return NoContent();
+        var adminId = await GetCurrentUserIdAsync();
+
+        try
+        {
+            await adminService.AssignJobAsync(id, request.HandymanUserId, adminId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    // --- Bid Transactions ---
     [HttpGet("bid-transactions")]
-    public async Task<ActionResult<IEnumerable<BidTransactionDto>>> GetTransactions([FromQuery] string? type) 
-        => Ok(await adminService.GetBidTransactionsAsync(type));
+    public async Task<ActionResult<IEnumerable<BidTransactionDto>>> GetTransactions([FromQuery] string? type)
+    {
+        try { return Ok(await adminService.GetBidTransactionsAsync(type)); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
 
     [HttpPatch("bid-transactions/{bidId}/force-reject")]
     public async Task<IActionResult> ForceRejectBid(Guid bidId, [FromBody] string reason)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
-        await adminService.HandleBidActionAsync(bidId, "FORCE_REJECT", reason, AdminId);
-        return NoContent();
+        var adminId = await GetCurrentUserIdAsync();
+
+        try
+        {
+            await adminService.HandleBidActionAsync(bidId, "FORCE_REJECT", reason, adminId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("bid-transactions/{bidId}/lock")]
     public async Task<IActionResult> LockBid(Guid bidId, [FromBody] string reason)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
-        await adminService.HandleBidActionAsync(bidId, "LOCK", reason, AdminId);
-        return NoContent();
+        var adminId = await GetCurrentUserIdAsync();
+
+        try
+        {
+            await adminService.HandleBidActionAsync(bidId, "LOCK", reason, adminId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("bid-transactions/{bidId}/flag")]
     public async Task<IActionResult> FlagBid(Guid bidId, [FromBody] string reason)
     {
-        if (AdminId == Guid.Empty) return Unauthorized();
-        await adminService.HandleBidActionAsync(bidId, "FLAG", reason, AdminId);
-        return NoContent();
+        var adminId = await GetCurrentUserIdAsync();
+
+        try
+        {
+            await adminService.HandleBidActionAsync(bidId, "FLAG", reason, adminId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    // --- Audit ---
     [HttpGet("audit-log")]
-    [Obsolete("This endpoint is currently not in use. ")]
-    public async Task<ActionResult<IEnumerable<AdminActionDto>>> GetAuditLogs() 
-        => Ok(await adminService.GetAuditLogsAsync());
+    [Obsolete("Use specific moderation logs where available.")]
+    public async Task<ActionResult<IEnumerable<AdminActionDto>>> GetAuditLogs()
+    {
+        try { return Ok(await adminService.GetAuditLogsAsync()); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
 }

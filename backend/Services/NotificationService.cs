@@ -1,16 +1,13 @@
 using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
+using backend.Constants;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Net;
 
 namespace backend.Services;
 
-public class NotificationService(NeighbourHelpDbContext context, ILogger<NotificationService> logger) : INotificationService
+public class NotificationService( NeighbourHelpDbContext context, ILogger<NotificationService> logger) : INotificationService
 {
     public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId)
     {
@@ -21,14 +18,7 @@ public class NotificationService(NeighbourHelpDbContext context, ILogger<Notific
 
         var unreadCount = notifications.Count(n => !n.Is_Read);
 
-        var dtos = notifications.Select(n => new NotificationDto(
-            n.Id,
-            n.Type,
-            n.Message,
-            n.Related_Job_Id,
-            n.Is_Read,
-            n.Created_At_Utc
-        )).ToList();
+        var dtos = notifications.Select(MapToDto).ToList();
 
         return new NotificationListResponse(dtos, unreadCount);
     }
@@ -40,27 +30,36 @@ public class NotificationService(NeighbourHelpDbContext context, ILogger<Notific
 
         if (notification == null)
         {
-            logger.LogWarning("Notification {NotificationId} not found for User {UserId}", notificationId, userId);
-            throw new KeyNotFoundException("Notification not found");
+            logger.LogWarning("MarkAsRead failed: Notification {NotificationId} not found for User {UserId}", notificationId, userId);
+            throw new HttpRequestException("Notification not found.", null, HttpStatusCode.NotFound);
         }
+
+        if (notification.Is_Read) return;
 
         notification.Is_Read = true;
         await context.SaveChangesAsync();
+        
         logger.LogInformation("Notification {NotificationId} marked as read by User {UserId}", notificationId, userId);
     }
 
     public async Task MarkAllAsReadAsync(Guid userId)
     {
-        var unreadNotifications = await context.Notifications
+        await context.Notifications
             .Where(n => n.User_Id == userId && !n.Is_Read)
-            .ToListAsync();
+            .ExecuteUpdateAsync(setters => setters.SetProperty(n => n.Is_Read, true));
 
-        foreach (var n in unreadNotifications)
-        {
-            n.Is_Read = true;
-        }
-
-        await context.SaveChangesAsync();
         logger.LogInformation("All notifications marked as read for User {UserId}", userId);
+    }
+
+    private static NotificationDto MapToDto(Notification entity)
+    {
+        return new NotificationDto(
+            Id: entity.Id,
+            Type: NotificationConstants.ParseFromDb(entity.Type).ToDbString(),
+            Message: entity.Message,
+            RelatedJobId: entity.Related_Job_Id,
+            IsRead: entity.Is_Read,
+            CreatedAtUtc: entity.Created_At_Utc
+        );
     }
 }

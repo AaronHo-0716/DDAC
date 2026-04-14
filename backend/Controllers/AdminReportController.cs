@@ -1,29 +1,18 @@
 using backend.Models.DTOs;
 using backend.Services;
+using backend.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace backend.Controllers;
 
 [ApiController]
 [Route("api/admin/report")]
 [Authorize(Roles = "admin")]
-public class AdminReportController(IReportService reportService) : ControllerBase 
+public class AdminReportController(IReportService reportService) : BaseController 
 {
-    private Guid AdminId 
-    {
-        get 
-        {
-            var claimValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                             ?? User.FindFirst("sub")?.Value;
-
-            return Guid.TryParse(claimValue, out var id) ? id : Guid.Empty;
-        }
-    }
-
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<UserReportDto>>> GetReports([FromQuery] ReportStatusFilter? status)
+    public async Task<ActionResult<IEnumerable<UserReportDto>>> GetReports([FromQuery] ReportStatus? status)
     {
         return Ok(await reportService.GetAllReportsAsync(status));
     }
@@ -31,36 +20,34 @@ public class AdminReportController(IReportService reportService) : ControllerBas
     [HttpPatch("{id}/resolve")]
     public async Task<IActionResult> ResolveReport(Guid id, [FromBody] string notes)
     {
+        var adminId = await GetCurrentUserIdAsync();
+        if (adminId == Guid.Empty) return Unauthorized();
+
         try
         {
-            await reportService.ResolveReportAsync(id, notes, AdminId);
+            await reportService.ResolveReportAsync(id, notes, adminId);
             return NoContent();
         }
-        catch (KeyNotFoundException ex)
+        catch (HttpRequestException ex)
         {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
+            return HandleError(ex);
         }
     }
 
-    [HttpPost("{id}/review")]
+    [HttpPatch("{id}/review")]
     public async Task<IActionResult> ReviewReport(Guid id, [FromBody] string notes)
     {
+        var adminId = await GetCurrentUserIdAsync();
+        if (adminId == Guid.Empty) return Unauthorized();
+
         try
         {
-            await reportService.ReviewReportAsync(id, notes, AdminId);
+            await reportService.ReviewReportAsync(id, notes, adminId);
             return NoContent();
         }
-        catch (KeyNotFoundException ex)
+        catch (HttpRequestException ex)
         {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
+            return HandleError(ex);
         }
     }
 }

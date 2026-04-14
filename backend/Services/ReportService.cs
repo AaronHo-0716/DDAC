@@ -1,24 +1,22 @@
 using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
+using backend.Constants;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Net;
 
 namespace backend.Services;
 
-public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService> logger) : IReportService
-{ 
+public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService> logger) : BaseService(context, logger), IReportService
+{
     public async Task CreateReportAsync(CreateReportRequest request, Guid reporterId)
     {
-        if (request.TargetUserId == reporterId)
-            throw new ArgumentException("You cannot report yourself.");
 
+        if (request.TargetUserId == reporterId) 
+        throw new HttpRequestException("Self-reporting is not allowed.", null, HttpStatusCode.BadRequest);
+        
         var targetExists = await context.Users.AnyAsync(u => u.Id == request.TargetUserId);
-        if (!targetExists) throw new KeyNotFoundException("Target user not found.");
+        if (!targetExists) throw new HttpRequestException("The user you are trying to report no longer exists.", null, HttpStatusCode.NotFound);
 
         var report = new User_Report
         {
@@ -27,24 +25,14 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
             Target_User_Id = request.TargetUserId,
             Reason = request.Reason,
             Description = request.Description,
-            Status = "pending",
+            Status = ReportStatus.Pending.ToDbString(),
             Created_At_Utc = DateTime.UtcNow
         };
 
         context.User_Reports.Add(report);
-
-        var adminIds = await context.Users.Where(u => u.Role == "admin").Select(u => u.Id).ToListAsync();
-        var adminNotifications = adminIds.Select(adminId => new Notification
-        {
-            Id = Guid.NewGuid(),
-            User_Id = adminId,
-            Type = "new_user_report",
-            Message = $"New report filed against user for: {request.Reason}",
-            Is_Read = false,
-            Created_At_Utc = DateTime.UtcNow
-        });
         
-        context.Notifications.AddRange(adminNotifications);
+        await CreateNotifications(NotificationType.NewUserReport, $"New user report filed: {request.Reason}");
+
         await context.SaveChangesAsync();
         
         logger.LogInformation("User {ReporterId} filed a report against {TargetId}", reporterId, request.TargetUserId);
@@ -60,70 +48,37 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
             .OrderByDescending(r => r.Created_At_Utc)
             .ToListAsync();
 
-        return reports.Select(r => new UserReportDto(
-            r.Id,
-            r.Reporter_Id,
-            r.Reporter.Name,
-            r.Target_User_Id,
-            r.Target_User.Name,
-            r.Reason,
-            r.Description,
-            r.Status,
-            r.Created_At_Utc,
-            r.Reviewed_By_Admin_Id,
-            r.Reviewed_By_Admin?.Name,
-            r.Reviewed_At_Utc,
-            r.Admin_Notes
-        ));
+        return reports.Select(MapToDto);
     }
 
-    public async Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatusFilter? status = null)
+    public async Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatus? status = null)
     {
         var query = context.User_Reports
             .Include(r => r.Reporter)
             .Include(r => r.Target_User)
             .Include(r => r.Reviewed_By_Admin)
             .AsNoTracking();
-    
+
         if (status.HasValue)
         {
-            var statusStr = status.Value.ToString().ToLower();
+            var statusStr = status.Value.ToDbString();
             query = query.Where(r => r.Status == statusStr);
         }
-    
+
         var reports = await query.OrderByDescending(r => r.Created_At_Utc).ToListAsync();
-    
-        return reports.Select(r => new UserReportDto(
-            r.Id,
-            r.Reporter_Id,
-            r.Reporter.Name,
-            r.Target_User_Id,
-            r.Target_User.Name,
-            r.Reason,
-            r.Description,
-            r.Status,
-            r.Created_At_Utc,
-            r.Reviewed_By_Admin_Id,
-            r.Reviewed_By_Admin?.Name,
-            r.Reviewed_At_Utc,
-            r.Admin_Notes
-        ));
+        return reports.Select(MapToDto);
     }
 
     public async Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId)
     {
         var report = await context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
-            ?? throw new KeyNotFoundException("Report not found.");
+            ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 
-        if (report.Status == "resolved")
-        {
-            throw new InvalidOperationException("This report has already been resolved and cannot be modified.");
-        }
-
-        report.Status = "resolved";
-        report.Admin_Notes = adminNotes;
-        report.Reviewed_At_Utc = DateTime.UtcNow;
-        report.Reviewed_By_Admin_Id = adminId;
+        if (report.Status == ReportStatus.Resolved.ToDbString())
+            throw new HttpRequestException("This report has already been resolved and cannot be modified.", null, HttpStatusCode.BadRequest);
+        
+        report.Status = ReportStatus.Resolved.ToDbString();
+        UpdateModerationDetails(report, adminNotes, adminId);
 
         await context.SaveChangesAsync();
         logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
@@ -132,19 +87,42 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
     public async Task ReviewReportAsync(Guid reportId, string adminNotes, Guid adminId)
     {
         var report = await context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
-            ?? throw new KeyNotFoundException("Report not found.");
+            ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 
-        if (report.Status == "resolved")
-        {
-            throw new InvalidOperationException("This report has already been resolved and cannot be marked as 'under review'.");
-        }
-    
-        report.Status = "reviewed";
-        report.Admin_Notes = adminNotes; // Save notes provided during review
+        if (report.Status == ReportStatus.Resolved.ToDbString())
+            throw new HttpRequestException("Resolved reports cannot be put back under review.", null, HttpStatusCode.BadRequest);
+        
+
+        report.Status = ReportStatus.Reviewed.ToDbString();
+        UpdateModerationDetails(report, adminNotes, adminId);
+
+        await context.SaveChangesAsync();
+        logger.LogInformation("Report {ReportId} status updated to 'Reviewed' by Admin {AdminId}", reportId, adminId);
+    }
+
+    private static void UpdateModerationDetails(User_Report report, string notes, Guid adminId)
+    {
+        report.Admin_Notes = notes;
         report.Reviewed_By_Admin_Id = adminId;
         report.Reviewed_At_Utc = DateTime.UtcNow;
-    
-        await context.SaveChangesAsync();
-        logger.LogInformation("Report {ReportId} status updated to 'reviewed' with notes by Admin {AdminId}", reportId, adminId);
+    }
+
+    private static UserReportDto MapToDto(User_Report r)
+    {
+        return new UserReportDto(
+            r.Id,
+            r.Reporter_Id,
+            r.Reporter.Name,
+            r.Target_User_Id,
+            r.Target_User.Name,
+            r.Reason,
+            r.Description,
+            ReportConstants.ParseFromDb(r.Status).ToDbString(),
+            r.Created_At_Utc,
+            r.Reviewed_By_Admin_Id,
+            r.Reviewed_By_Admin?.Name,
+            r.Reviewed_At_Utc,
+            r.Admin_Notes
+        );
     }
 }

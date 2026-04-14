@@ -2,133 +2,58 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using backend.Services;
 using backend.Models.DTOs;
-using Microsoft.Extensions.Logging;
-using System.Security.Claims;
 
 namespace backend.Controllers;
 
 [ApiController]
 [Route("api/bids")]
 [Authorize]
-public class BidController(IBidService bidService, ILogger<BidController> logger) : ControllerBase
+public class BidController(IBidService bidService) : BaseController
 {
-    [Authorize]
     [HttpGet("my")]
-    public async Task<ActionResult<BidListResponse>> GetMyBids(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10)
+    [Authorize(Roles = "admin,homeowner")]
+    public async Task<ActionResult<BidListResponse>> GetMyBids([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        var userId = GetUserIdFromClaims();
-        var userRole = GetUserRoleFromClaims();
+        var userId = await GetCurrentUserIdAsync();
+        if (userId == Guid.Empty) return Unauthorized();
 
-        if (userId == null)
-            return Unauthorized("User ID not found in token");
-
-        if (userRole != "handyman")
-            return Forbid();
-
-        var result = await bidService.GetMyBidsAsync(userId.Value, page, pageSize);
-        return Ok(result);
+        try { return Ok(await bidService.GetMyBidsAsync(userId, page, pageSize)); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    [Authorize]
     [HttpPatch("{bidId}/accept")]
     public async Task<ActionResult<BidDto>> AcceptBid(Guid bidId)
     {
-        var userId = GetUserIdFromClaims();
-        var userRole = GetUserRoleFromClaims();
+        var userId = await GetCurrentUserIdAsync();
+        if (userId == Guid.Empty) return Unauthorized();
 
-        if (userId == null)
-            return Unauthorized("User ID not found in token");
-
-        try
-        {
-            var bid = await bidService.AcceptBidAsync(bidId, userId.Value, userRole);
-            return Ok(bid);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        try { return Ok(await bidService.AcceptBidAsync(bidId, userId, GetUserRole())); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    [Authorize]
     [HttpPatch("{bidId}/reject")]
     public async Task<ActionResult<BidDto>> RejectBid(Guid bidId)
     {
-        var userId = GetUserIdFromClaims();
-        var userRole = GetUserRoleFromClaims();
+        var userId = await GetCurrentUserIdAsync();
+        if (userId == Guid.Empty) return Unauthorized();
 
-        if (userId == null)
-            return Unauthorized("User ID not found in token");
-
-        try
-        {
-            var bid = await bidService.RejectBidAsync(bidId, userId.Value, userRole);
-            return Ok(bid);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        try { return Ok(await bidService.RejectBidAsync(bidId, userId, GetUserRole())); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    [Authorize]
     [HttpDelete("{bidId}")]
     public async Task<IActionResult> DeleteBid(Guid bidId)
     {
-        var userId = GetUserIdFromClaims();
-        var userRole = GetUserRoleFromClaims();
-
-        if (userId == null)
-            return Unauthorized("User ID not found in token");
+        var userId = await GetCurrentUserIdAsync();
+        if (userId == Guid.Empty) return Unauthorized();
 
         try
         {
-            await bidService.DeleteBidAsync(bidId, userId.Value, userRole);
+            await bidService.DeleteBidAsync(bidId, userId, GetUserRole());
             return NoContent();
         }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    private Guid? GetUserIdFromClaims()
-    {
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (Guid.TryParse(userIdClaim, out var userId))
-            return userId;
-
-        return null;
-    }
-
-    private string GetUserRoleFromClaims()
-    {
-        return User.FindFirstValue(ClaimTypes.Role) ?? "guest";
-    }
+    private string GetUserRole() => User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "guest";
 }

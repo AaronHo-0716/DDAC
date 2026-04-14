@@ -2,46 +2,51 @@ using backend.Models.DTOs;
 using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace backend.Controllers;
 
 [ApiController]
 [Route("api/notifications")]
-[Authorize] 
-public class NotificationController(INotificationService notificationService, ILogger<NotificationController> logger) : ControllerBase
+[Authorize]
+public class NotificationController(INotificationService notificationService) : BaseController
 {
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
     [HttpGet]
     public async Task<ActionResult<NotificationListResponse>> GetNotifications()
     {
-        var result = await notificationService.GetUserNotificationsAsync(UserId);
-        return Ok(result);
+        var userId = await GetCurrentUserIdAsync();
+
+        return Ok(await notificationService.GetUserNotificationsAsync(userId));
     }
 
     [HttpPatch("{id}/read")]
     public async Task<IActionResult> MarkAsRead(Guid id)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         try
         {
-            await notificationService.MarkAsReadAsync(id, UserId);
+            await notificationService.MarkAsReadAsync(id, userId);
             return NoContent();
         }
-        catch (KeyNotFoundException ex)
+        catch (HttpRequestException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return HandleError(ex);
         }
     }
 
     [HttpPatch("read-all")]
     public async Task<IActionResult> MarkAllAsRead()
     {
-        await notificationService.MarkAllAsReadAsync(UserId);
-        return NoContent();
+        var userId = await GetCurrentUserIdAsync();
+
+        try
+        {
+            await notificationService.MarkAllAsReadAsync(userId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex)
+        {
+            return HandleError(ex);
+        }
     }
 }

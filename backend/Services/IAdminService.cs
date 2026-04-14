@@ -1,7 +1,4 @@
 using backend.Models.DTOs;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace backend.Services;
 
@@ -11,7 +8,7 @@ public interface IAdminService
     Task<UserDto> CreateAdminAsync(RegisterRequest request);
     Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request);
     Task<UserDto> GetUserByIdAsync(Guid id);
-    Task<BlockedUserResponse?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken);
+    Task<UserDto?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken);
     Task<IEnumerable<HandymanVerificationDto>> GetPendingVerificationsAsync();
     Task VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId);
     Task<IEnumerable<JobDto>> GetEmergencyJobsAsync();

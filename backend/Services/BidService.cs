@@ -1,103 +1,61 @@
 using backend.Data;
 using backend.Models.Entities;
 using backend.Models.DTOs;
+using backend.Constants;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Net;
 
 namespace backend.Services;
 
-public class BidService : IBidService
+public class BidService(NeighbourHelpDbContext context, ILogger<BidService> logger) : BaseService(context, logger), IBidService
 {
-    private readonly NeighbourHelpDbContext _context;
-    private readonly ILogger<BidService> _logger;
-
-    public BidService(NeighbourHelpDbContext context, ILogger<BidService> logger)
-    {
-        _context = context;
-        _logger = logger;
-    }
-
     public async Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 10)
     {
-        var jobExists = await _context.Jobs.AnyAsync(j => j.Id == jobId);
-        if (!jobExists)
-            throw new KeyNotFoundException($"Job with id {jobId} not found");
+        if (!await context.Jobs.AnyAsync(j => j.Id == jobId))
+            throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
-        var query = _context.Bids
+        var query = context.Bids
             .Where(b => b.Job_Id == jobId)
             .OrderByDescending(b => b.Created_At_Utc);
 
-        var totalCount = await query.CountAsync();
-
-        var bids = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Include(b => b.Handyman_User)
-            .ToListAsync();
-
-        var bidDtos = bids.Select(b => MapBidToDto(b)).ToList();
-
-        return new BidListResponse(
-            Bids: bidDtos,
-            Page: page,
-            PageSize: pageSize,
-            TotalCount: totalCount
-        );
+        return await GetPagedBidsResponse(query, page, pageSize);
     }
 
     public async Task<BidListResponse> GetMyBidsAsync(Guid userId, int page = 1, int pageSize = 10)
     {
-        var query = _context.Bids
+        var query = context.Bids
             .Where(b => b.Handyman_User_Id == userId)
             .OrderByDescending(b => b.Created_At_Utc);
 
-        var totalCount = await query.CountAsync();
-
-        var bids = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Include(b => b.Handyman_User)
-            .ToListAsync();
-
-        var bidDtos = bids.Select(MapBidToDto).ToList();
-
-        return new BidListResponse(
-            Bids: bidDtos,
-            Page: page,
-            PageSize: pageSize,
-            TotalCount: totalCount
-        );
+        return await GetPagedBidsResponse(query, page, pageSize);
     }
 
     public async Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request, Guid userId, string userRole)
     {
-        if (userRole != "handyman")
-            throw new UnauthorizedAccessException("Only handymen can create bids");
+        ValidateHandymanRole(userRole);
 
-        var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId);
-        if (job == null)
-            throw new KeyNotFoundException($"Job with id {jobId} not found");
+        var job = await context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId) 
+            ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
-        if (job.Status != "open")
-            throw new ArgumentException($"Cannot bid on a job with status '{job.Status}'. Job must be open.");
+        if (job.Status != JobStatus.Open.ToDbString())
+            throw new HttpRequestException($"Cannot bid on a job with status '{job.Status}'. Job must be open.", null, HttpStatusCode.BadRequest);
 
         if (job.Posted_By_User_Id == userId)
-            throw new ArgumentException("You cannot bid on your own job");
+            throw new HttpRequestException("You cannot bid on your own job", null, HttpStatusCode.BadRequest);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null || !user.IsActive)
-            throw new UnauthorizedAccessException("User account is inactive or blocked");
+            throw new HttpRequestException("User account is inactive or blocked", null, HttpStatusCode.Forbidden);
 
-        var isHandymanVerified = await _context.Handyman_Verifications
-            .AnyAsync(v => v.User_Id == userId && v.Status == "approved");
-        if (!isHandymanVerified)
-            throw new ArgumentException("Your handyman account is not verified yet. You cannot place bids until your verification is approved.");
+        var isVerified = await context.Handyman_Verifications
+            .AnyAsync(v => v.User_Id == userId && v.Status == VerificationStatus.Approved.ToDbString());
+            
+        if (!isVerified)
+            throw new HttpRequestException("Your handyman account is not verified yet.", null, HttpStatusCode.BadRequest);
 
-        var existingBid = await _context.Bids
-            .FirstOrDefaultAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId);
-        if (existingBid != null)
-            throw new ArgumentException("You have already placed a bid on this job");
+        if (await context.Bids.AnyAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId))
+            throw new HttpRequestException("You have already placed a bid on this job", null, HttpStatusCode.BadRequest);
 
         var bid = new Bid
         {
@@ -107,293 +65,171 @@ public class BidService : IBidService
             Price = request.Price,
             Estimated_Arrival_Utc = request.EstimatedArrival,
             Message = request.Message,
-            Status = "pending",
+            Status = BidStatus.Pending.ToDbString(),
             Is_Recommended = false,
             Created_At_Utc = DateTime.UtcNow,
             Updated_At_Utc = DateTime.UtcNow
         };
 
-        _context.Bids.Add(bid);
+        context.Bids.Add(bid);
 
         var metadata = JsonSerializer.Serialize(new { price = request.Price, estimated_arrival = request.EstimatedArrival });
-        var bidTransaction = new Bid_Transaction
-        {
-            Id = Guid.NewGuid(),
-            Bid_Id = bid.Id,
-            Job_Id = jobId,
-            Handyman_User_Id = userId,
-            Homeowner_User_Id = job.Posted_By_User_Id,
-            Event_Type = "created",
-            Event_By_User_Id = userId,
-            Event_Reason = "Bid created by handyman",
-            Event_Metadata = metadata,
-            Created_At_Utc = DateTime.UtcNow
-        };
+        AddBidTransaction(bid.Id, jobId, userId, job.Posted_By_User_Id, BidEventType.Created, userId, "Bid created by handyman", metadata);
 
-        _context.Bid_Transactions.Add(bidTransaction);
+        CreateNotification(job.Posted_By_User_Id, NotificationType.BidReceived, $"{user.Name} has placed a bid of ${request.Price}", jobId);
 
-        var notification = new Notification
-        {
-            Id = Guid.NewGuid(),
-            User_Id = job.Posted_By_User_Id,
-            Type = "bid_received",
-            Message = $"{user.Name} has placed a bid of ${request.Price}",
-            Related_Job_Id = jobId,
-            Is_Read = false,
-            Created_At_Utc = DateTime.UtcNow
-        };
+        await context.SaveChangesAsync();
+        logger.LogInformation("Bid {BidId} created for Job {JobId} by Handyman {UserId}", bid.Id, jobId, userId);
 
-        _context.Notifications.Add(notification);
-
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Bid {BidId} created for Job {JobId} by Handyman {UserId}", bid.Id, jobId, userId);
-
-        var createdBid = await _context.Bids
-            .Include(b => b.Handyman_User)
-            .FirstOrDefaultAsync(b => b.Id == bid.Id);
-
-        return MapBidToDto(createdBid!);
+        return await GetBidDtoWithUser(bid.Id);
     }
 
     public async Task<BidDto> AcceptBidAsync(Guid bidId, Guid userId, string userRole)
     {
-        if (userRole != "homeowner" && userRole != "admin")
-            throw new UnauthorizedAccessException("Only the job owner or admin can accept bids");
+        if (userRole != UserRole.Homeowner.ToDbString() && userRole != UserRole.Admin.ToDbString())
+            throw new HttpRequestException("Unauthorized role for this action", null, HttpStatusCode.Forbidden);
 
-        var bid = await _context.Bids
+        var bid = await context.Bids
             .Include(b => b.Job)
             .Include(b => b.Handyman_User)
-            .FirstOrDefaultAsync(b => b.Id == bidId);
+            .FirstOrDefaultAsync(b => b.Id == bidId) 
+            ?? throw new HttpRequestException($"Bid with id {bidId} not found", null, HttpStatusCode.NotFound);
 
-        if (bid == null)
-            throw new KeyNotFoundException($"Bid with id {bidId} not found");
+        if (userRole == UserRole.Homeowner.ToDbString() && bid.Job.Posted_By_User_Id != userId)
+            throw new HttpRequestException("You are not the owner of this job", null, HttpStatusCode.Forbidden);
 
-        if (userRole == "homeowner" && bid.Job.Posted_By_User_Id != userId)
-            throw new UnauthorizedAccessException("You are not the owner of this job");
+        if (bid.Status != BidStatus.Pending.ToDbString())
+            throw new HttpRequestException($"Cannot accept a bid with status '{bid.Status}'.", null, HttpStatusCode.BadRequest);
 
-        if (bid.Status != "pending")
-            throw new ArgumentException($"Cannot accept a bid with status '{bid.Status}'. Bid must be pending.");
+        if (bid.Job.Status != JobStatus.Open.ToDbString())
+            throw new HttpRequestException("Cannot accept a bid for a job that is not open", null, HttpStatusCode.BadRequest);
 
-        if (bid.Job.Status != "open")
-            throw new ArgumentException("Cannot accept a bid for a job that is not open");
-
-        using (var transaction = await _context.Database.BeginTransactionAsync())
+        using var transaction = await context.Database.BeginTransactionAsync();
+        try
         {
-            try
+            bid.Status = BidStatus.Accepted.ToDbString();
+            bid.Updated_At_Utc = DateTime.UtcNow;
+
+            var otherPendingBids = await context.Bids
+                .Where(b => b.Job_Id == bid.Job_Id && b.Id != bid.Id && b.Status == BidStatus.Pending.ToDbString())
+                .ToListAsync();
+
+            foreach (var otherBid in otherPendingBids)
             {
-                bid.Status = "accepted";
-                bid.Updated_At_Utc = DateTime.UtcNow;
-                _context.Bids.Update(bid);
+                otherBid.Status = BidStatus.Rejected.ToDbString();
+                otherBid.Updated_At_Utc = DateTime.UtcNow;
 
-                var otherPendingBids = await _context.Bids
-                    .Where(b => b.Job_Id == bid.Job_Id && b.Id != bid.Id && b.Status == "pending")
-                    .ToListAsync();
-
-                foreach (var otherBid in otherPendingBids)
-                {
-                    otherBid.Status = "rejected";
-                    otherBid.Updated_At_Utc = DateTime.UtcNow;
-                    _context.Bids.Update(otherBid);
-
-                    var rejectedMetadata = JsonSerializer.Serialize(new { accepted_bid_id = bid.Id });
-                    var rejectedEvent = new Bid_Transaction
-                    {
-                        Id = Guid.NewGuid(),
-                        Bid_Id = otherBid.Id,
-                        Job_Id = bid.Job_Id,
-                        Handyman_User_Id = otherBid.Handyman_User_Id,
-                        Homeowner_User_Id = bid.Job.Posted_By_User_Id,
-                        Event_Type = "rejected",
-                        Event_By_User_Id = userId,
-                        Event_Reason = "Rejected due to another bid being accepted",
-                        Event_Metadata = rejectedMetadata,
-                        Created_At_Utc = DateTime.UtcNow
-                    };
-                    _context.Bid_Transactions.Add(rejectedEvent);
-
-                    var rejectionNotification = new Notification
-                    {
-                        Id = Guid.NewGuid(),
-                        User_Id = otherBid.Handyman_User_Id,
-                        Type = "bid_rejected",
-                        Message = $"Your bid for '{bid.Job.Title}' was not accepted",
-                        Related_Job_Id = bid.Job_Id,
-                        Is_Read = false,
-                        Created_At_Utc = DateTime.UtcNow
-                    };
-                    _context.Notifications.Add(rejectionNotification);
-                }
-
-                bid.Job.Status = "in_progress";
-                bid.Job.Updated_At_Utc = DateTime.UtcNow;
-                _context.Jobs.Update(bid.Job);
-
-                var acceptedMetadata = JsonSerializer.Serialize(new {});
-                var acceptedEvent = new Bid_Transaction
-                {
-                    Id = Guid.NewGuid(),
-                    Bid_Id = bid.Id,
-                    Job_Id = bid.Job_Id,
-                    Handyman_User_Id = bid.Handyman_User_Id,
-                    Homeowner_User_Id = bid.Job.Posted_By_User_Id,
-                    Event_Type = "accepted",
-                    Event_By_User_Id = userId,
-                    Event_Reason = "Bid accepted by job owner",
-                    Event_Metadata = acceptedMetadata,
-                    Created_At_Utc = DateTime.UtcNow
-                };
-                _context.Bid_Transactions.Add(acceptedEvent);
-
-                var acceptanceNotification = new Notification
-                {
-                    Id = Guid.NewGuid(),
-                    User_Id = bid.Handyman_User_Id,
-                    Type = "bid_accepted",
-                    Message = $"Your bid for '{bid.Job.Title}' has been accepted!",
-                    Related_Job_Id = bid.Job_Id,
-                    Is_Read = false,
-                    Created_At_Utc = DateTime.UtcNow
-                };
-                _context.Notifications.Add(acceptanceNotification);
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-                _logger.LogInformation("Bid {BidId} accepted by User {UserId}. Job {JobId} is now in_progress.", bidId, userId, bid.Job_Id);
+                var rejectedMetadata = JsonSerializer.Serialize(new { accepted_bid_id = bid.Id });
+                AddBidTransaction(otherBid.Id, bid.Job_Id, otherBid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Rejected due to another bid being accepted", rejectedMetadata);
+                CreateNotification(otherBid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was not accepted", bid.Job_Id);
             }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                _logger.LogError(ex, "Failed to accept bid {BidId}", bidId);
-                throw;
-            }
+
+            bid.Job.Status = JobStatus.InProgress.ToDbString();
+            bid.Job.Updated_At_Utc = DateTime.UtcNow;
+
+            AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Accepted, userId, "Bid accepted by job owner");
+            CreateNotification(bid.Handyman_User_Id, NotificationType.BidAccepted, $"Your bid for '{bid.Job.Title}' has been accepted!", bid.Job_Id);
+
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            
+            return await GetBidDtoWithUser(bid.Id);
         }
-
-        var updatedBid = await _context.Bids
-            .Include(b => b.Handyman_User)
-            .FirstOrDefaultAsync(b => b.Id == bid.Id);
-
-        return MapBidToDto(updatedBid!);
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            logger.LogError(ex, "Failed to accept bid {BidId}", bidId);
+            throw;
+        }
     }
 
     public async Task<BidDto> RejectBidAsync(Guid bidId, Guid userId, string userRole)
     {
-        if (userRole != "homeowner" && userRole != "admin")
-            throw new UnauthorizedAccessException("Only the job owner or admin can reject bids");
+        if (userRole != UserRole.Homeowner.ToDbString() && userRole != UserRole.Admin.ToDbString())
+            throw new HttpRequestException("Unauthorized role for this action", null, HttpStatusCode.Forbidden);
 
-        var bid = await _context.Bids
+        var bid = await context.Bids
             .Include(b => b.Job)
             .Include(b => b.Handyman_User)
-            .FirstOrDefaultAsync(b => b.Id == bidId);
+            .FirstOrDefaultAsync(b => b.Id == bidId) 
+            ?? throw new HttpRequestException($"Bid with id {bidId} not found", null, HttpStatusCode.NotFound);
 
-        if (bid == null)
-            throw new KeyNotFoundException($"Bid with id {bidId} not found");
+        if (userRole == UserRole.Homeowner.ToDbString() && bid.Job.Posted_By_User_Id != userId)
+            throw new HttpRequestException("You are not the owner of this job", null, HttpStatusCode.Forbidden);
 
-        if (userRole == "homeowner" && bid.Job.Posted_By_User_Id != userId)
-            throw new UnauthorizedAccessException("You are not the owner of this job");
+        if (bid.Status != BidStatus.Pending.ToDbString())
+            throw new HttpRequestException($"Cannot reject a bid with status '{bid.Status}'.", null, HttpStatusCode.BadRequest);
 
-        if (bid.Status != "pending")
-            throw new ArgumentException($"Cannot reject a bid with status '{bid.Status}'. Bid must be pending.");
-
-        bid.Status = "rejected";
+        bid.Status = BidStatus.Rejected.ToDbString();
         bid.Updated_At_Utc = DateTime.UtcNow;
-        _context.Bids.Update(bid);
 
-        var rejectMetadata = JsonSerializer.Serialize(new {});
-        var bidTransaction = new Bid_Transaction
-        {
-            Id = Guid.NewGuid(),
-            Bid_Id = bid.Id,
-            Job_Id = bid.Job_Id,
-            Handyman_User_Id = bid.Handyman_User_Id,
-            Homeowner_User_Id = bid.Job.Posted_By_User_Id,
-            Event_Type = "rejected",
-            Event_By_User_Id = userId,
-            Event_Reason = "Bid rejected by job owner",
-            Event_Metadata = rejectMetadata,
-            Created_At_Utc = DateTime.UtcNow
-        };
-        _context.Bid_Transactions.Add(bidTransaction);
+        AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Bid rejected by job owner");
+        CreateNotification(bid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was rejected", bid.Job_Id);
 
-        var notification = new Notification
-        {
-            Id = Guid.NewGuid(),
-            User_Id = bid.Handyman_User_Id,
-            Type = "bid_rejected",
-            Message = $"Your bid for '{bid.Job.Title}' was rejected",
-            Related_Job_Id = bid.Job_Id,
-            Is_Read = false,
-            Created_At_Utc = DateTime.UtcNow
-        };
-        _context.Notifications.Add(notification);
-
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Bid {BidId} rejected by User {UserId}", bidId, userId);
-
+        await context.SaveChangesAsync();
         return MapBidToDto(bid);
     }
 
     public async Task DeleteBidAsync(Guid bidId, Guid userId, string userRole)
     {
-        if (userRole != "handyman")
-            throw new UnauthorizedAccessException("Only the handyman who created the bid can delete it");
+        ValidateHandymanRole(userRole);
 
-        var bid = await _context.Bids
-            .Include(b => b.Job)
-            .FirstOrDefaultAsync(b => b.Id == bidId);
-
-        if (bid == null)
-            throw new KeyNotFoundException($"Bid with id {bidId} not found");
+        var bid = await context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
+            ?? throw new HttpRequestException($"Bid with id {bidId} not found", null, HttpStatusCode.NotFound);
 
         if (bid.Handyman_User_Id != userId)
-            throw new UnauthorizedAccessException("You can only delete your own bids");
+            throw new HttpRequestException("You can only delete your own bids", null, HttpStatusCode.Forbidden);
 
-        if (bid.Status != "pending")
-            throw new ArgumentException($"Cannot delete a bid with status '{bid.Status}'. Only pending bids can be deleted.");
+        if (bid.Status != BidStatus.Pending.ToDbString())
+            throw new HttpRequestException($"Cannot delete a bid with status '{bid.Status}'.", null, HttpStatusCode.BadRequest);
 
-        var deleteMetadata = JsonSerializer.Serialize(new {});
-        var bidTransaction = new Bid_Transaction
+        AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Retracted, userId, "Bid deleted/retracted by handyman");
+
+        context.Bids.Remove(bid);
+        await context.SaveChangesAsync();
+    }
+
+    private async Task<BidListResponse> GetPagedBidsResponse(IQueryable<Bid> query, int page, int pageSize)
+    {
+        var totalCount = await query.CountAsync();
+        var bids = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(b => b.Handyman_User)
+            .ToListAsync();
+
+        return new BidListResponse(bids.Select(MapBidToDto).ToList(), page, pageSize, totalCount);
+    }
+
+    private void AddBidTransaction(Guid bidId, Guid jobId, Guid handymanId, Guid homeownerId, BidEventType type, Guid actorId, string reason, string metadata = "{}")
+    {
+        context.Bid_Transactions.Add(new Bid_Transaction
         {
             Id = Guid.NewGuid(),
-            Bid_Id = bid.Id,
-            Job_Id = bid.Job_Id,
-            Handyman_User_Id = bid.Handyman_User_Id,
-            Homeowner_User_Id = bid.Job.Posted_By_User_Id,
-            Event_Type = "retracted",
-            Event_By_User_Id = userId,
-            Event_Reason = "Bid deleted/retracted by handyman",
-            Event_Metadata = deleteMetadata,
+            Bid_Id = bidId,
+            Job_Id = jobId,
+            Handyman_User_Id = handymanId,
+            Homeowner_User_Id = homeownerId,
+            Event_Type = type.ToDbString(),
+            Event_By_User_Id = actorId,
+            Event_Reason = reason,
+            Event_Metadata = metadata,
             Created_At_Utc = DateTime.UtcNow
-        };
-        _context.Bid_Transactions.Add(bidTransaction);
-
-        _context.Bids.Remove(bid);
-
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Bid {BidId} deleted by Handyman {UserId}", bidId, userId);
+        });
     }
 
-    private BidDto MapBidToDto(Bid bid)
+    private async Task<BidDto> GetBidDtoWithUser(Guid bidId)
     {
-        return new BidDto(
-            Id: bid.Id,
-            JobId: bid.Job_Id,
-            Handyman: new UserDto(
-                Id: bid.Handyman_User.Id,
-                Name: bid.Handyman_User.Name,
-                Email: bid.Handyman_User.Email,
-                Role: bid.Handyman_User.Role,
-                AvatarUrl: bid.Handyman_User.AvatarUrl,
-                Rating: bid.Handyman_User.Rating,
-                CreatedAt: bid.Handyman_User.CreatedAtUtc,
-                IsActive: bid.Handyman_User.IsActive
-            ),
-            Price: bid.Price,
-            EstimatedArrival: bid.Estimated_Arrival_Utc,
-            Message: bid.Message,
-            Status: bid.Status,
-            IsRecommended: bid.Is_Recommended,
-            CreatedAt: bid.Created_At_Utc,
-            UpdatedAt: bid.Updated_At_Utc
-        );
+        var bid = await context.Bids
+            .Include(b => b.Handyman_User)
+            .FirstOrDefaultAsync(b => b.Id == bidId);
+        return MapBidToDto(bid!);
     }
+
+    private void ValidateHandymanRole(string role)
+    {
+        if (role != UserRole.Handyman.ToDbString())
+            throw new HttpRequestException("Only handymen are authorized for this action", null, HttpStatusCode.Forbidden);
+    }
+
 }

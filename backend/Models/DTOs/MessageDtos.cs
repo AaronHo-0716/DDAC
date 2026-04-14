@@ -1,10 +1,9 @@
-using System;
-using System.Collections.Generic;
+using backend.Constants;
 
 namespace backend.Models.DTOs;
 
 public record CreateJobChatRequest(Guid JobId, Guid BidId, Guid OtherUserId);
-public record CreateSupportChatRequest(Guid? TargetUserId); // Admin provides target, User leaves null
+public record CreateSupportChatRequest(Guid? TargetUserId); 
 public record SendMessageRequest(string BodyText, string? ClientMessageId = null);
 
 public record ConversationDto(
@@ -18,7 +17,7 @@ public record ConversationDto(
     List<ParticipantDto> Participants
 );
 
-public record ParticipantDto(Guid UserId, string Name, string Role, string? AvatarUrl);
+public record ParticipantDto(Guid UserId, string Name, UserRole Role, string? AvatarUrl);
 
 public record MessageDto(
     Guid Id,

@@ -1,4 +1,4 @@
-using System;
+using backend.Constants;
 
 namespace backend.Models.DTOs;
 
@@ -11,7 +11,7 @@ public record UserDto(
     decimal? Rating,
     DateTime CreatedAt,
     bool IsActive = true,
-    string Verification = "approved",
+    string? Verification = null,
     string? BlockedReason = null,
     DateTime? BlockedAtUtc = null
 );
@@ -27,11 +27,11 @@ public record AuthResponse(
     TokenDto Tokens
 );
 
-public record BlockedUserResponse(
-    string Message,
-    string Reason,
-    DateTime? BlockedAt
-);
+// public record BlockedUserResponse(
+//     string Message,
+//     string Reason,
+//     DateTime? BlockedAt
+// );
 
 public record LoginRequest(string Email, string Password);
 public record RegisterRequest(string Name, string Email, string Password, string Role);

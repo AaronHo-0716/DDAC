@@ -1,8 +1,7 @@
-using backend.Models.Entities;
+// using backend.Constants;
 
 namespace backend.Models.DTOs;
 
-// Job response DTO
 public record JobDto(
     Guid Id,
     string Title,
@@ -21,7 +20,6 @@ public record JobDto(
     List<string>? ImageUrls
 );
 
-// Create job request
 public record CreateJobRequest(
     string Title,
     string Description,
@@ -34,7 +32,6 @@ public record CreateJobRequest(
     List<string>? ImageUrls = null
 );
 
-// Update job request
 public record UpdateJobRequest(
     string Title,
     string Description,
@@ -46,7 +43,6 @@ public record UpdateJobRequest(
     bool IsEmergency = false
 );
 
-// Job listing response (paginated)
 public record JobListResponse(
     List<JobDto> Jobs,
     int Page,
@@ -54,7 +50,6 @@ public record JobListResponse(
     int TotalCount
 );
 
-// Query filter parameters
 public record JobFilterQuery(
     int Page = 1,
     int PageSize = 10,
