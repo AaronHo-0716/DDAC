@@ -21,6 +21,7 @@ const handymanNavLinks = [
 
 const adminNavLinks = [
   { label: "Admin Dashboard", href: "/admin" },
+  { label: "Jobs", href: "/admin/jobs" },
   { label: "Reports", href: "/admin/reports" },
   { label: "Bid Transactions", href: "/admin/transactions/bids" },
   { label: "Users", href: "/admin/users" },
