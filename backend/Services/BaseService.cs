@@ -17,13 +17,24 @@ public abstract class BaseService(NeighbourHelpDbContext context, ILogger logger
         try { return new System.Net.Mail.MailAddress(email).Address == email; }
         catch { return false; }
     }
-    protected UserDto MapUserToDto(User user, VerificationStatus? verificationStatus = null)
+    protected async Task<UserDto> MapUserToDto(User user)
     {
-        Enum.TryParse<UserRole>(user.Role, true, out var roleEnum);
+        if (!Enum.TryParse<UserRole>(user.Role, true, out var roleEnum))
+        {
+            roleEnum = UserRole.Homeowner;
+        }
 
-        string? statusDbString = verificationStatus?.ToDbString();
+        string? verificationStatusFromDb = null;
 
-        var finalVerification = AuthConstants.ParseVerification(statusDbString, user.Role);
+        if (roleEnum == UserRole.Handyman)
+        {
+            verificationStatusFromDb = await Context.Handyman_Verifications
+                .Where(v => v.User_Id == user.Id)
+                .Select(v => v.Status)
+                .FirstOrDefaultAsync();
+        }
+
+        var finalVerification = AuthConstants.ParseVerification(verificationStatusFromDb, user.Role);
 
         return new UserDto(
             user.Id,
