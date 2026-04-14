@@ -10,14 +10,12 @@ import { notificationsService } from "@/app/lib/api/notifications";
 const homeownerNavLinks = [
   { label: "My Jobs", href: "/my-jobs" },
   { label: "Dashboard", href: "/dashboard" },
-  { label: "My Reports", href: "/reports" },
   { label: "Post Job", href: "/create-job" },
 ];
 
 const handymanNavLinks = [
   { label: "Browse Jobs", href: "/handyman" },
   { label: "My Bids", href: "/handyman/bids" },
-  { label: "My Reports", href: "/reports" },
   { label: "Active Jobs", href: "/handyman/active-jobs" },
 ];
 
@@ -146,6 +144,11 @@ export default function Navbar() {
                       <Link href="/settings" className="block px-4 py-2.5 text-sm text-[#111827] hover:bg-[#F7F8FA] transition-colors">
                         Settings
                       </Link>
+                      {(user.role === "homeowner" || user.role === "handyman") && (
+                        <Link href="/reports" className="block px-4 py-2.5 text-sm text-[#111827] hover:bg-[#F7F8FA] transition-colors">
+                          My Reports
+                        </Link>
+                      )}
                       <button
                         onClick={() => {
                           void handleSignOut();
@@ -217,6 +220,29 @@ export default function Navbar() {
           )}
           {user && (
             <div className="border-t border-[#E5E7EB] pt-2 mt-2 space-y-1 px-4">
+              <Link
+                href="/profile"
+                className="block px-4 py-2.5 text-sm font-medium text-[#6B7280] hover:text-[#111827] hover:bg-[#F7F8FA] rounded-lg transition-colors"
+                onClick={() => setMobileOpen(false)}
+              >
+                Profile
+              </Link>
+              <Link
+                href="/settings"
+                className="block px-4 py-2.5 text-sm font-medium text-[#6B7280] hover:text-[#111827] hover:bg-[#F7F8FA] rounded-lg transition-colors"
+                onClick={() => setMobileOpen(false)}
+              >
+                Settings
+              </Link>
+              {(user.role === "homeowner" || user.role === "handyman") && (
+                <Link
+                  href="/reports"
+                  className="block px-4 py-2.5 text-sm font-medium text-[#6B7280] hover:text-[#111827] hover:bg-[#F7F8FA] rounded-lg transition-colors"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  My Reports
+                </Link>
+              )}
               <button
                 onClick={() => {
                   void handleSignOut();
