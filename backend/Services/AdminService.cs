@@ -47,7 +47,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         await context.SaveChangesAsync();
 
         logger.LogInformation("New admin added with email: {Email}", request.Email);
-        return MapUserToDto(newUser, VerificationStatus.Approved);
+        return await MapUserToDto(newUser);
     }
 
     public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
@@ -83,10 +83,13 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             .Where(v => pagedUserIds.Contains(v.User_Id))
             .ToDictionaryAsync(v => v.User_Id, v => v.Status);
 
-        return users.Select(u => {
+        var mappingTasks = users.Select(async u => 
+        {
             var statusStr = verificationStatuses.GetValueOrDefault(u.Id);
-            return MapUserToDto(u, AuthConstants.ParseVerification(statusStr, u.Role));
+            return await MapUserToDto(u); 
         });
+
+        return await Task.WhenAll(mappingTasks);
     }
 
     public async Task<UserDto> GetUserByIdAsync(Guid id)
@@ -103,7 +106,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
                 .FirstOrDefaultAsync();
         }
 
-        return MapUserToDto(user, AuthConstants.ParseVerification(statusStr, user.Role));
+        return await MapUserToDto(user);
     }
 
     public async Task<UserDto?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminId)
@@ -125,7 +128,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         if (block)
         {
             logger.LogInformation("User {UserId} blocked by Admin {AdminId}.", targetId, adminId);
-            return MapUserToDto(user, AuthConstants.ParseVerification("", user.Role));
+            return await MapUserToDto(user);
         }
 
         logger.LogInformation("User {UserId} unblocked by Admin {AdminId}", targetId, adminId);

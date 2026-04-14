@@ -30,7 +30,7 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
         if (!user.IsActive)
         {
             logger.LogInformation("Blocked user {UserId} attempted login.", user.Id);
-            return new AuthResponse(MapUserToDto(user), new TokenDto(string.Empty, string.Empty, 0));
+            return new AuthResponse(await MapUserToDto(user), new TokenDto(string.Empty, string.Empty, 0));
         }
 
         return await GenerateAuthResponse(user);
@@ -113,7 +113,7 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
         await context.SaveChangesAsync();
 
         var (accessToken, expiresIn) = CreateJwtToken(existingToken.User);
-        return new AuthResponse(MapUserToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
+        return new AuthResponse(await MapUserToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
     }
 
     public async Task Logout(LogoutRequest request, Guid userId)
@@ -136,7 +136,7 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
     {
         var user = await context.Users.FindAsync(userId) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
-        return MapUserToDto(user);
+        return await MapUserToDto(user);
     }
 
     private (string Token, int ExpiresIn) CreateJwtToken(User user)
@@ -173,7 +173,7 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
             Created_At_Utc = DateTime.UtcNow
         });
         await context.SaveChangesAsync();
-        return new AuthResponse(MapUserToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
+        return new AuthResponse(await MapUserToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
     }
 
     private string GenerateSecureRandomString()
