@@ -1,4 +1,4 @@
-// using backend.Constants;
+using backend.Constants;
 
 namespace backend.Models.DTOs;
 
@@ -54,7 +54,7 @@ public record JobFilterQuery(
     int Page = 1,
     int PageSize = 10,
     string? Category = null,
-    string? Status = null,
+    JobStatus? Status = null,
     string? Search = null,
     bool? IsEmergency = null,
     decimal? MaxDistanceKm = null

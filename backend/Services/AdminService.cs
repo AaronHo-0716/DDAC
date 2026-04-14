@@ -53,42 +53,40 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
     public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
     {
         var query = context.Users.AsNoTracking();
-
+    
         if (!string.IsNullOrWhiteSpace(request.Name))
             query = query.Where(u => u.Name.ToLower().Contains(request.Name.ToLower()));
-
         if (!string.IsNullOrWhiteSpace(request.Email))
             query = query.Where(u => u.Email.ToLower().Contains(request.Email.ToLower()));
-
-        if (!string.IsNullOrWhiteSpace(request.Role))
-            query = query.Where(u => u.Role == request.Role.ToLower());
-
+        if (request.Role.HasValue)
+            query = query.Where(u => u.Role == request.Role.Value.ToDbString());
         if (request.IsActive.HasValue)
             query = query.Where(u => u.IsActive == request.IsActive.Value);
-
-        if (!string.IsNullOrWhiteSpace(request.Verification))
+    
+        if (request.Verification.HasValue)
         {
-            var veriStr = request.Verification.ToLower();
+            var veriStr = request.Verification.Value.ToDbString();
             query = query.Where(u => context.Handyman_Verifications.Any(v => v.User_Id == u.Id && v.Status == veriStr));
         }
-
+    
         var users = await query
             .OrderByDescending(u => u.CreatedAtUtc)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync();
-
+    
         var pagedUserIds = users.Select(u => u.Id).ToList();
         var verificationStatuses = await context.Handyman_Verifications
             .Where(v => pagedUserIds.Contains(v.User_Id))
             .ToDictionaryAsync(v => v.User_Id, v => v.Status);
-
-        var mappingTasks = users.Select(async u => 
+    
+        var mappingTasks = users.Select(u => 
         {
             var statusStr = verificationStatuses.GetValueOrDefault(u.Id);
-            return await MapUserToDto(u); 
+            
+            return MapUserToDto(u, statusStr); 
         });
-
+    
         return await Task.WhenAll(mappingTasks);
     }
 

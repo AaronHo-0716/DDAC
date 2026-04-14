@@ -234,6 +234,6 @@ export const adminService = {
   },
 
   async reviewReport(reportId: string, notes: string): Promise<void> {
-    await apiClient.post<void>(`/admin/report/${reportId}/review`, notes);
+    await apiClient.patch<void>(`/admin/report/${reportId}/review`, notes);
   },
 };

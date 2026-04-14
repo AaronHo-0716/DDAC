@@ -17,24 +17,27 @@ public abstract class BaseService(NeighbourHelpDbContext context, ILogger logger
         try { return new System.Net.Mail.MailAddress(email).Address == email; }
         catch { return false; }
     }
-    protected async Task<UserDto> MapUserToDto(User user)
+
+    protected async Task<UserDto> MapUserToDto(User user, string? statusOverride = null)
     {
         if (!Enum.TryParse<UserRole>(user.Role, true, out var roleEnum))
         {
             roleEnum = UserRole.Homeowner;
         }
 
-        string? verificationStatusFromDb = null;
+        // Use the override if provided, otherwise fetch from DB
+        string? verificationStatus = statusOverride;
 
-        if (roleEnum == UserRole.Handyman)
+        // ONLY query the database if we don't have an override and the user is a handyman
+        if (verificationStatus == null && roleEnum == UserRole.Handyman)
         {
-            verificationStatusFromDb = await Context.Handyman_Verifications
+            verificationStatus = await Context.Handyman_Verifications
                 .Where(v => v.User_Id == user.Id)
                 .Select(v => v.Status)
                 .FirstOrDefaultAsync();
         }
 
-        var finalVerification = AuthConstants.ParseVerification(verificationStatusFromDb, user.Role);
+        var finalVerification = AuthConstants.ParseVerification(verificationStatus, user.Role);
 
         return new UserDto(
             user.Id,

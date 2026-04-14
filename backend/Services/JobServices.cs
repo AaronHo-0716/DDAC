@@ -25,8 +25,8 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
         if (!string.IsNullOrEmpty(filter.Category))
             query = query.Where(j => j.Category == filter.Category);
 
-        if (!string.IsNullOrEmpty(filter.Status))
-            query = query.Where(j => j.Status == filter.Status);
+        if (filter.Status.HasValue)
+            query = query.Where(j => j.Status == filter.Status.Value.ToDbString());
 
         if (!string.IsNullOrEmpty(filter.Search))
         {

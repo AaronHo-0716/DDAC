@@ -1,13 +1,13 @@
-// using backend.Constants;
+using backend.Constants;
 
 namespace backend.Models.DTOs;
 
 public record UserSearchRequest(
     string? Name = null,
     string? Email = null,
-    string? Role = null,
+    UserRole? Role = null,
     bool? IsActive = null,
-    string? Verification = null,
+    VerificationStatus? Verification = null,
     int Page = 1,
     int PageSize = 10
 );
