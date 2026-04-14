@@ -195,6 +195,17 @@ export default function BrowsePage() {
                   key={job.id}
                   className="bg-white border border-[#E5E7EB] rounded-2xl p-5 hover:shadow-md hover:-translate-y-0.5 transition-all"
                 >
+                  {job.imageUrls.length > 0 && (
+                    <div className="mb-3 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8FA]">
+                      <img
+                        src={job.imageUrls[0]}
+                        alt={`${job.title} image`}
+                        className="h-40 w-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h2 className="text-base font-semibold text-[#111827]">{job.title}</h2>
                     {job.isEmergency && <StatusBadge status="emergency" />}

@@ -392,6 +392,30 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
               <p className="text-sm text-[#374151] leading-relaxed whitespace-pre-wrap">{job.description}</p>
 
+              {job.imageUrls.length > 0 && (
+                <div className="mt-5">
+                  <p className="mb-2 text-sm font-medium text-[#111827]">Job Photos</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {job.imageUrls.map((url, index) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8FA]"
+                      >
+                        <img
+                          src={url}
+                          alt={`${job.title} photo ${index + 1}`}
+                          className="h-52 w-full object-cover"
+                          loading="lazy"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {canSubmitBid && (
                 <div className="mt-6 flex justify-end">
                   <PrimaryButton size="sm" onClick={() => setShowBidModal(true)}>

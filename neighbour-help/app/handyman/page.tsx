@@ -73,6 +73,21 @@ function JobFeedCard({
       <p className="text-sm text-[#6B7280] mt-3 mb-1 line-clamp-2">
         {job.description}
       </p>
+        {job.imageUrls.length > 0 && (
+          <div className="mt-3 mb-1 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8FA] relative">
+            <img
+              src={job.imageUrls[0]}
+              alt={`${job.title} image`}
+              className="h-40 w-full object-cover"
+              loading="lazy"
+            />
+            {job.imageUrls.length > 1 && (
+              <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
+                +{job.imageUrls.length - 1}
+              </span>
+            )}
+          </div>
+        )}
       {job.budget && (
         <p className="text-xs text-[#6B7280] mb-4">
           Budget:{" "}
