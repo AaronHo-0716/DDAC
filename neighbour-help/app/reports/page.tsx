@@ -54,14 +54,14 @@ export default function ReportsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState<ReportFilter>("all");
 
+  const hasSelectedTarget = targetUserId.trim().length > 0;
+
   useEffect(() => {
     const targetFromQuery = searchParams.get("targetUserId") ?? "";
     const targetNameFromQuery = searchParams.get("targetName") ?? "";
 
-    if (targetFromQuery) {
-      setTargetUserId(targetFromQuery);
-      setTargetUserName(targetNameFromQuery);
-    }
+    setTargetUserId(targetFromQuery);
+    setTargetUserName(targetNameFromQuery);
   }, [searchParams]);
 
   useEffect(() => {
@@ -105,7 +105,7 @@ export default function ReportsPage() {
     const reportDescription = description.trim();
 
     if (!target || !reportReason || !reportDescription) {
-      setError("Target user, reason, and description are required.");
+      setError("Choose a user via a Report action on a job/bid, then provide reason and description.");
       setMessage(null);
       return;
     }
@@ -181,16 +181,15 @@ export default function ReportsPage() {
           <form onSubmit={submitReport} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#111827] mb-1.5">Target User ID</label>
-                <input
-                  value={targetUserId}
-                  onChange={(e) => setTargetUserId(e.target.value)}
-                  placeholder="UUID of the user to report"
-                  className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
-                />
-                {targetUserName && (
-                  <p className="mt-1 text-xs text-[#6B7280]">Target: {targetUserName}</p>
-                )}
+                <label className="block text-sm font-medium text-[#111827] mb-1.5">Target User</label>
+                <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 text-sm text-[#111827]">
+                  {hasSelectedTarget ? (targetUserName || "Selected user") : "No target selected"}
+                </div>
+                <p className="mt-1 text-xs text-[#6B7280]">
+                  {hasSelectedTarget
+                    ? "Target selected from report action."
+                    : "Open a job/bid and use Report to prefill the target user."}
+                </p>
               </div>
 
               <div>
@@ -217,7 +216,7 @@ export default function ReportsPage() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !hasSelectedTarget}
               className="inline-flex items-center gap-2 rounded-xl bg-[#0B74FF] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#065ed1] disabled:opacity-60"
             >
               <Send className="w-4 h-4" /> {submitting ? "Submitting..." : "Submit Report"}
@@ -259,7 +258,7 @@ export default function ReportsPage() {
                   </div>
                   <p className="text-sm text-[#6B7280] mt-2">{report.description}</p>
                   <div className="mt-2 text-xs text-[#6B7280] space-y-1">
-                    <p>Target: {report.targetUserName} ({report.targetUserId})</p>
+                    <p>Target: {report.targetUserName}</p>
                     <p>Created: {formatDate(report.createdAtUtc)}</p>
                     <p>Reviewed: {formatDate(report.reviewAtUtc)}</p>
                     {report.adminNotes && <p>Admin note: {report.adminNotes}</p>}
