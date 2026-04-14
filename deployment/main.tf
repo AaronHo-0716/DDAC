@@ -281,6 +281,26 @@ resource "aws_iam_role_policy" "ssm_parameter_read_and_write" {
   })
 }
 
+# Add S3 Permissions to existing EC2 Role
+resource "aws_iam_role_policy" "s3_upload_policy" {
+  name = "s3-upload-policy"
+  role = aws_iam_role.ec2_ssm_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject"
+        ]
+        Resource = "${aws_s3_bucket.user_uploads.arn}/*"
+      }
+    ]
+  })
+}
+
 # Attach the AWS managed policy for SSM Core functionality
 resource "aws_iam_role_policy_attachment" "ssm_core_attachment" {
   role       = aws_iam_role.ec2_ssm_role.name
@@ -482,6 +502,40 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.db_sg.id]
   skip_final_snapshot    = true
   multi_az               = false
+}
+
+# --- S3 Bucket for User Uploads ---
+resource "aws_s3_bucket" "user_uploads" {
+  bucket_prefix = "neighbourhelp-uploads-"
+}
+
+# Block public access
+resource "aws_s3_bucket_public_access_block" "uploads_block" {
+  bucket                  = aws_s3_bucket.user_uploads.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Allow CORS so my frontend can upload directly to S3
+resource "aws_s3_bucket_cors_configuration" "uploads_cors" {
+  bucket = aws_s3_bucket.user_uploads.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT", "POST", "GET"]
+    allowed_origins = ["https://neighbourhelp.me"] # Replace with local/dev URLs as needed
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
+# Pass the bucket name to the backend via SSM
+resource "aws_ssm_parameter" "s3_bucket_name" {
+  name  = "/app/backend/s3_uploads_bucket"
+  type  = "String"
+  value = aws_s3_bucket.user_uploads.bucket
 }
 
 # --- Secrets & Configuration Store ---

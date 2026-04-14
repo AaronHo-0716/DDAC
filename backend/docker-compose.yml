@@ -37,5 +37,14 @@ services:
     depends_on:
       - db
 
+  localstack:
+    image: localstack/localstack:latest
+    container_name: neighbourhelp-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - AWS_DEFAULT_REGION=ap-southeast-5
+
 volumes:
   postgres_data:
