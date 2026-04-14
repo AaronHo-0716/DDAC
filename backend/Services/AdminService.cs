@@ -7,19 +7,28 @@ using System.Net;
 
 namespace backend.Services;
 
-public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger) : BaseService(context, logger), IAdminService
+public class AdminService : BaseService, IAdminService
 {
+    private readonly NeighbourHelpDbContext _context;
+    private readonly ILogger _logger;
+
+    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger) : base(context, logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
     public async Task<AdminOverviewResponse> GetOverviewAsync()
     {
         var today = DateTime.UtcNow.Date;
         var openStatus = JobStatus.Open.ToDbString();
 
         return new AdminOverviewResponse(
-            UsersCreatedToday: await context.Users.CountAsync(u => u.CreatedAtUtc >= today),
-            JobsPostedToday: await context.Jobs.CountAsync(j => j.Created_At_Utc >= today),
-            BidsCreatedToday: await context.Bids.CountAsync(b => b.Created_At_Utc >= today),
-            OpenEmergencies: await context.Jobs.CountAsync(j => j.Is_Emergency && j.Status == openStatus),
-            BlockedAccountCount: await context.Users.CountAsync(u => !u.IsActive)
+            UsersCreatedToday: await _context.Users.CountAsync(u => u.CreatedAtUtc >= today),
+            JobsPostedToday: await _context.Jobs.CountAsync(j => j.Created_At_Utc >= today),
+            BidsCreatedToday: await _context.Bids.CountAsync(b => b.Created_At_Utc >= today),
+            OpenEmergencies: await _context.Jobs.CountAsync(j => j.Is_Emergency && j.Status == openStatus),
+            BlockedAccountCount: await _context.Users.CountAsync(u => !u.IsActive)
         );
     }
 
@@ -29,7 +38,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
 
         var emailLower = request.Email.ToLower().Trim();
-        if (await context.Users.AnyAsync(u => u.Email == emailLower))
+        if (await _context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("A user with this email already exists.", null, HttpStatusCode.Conflict);
 
         var newUser = new User
@@ -43,16 +52,16 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             TokenVersion = 1
         };
 
-        context.Users.Add(newUser);
-        await context.SaveChangesAsync();
+        _context.Users.Add(newUser);
+        await _context.SaveChangesAsync();
 
-        logger.LogInformation("New admin added with email: {Email}", request.Email);
+        _logger.LogInformation("New admin added with email: {Email}", request.Email);
         return await MapUserToDto(newUser);
     }
 
     public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
     {
-        var query = context.Users.AsNoTracking();
+        var query = _context.Users.AsNoTracking();
     
         if (!string.IsNullOrWhiteSpace(request.Name))
             query = query.Where(u => u.Name.ToLower().Contains(request.Name.ToLower()));
@@ -66,7 +75,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         if (request.Verification.HasValue)
         {
             var veriStr = request.Verification.Value.ToDbString();
-            query = query.Where(u => context.Handyman_Verifications.Any(v => v.User_Id == u.Id && v.Status == veriStr));
+            query = query.Where(u => _context.Handyman_Verifications.Any(v => v.User_Id == u.Id && v.Status == veriStr));
         }
     
         var users = await query
@@ -76,7 +85,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             .ToListAsync();
     
         var pagedUserIds = users.Select(u => u.Id).ToList();
-        var verificationStatuses = await context.Handyman_Verifications
+        var verificationStatuses = await _context.Handyman_Verifications
             .Where(v => pagedUserIds.Contains(v.User_Id))
             .ToDictionaryAsync(v => v.User_Id, v => v.Status);
     
@@ -92,13 +101,13 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
 
     public async Task<UserDto> GetUserByIdAsync(Guid id)
     {
-        var user = await context.Users.FindAsync(id) 
+        var user = await _context.Users.FindAsync(id) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
         
         string? statusStr = null;
         if (user.Role == UserRole.Handyman.ToDbString())
         {
-            statusStr = await context.Handyman_Verifications
+            statusStr = await _context.Handyman_Verifications
                 .Where(v => v.User_Id == user.Id)
                 .Select(v => v.Status)
                 .FirstOrDefaultAsync();
@@ -112,7 +121,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         if (block && targetId == adminId)
             throw new HttpRequestException("Security Error: You cannot block your own account.", null, HttpStatusCode.BadRequest);
 
-        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == targetId) 
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == targetId) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
 
         user.IsActive = !block;
@@ -121,15 +130,15 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
         user.Blocked_By_User_Id = block ? adminId : null;
         user.TokenVersion++;
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
 
         if (block)
         {
-            logger.LogInformation("User {UserId} blocked by Admin {AdminId}.", targetId, adminId);
+            _logger.LogInformation("User {UserId} blocked by Admin {AdminId}.", targetId, adminId);
             return await MapUserToDto(user);
         }
 
-        logger.LogInformation("User {UserId} unblocked by Admin {AdminId}", targetId, adminId);
+        _logger.LogInformation("User {UserId} unblocked by Admin {AdminId}", targetId, adminId);
         return null;
     }
 
@@ -137,7 +146,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
     {
         var pendingStatus = VerificationStatus.Pending.ToDbString();
         
-        return await context.Handyman_Verifications
+        return await _context.Handyman_Verifications
             .Include(v => v.User)
             .Where(v => v.Status == pendingStatus)
             .Select(v => new HandymanVerificationDto(
@@ -151,10 +160,13 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
 
     public async Task VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId)
     {
-        var verification = await context.Handyman_Verifications
+        var verification = await _context.Handyman_Verifications
             .Include(v => v.User)
             .FirstOrDefaultAsync(v => v.Id == id) 
             ?? throw new HttpRequestException("Verification record not found.", null, HttpStatusCode.NotFound);
+
+        if  (verification.Status == VerificationStatus.Approved.ToDbString()) 
+            throw new HttpRequestException("This handyman has already been approved.", null, HttpStatusCode.BadRequest);
 
         var newStatus = approve ? VerificationStatus.Approved : VerificationStatus.Rejected;
         
@@ -168,14 +180,14 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
                     NotificationType.VerificationResult, 
                     approve ? "Your handyman account has been approved!" : $"Your handyman verification was rejected. Reason: {notes}");
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
     }
 
     public async Task<IEnumerable<JobDto>> GetEmergencyJobsAsync()
     {
         var openStatus = JobStatus.Open.ToDbString();
         
-        var jobs = await context.Jobs
+        var jobs = await _context.Jobs
             .Include(j => j.Posted_By_User)
             .Where(j => j.Is_Emergency && j.Status == openStatus)
             .ToListAsync();
@@ -185,17 +197,17 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
 
     public async Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId)
     {
-        var job = await context.Jobs.FindAsync(jobId) 
+        var job = await _context.Jobs.FindAsync(jobId) 
             ?? throw new HttpRequestException("Job not found.", null, HttpStatusCode.NotFound);
         
         job.Status = JobStatus.InProgress.ToDbString(); 
-        await context.SaveChangesAsync();
-        logger.LogInformation("Job {JobId} force-assigned by Admin {AdminId}", jobId, adminId);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Job {JobId} force-assigned by Admin {AdminId}", jobId, adminId);
     }
 
     public async Task<IEnumerable<BidTransactionDto>> GetBidTransactionsAsync(string? eventType = null)
     {
-        var query = context.Bid_Transactions.AsQueryable();
+        var query = _context.Bid_Transactions.AsQueryable();
         if (!string.IsNullOrEmpty(eventType)) 
             query = query.Where(t => t.Event_Type == eventType.ToLower());
 
@@ -206,7 +218,7 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
 
     public async Task<BidTransactionDto> GetBidTransactionByIdAsync(Guid id)
     {
-        var transaction = await context.Bid_Transactions.FindAsync(id);
+        var transaction = await _context.Bid_Transactions.FindAsync(id);
 
         if (transaction == null)
         {
@@ -225,13 +237,13 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
 
     public async Task HandleBidActionAsync(Guid bidId, string actionType, string reason, Guid adminId)
     {
-        var bid = await context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
+        var bid = await _context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
             ?? throw new HttpRequestException("Bid not found.", null, HttpStatusCode.NotFound);
 
         if (actionType == "FORCE_REJECT") 
             bid.Status = BidStatus.Rejected.ToDbString();
 
-        context.Bid_Transactions.Add(new Bid_Transaction {
+        _context.Bid_Transactions.Add(new Bid_Transaction {
             Id = Guid.NewGuid(), 
             Bid_Id = bidId, 
             Job_Id = bid.Job_Id, 
@@ -244,12 +256,12 @@ public class AdminService(NeighbourHelpDbContext context, ILogger<AdminService> 
             Created_At_Utc = DateTime.UtcNow
         });
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
     }
 
     public async Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync()
     {
-        return await context.Admin_Actions
+        return await _context.Admin_Actions
             .OrderByDescending(a => a.Created_At_Utc)
             .Select(a => new AdminActionDto(a.Id, a.Admin_User_Id, a.Action_Type, a.Target_Type, a.Target_Id, a.Reason, a.Created_At_Utc))
             .ToListAsync();

@@ -7,15 +7,24 @@ using System.Net;
 
 namespace backend.Services;
 
-public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService> logger) : BaseService(context, logger), IReportService
+public class ReportService : BaseService, IReportService
 {
+    private readonly NeighbourHelpDbContext _context;
+    private readonly ILogger _logger;
+
+    public ReportService( NeighbourHelpDbContext context, ILogger<ReportService> logger) : base(context, logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
     public async Task CreateReportAsync(CreateReportRequest request, Guid reporterId)
     {
 
         if (request.TargetUserId == reporterId) 
         throw new HttpRequestException("Self-reporting is not allowed.", null, HttpStatusCode.BadRequest);
         
-        var targetExists = await context.Users.AnyAsync(u => u.Id == request.TargetUserId);
+        var targetExists = await _context.Users.AnyAsync(u => u.Id == request.TargetUserId);
         if (!targetExists) throw new HttpRequestException("The user you are trying to report no longer exists.", null, HttpStatusCode.NotFound);
 
         var report = new User_Report
@@ -29,18 +38,18 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
             Created_At_Utc = DateTime.UtcNow
         };
 
-        context.User_Reports.Add(report);
+        _context.User_Reports.Add(report);
         
         await CreateNotifications(NotificationType.NewUserReport, $"New user report filed: {request.Reason}");
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
         
-        logger.LogInformation("User {ReporterId} filed a report against {TargetId}", reporterId, request.TargetUserId);
+        _logger.LogInformation("User {ReporterId} filed a report against {TargetId}", reporterId, request.TargetUserId);
     }
 
     public async Task<IEnumerable<UserReportDto>> GetMyReportsAsync(Guid userId)
     {
-        var reports = await context.User_Reports
+        var reports = await _context.User_Reports
             .Include(r => r.Reporter)
             .Include(r => r.Target_User)
             .Include(r => r.Reviewed_By_Admin)
@@ -53,7 +62,7 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
 
     public async Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatus? status = null)
     {
-        var query = context.User_Reports
+        var query = _context.User_Reports
             .Include(r => r.Reporter)
             .Include(r => r.Target_User)
             .Include(r => r.Reviewed_By_Admin)
@@ -71,7 +80,7 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
 
     public async Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId)
     {
-        var report = await context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
+        var report = await _context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
             ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 
         if (report.Status == ReportStatus.Resolved.ToDbString())
@@ -80,13 +89,13 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
         report.Status = ReportStatus.Resolved.ToDbString();
         UpdateModerationDetails(report, adminNotes, adminId);
 
-        await context.SaveChangesAsync();
-        logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
     }
 
     public async Task ReviewReportAsync(Guid reportId, string adminNotes, Guid adminId)
     {
-        var report = await context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
+        var report = await _context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
             ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 
         if (report.Status == ReportStatus.Resolved.ToDbString())
@@ -96,8 +105,8 @@ public class ReportService(NeighbourHelpDbContext context, ILogger<ReportService
         report.Status = ReportStatus.Reviewed.ToDbString();
         UpdateModerationDetails(report, adminNotes, adminId);
 
-        await context.SaveChangesAsync();
-        logger.LogInformation("Report {ReportId} status updated to 'Reviewed' by Admin {AdminId}", reportId, adminId);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Report {ReportId} status updated to 'Reviewed' by Admin {AdminId}", reportId, adminId);
     }
 
     private static void UpdateModerationDetails(User_Report report, string notes, Guid adminId)
