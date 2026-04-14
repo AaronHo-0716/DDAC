@@ -125,6 +125,16 @@ export const authService = {
   },
 
   /**
+   * POST /api/auth/profile-picture
+   * Uploads a profile image and persists avatarUrl on the user record.
+   */
+  async updateProfilePicture(file: File): Promise<User> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.postForm<User>("/auth/profile-picture", formData);
+  },
+
+  /**
    * Account profile write endpoint is not part of current backend v1 API.
    * Returns the latest profile shape merged with requested edits for UI continuity.
    */

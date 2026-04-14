@@ -128,9 +128,17 @@ export default function Navbar() {
                     onClick={() => setDropdownOpen(!dropdownOpen)}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-[#F7F8FA] transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-full bg-[#0B74FF] text-white text-sm font-semibold flex items-center justify-center">
-                      {user.name?.charAt(0).toUpperCase() ?? "U"}
-                    </div>
+                    {user.avatarUrl ? (
+                      <img
+                        src={user.avatarUrl}
+                        alt={`${user.name} avatar`}
+                        className="w-8 h-8 rounded-full object-cover border border-[#E5E7EB]"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-[#0B74FF] text-white text-sm font-semibold flex items-center justify-center">
+                        {user.name?.charAt(0).toUpperCase() ?? "U"}
+                      </div>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-[#6B7280] transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
                   </button>
 
@@ -225,6 +233,24 @@ export default function Navbar() {
           )}
           {user && (
             <div className="border-t border-[#E5E7EB] pt-2 mt-2 space-y-1 px-4">
+              <div className="flex items-center gap-2 px-4 py-2">
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={`${user.name} avatar`}
+                    className="w-8 h-8 rounded-full object-cover border border-[#E5E7EB]"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-[#0B74FF] text-white text-sm font-semibold flex items-center justify-center">
+                    {user.name?.charAt(0).toUpperCase() ?? "U"}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#111827] truncate">{user.name}</p>
+                  <p className="text-xs text-[#6B7280] truncate">{user.email}</p>
+                </div>
+              </div>
+
               <Link
                 href="/profile"
                 className="block px-4 py-2.5 text-sm font-medium text-[#6B7280] hover:text-[#111827] hover:bg-[#F7F8FA] rounded-lg transition-colors"

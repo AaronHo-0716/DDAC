@@ -71,4 +71,28 @@ public class AuthController(IAuthService authService) : BaseController
         await authService.Logout(request, await GetCurrentUserIdAsync());
         return Ok(new { message = "Logged out successfully." });
     }
+
+    [Authorize]
+    [HttpPost("profile-picture")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<ActionResult<UserDto>> UpdateProfilePicture([FromForm] UpdateProfilePictureRequest request, CancellationToken cancellationToken)
+    {
+        var userId = await GetCurrentUserIdAsync();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        if (request.File == null)
+        {
+            return BadRequest(new { message = "File is required." });
+        }
+
+        try
+        {
+            return Ok(await authService.UpdateProfilePictureAsync(userId, request.File, cancellationToken));
+        }
+        catch (HttpRequestException ex)
+        {
+            return HandleError(ex);
+        }
+    }
 }
