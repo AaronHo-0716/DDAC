@@ -8,6 +8,7 @@ import ImageUploader from "../components/ui/ImageUploader";
 import type { JobCategory } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
 import { jobsService } from "../lib/api/jobs";
+import { uploadsService } from "../lib/api/uploads";
 
 const CATEGORIES: { name: JobCategory; emoji: string; desc: string }[] = [
   {
@@ -99,6 +100,7 @@ export default function CreateJobPage() {
   const [step, setStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
@@ -115,7 +117,18 @@ export default function CreateJobPage() {
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setSubmitError(null);
+
     try {
+      const uploadedImageUrls =
+        photos.length > 0
+          ? (
+              await Promise.all(
+                photos.map((photo) => uploadsService.uploadJobImage(photo)),
+              )
+            ).map((upload) => upload.url)
+          : [];
+
       await jobsService.createJob({
         title: form.title,
         description: form.description,
@@ -123,13 +136,14 @@ export default function CreateJobPage() {
         location: form.location,
         budget: form.budget ? Number(form.budget) : undefined,
         isEmergency: form.isEmergency,
-        imageUrls: [],
+        imageUrls: uploadedImageUrls,
       });
+
       setSubmitting(false);
       setSubmitted(true);
     } catch (error) {
       setSubmitting(false);
-      alert(
+      setSubmitError(
         `Failed to post job: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
@@ -350,7 +364,8 @@ export default function CreateJobPage() {
               </p>
               <ImageUploader files={photos} onChange={setPhotos} maxFiles={5} />
               <p className="text-xs text-[#9CA3AF] mt-3 text-center">
-                File upload will connect to Azure Blob Storage via the backend.
+                Selected files will be uploaded to S3 via the backend when you
+                submit the job.
               </p>
             </div>
           )}
@@ -400,6 +415,12 @@ export default function CreateJobPage() {
           )}
         </div>
 
+        {submitError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
+
         {/* Navigation buttons */}
         <div className="flex items-center justify-between">
           {step > 0 ? (
@@ -440,7 +461,7 @@ export default function CreateJobPage() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                     />
                   </svg>
-                  Posting…
+                  {photos.length > 0 ? "Uploading & Posting…" : "Posting…"}
                 </span>
               ) : (
                 <>Post Job</>

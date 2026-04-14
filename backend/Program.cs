@@ -1,8 +1,12 @@
 using System.Text;
+using Amazon;
+using Amazon.Runtime;
+using Amazon.S3;
 using Amazon.Extensions.Configuration.SystemsManager;
 using backend.Data;
 using backend.Data.Seeders;
 using backend.Middleware;
+using backend.Models.Config;
 using backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -107,6 +111,40 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// Storage (S3 / LocalStack)
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+builder.Services.AddSingleton<IAmazonS3>(serviceProvider =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var storageOptions = configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
+    var s3Options = storageOptions.S3;
+
+    if (string.IsNullOrWhiteSpace(s3Options.BucketName))
+    {
+        throw new InvalidOperationException("Storage:S3:BucketName is required.");
+    }
+
+    var s3Config = new AmazonS3Config
+    {
+        ForcePathStyle = s3Options.ForcePathStyle,
+        AuthenticationRegion = s3Options.Region,
+        RegionEndpoint = RegionEndpoint.GetBySystemName(s3Options.Region)
+    };
+
+    if (!string.IsNullOrWhiteSpace(s3Options.ServiceUrl))
+    {
+        s3Config.ServiceURL = s3Options.ServiceUrl;
+        s3Config.UseHttp = s3Options.ServiceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    if (!string.IsNullOrWhiteSpace(s3Options.AccessKey) && !string.IsNullOrWhiteSpace(s3Options.SecretKey))
+    {
+        return new AmazonS3Client(new BasicAWSCredentials(s3Options.AccessKey, s3Options.SecretKey), s3Config);
+    }
+
+    return new AmazonS3Client(s3Config);
+});
+
 // CORS
 builder.Services.AddCors(options =>
 {
@@ -127,6 +165,7 @@ builder.Services.AddScoped<IBidService, BidService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IStorageService, S3StorageService>();
 
 var app = builder.Build();
 

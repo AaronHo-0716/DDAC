@@ -63,6 +63,12 @@ interface RequestOptions extends RequestInit {
   authenticated?: boolean;
 }
 
+function hasContentTypeHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some(
+    (header) => header.toLowerCase() === "content-type",
+  );
+}
+
 export class ApiClientError extends Error {
   statusCode: number;
   errors?: Record<string, string[]>;
@@ -157,9 +163,16 @@ async function request<T>(
   const url = `${API_BASE_URL}${path}`;
 
   const resolvedHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
     ...(headers as Record<string, string>),
   };
+
+  const hasBody = options.body !== undefined && options.body !== null;
+  const isFormDataBody =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
+
+  if (hasBody && !isFormDataBody && !hasContentTypeHeader(resolvedHeaders)) {
+    resolvedHeaders["Content-Type"] = "application/json";
+  }
 
   if (authenticated) {
     const token = getAccessToken();
@@ -208,6 +221,14 @@ export const apiClient = {
     return request<T>(path, {
       method: "POST",
       body: JSON.stringify(body),
+      ...options,
+    });
+  },
+
+  postForm<T>(path: string, formData: FormData, options?: RequestOptions): Promise<T> {
+    return request<T>(path, {
+      method: "POST",
+      body: formData,
       ...options,
     });
   },

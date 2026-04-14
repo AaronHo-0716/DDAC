@@ -163,6 +163,13 @@ export interface UpdateJobRequest {
   isEmergency?: boolean;
 }
 
+export interface UploadImageResponse {
+  objectKey: string;
+  url: string;
+  size: number;
+  contentType: string;
+}
+
 // ─── Bids ────────────────────────────────────────────────────────────────────
 
 export type BidStatus = "pending" | "accepted" | "rejected";
