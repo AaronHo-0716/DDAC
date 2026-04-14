@@ -12,24 +12,35 @@ using System.Security.Cryptography;
 
 namespace backend.Services;
 
-public class AuthService( NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger) : BaseService(context, logger), IAuthService
+public class AuthService : BaseService, IAuthService
 {
+    private readonly NeighbourHelpDbContext _context;
+    private readonly IConfiguration _config;
+    private readonly ILogger _logger;
+
+    public AuthService( NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger) : base(context, logger)
+    {
+        _context = context;
+        _config = config;
+        _logger = logger;
+    }
+    
     public async Task<AuthResponse> Login(LoginRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
             throw new HttpRequestException("Email and password are required.", null, HttpStatusCode.BadRequest);
 
-        var user = await context.Users.FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            logger.LogWarning("Failed login attempt for email: {Email}", request.Email);
+            _logger.LogWarning("Failed login attempt for email: {Email}", request.Email);
             throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
         }
 
         if (!user.IsActive)
         {
-            logger.LogInformation("Blocked user {UserId} attempted login.", user.Id);
+            _logger.LogInformation("Blocked user {UserId} attempted login.", user.Id);
             return new AuthResponse(await MapUserToDto(user), new TokenDto(string.Empty, string.Empty, 0));
         }
 
@@ -45,7 +56,7 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
             throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
 
         var emailLower = request.Email.ToLower().Trim();
-        if (await context.Users.AnyAsync(u => u.Email == emailLower))
+        if (await _context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("A user with this email already exists.", null, HttpStatusCode.Conflict);
 
         if (!Enum.TryParse<UserRole>(request.Role, true, out var roleEnum) || roleEnum == UserRole.Admin)
@@ -62,12 +73,12 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
             TokenVersion = 1
         };
 
-        context.Users.Add(newUser);
+        _context.Users.Add(newUser);
 
         if (roleEnum == UserRole.Handyman)
         {
             // 1. Create the verification record
-            context.Handyman_Verifications.Add(new Handyman_Verification
+            _context.Handyman_Verifications.Add(new Handyman_Verification
             {
                 Id = Guid.NewGuid(),
                 User_Id = newUser.Id,
@@ -83,13 +94,13 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
                         );
         }
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
         return await GenerateAuthResponse(newUser);
     }
 
     public async Task<AuthResponse> RefreshToken(string token)
     {
-        var existingToken = await context.Refresh_Tokens
+        var existingToken = await _context.Refresh_Tokens
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.Token_Hash == token);
 
@@ -109,8 +120,8 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
             Created_At_Utc = DateTime.UtcNow
         };
 
-        context.Refresh_Tokens.Add(newRefreshToken);
-        await context.SaveChangesAsync();
+        _context.Refresh_Tokens.Add(newRefreshToken);
+        await _context.SaveChangesAsync();
 
         var (accessToken, expiresIn) = CreateJwtToken(existingToken.User);
         return new AuthResponse(await MapUserToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
@@ -118,7 +129,7 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
 
     public async Task Logout(LogoutRequest request, Guid userId)
     {
-        var tokenEntry = await context.Refresh_Tokens
+        var tokenEntry = await _context.Refresh_Tokens
             .FirstOrDefaultAsync(t => t.Token_Hash == request.RefreshToken && t.User_Id == userId);
 
         if (tokenEntry != null) {
@@ -126,15 +137,15 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
             tokenEntry.Replaced_By_Token_Hash = "LOGOUT";
         }
 
-        var user = await context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId);
         if (user != null) user.TokenVersion++;
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
     }
 
     public async Task<UserDto> GetUserById(Guid userId)
     {
-        var user = await context.Users.FindAsync(userId) 
+        var user = await _context.Users.FindAsync(userId) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
         return await MapUserToDto(user);
     }
@@ -149,11 +160,11 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
             new("TokenVersion", user.TokenVersion.ToString()) 
 
         };
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]!));
-        var expiryMinutes = config.GetValue<int>("Jwt:ExpiryInMinutes", AuthConstants.DefaultJwtExpiryMinutes);
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+        var expiryMinutes = _config.GetValue<int>("Jwt:ExpiryInMinutes", AuthConstants.DefaultJwtExpiryMinutes);
         var token = new JwtSecurityToken(
-            issuer: config["Jwt:Issuer"], 
-            audience: config["Jwt:Audience"], 
+            issuer: _config["Jwt:Issuer"], 
+            audience: _config["Jwt:Audience"], 
             claims: claims,
             expires: DateTime.UtcNow.AddMinutes(expiryMinutes),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
@@ -165,14 +176,14 @@ public class AuthService( NeighbourHelpDbContext context, IConfiguration config,
     {
         var (accessToken, expiresIn) = CreateJwtToken(user);
         var refreshTokenStr = GenerateSecureRandomString();
-        context.Refresh_Tokens.Add(new Refresh_Token {
+        _context.Refresh_Tokens.Add(new Refresh_Token {
             Id = Guid.NewGuid(), 
             User_Id = user.Id, 
             Token_Hash = refreshTokenStr,
             Expires_At_Utc = DateTime.UtcNow.AddDays(AuthConstants.RefreshTokenExpiryDays), 
             Created_At_Utc = DateTime.UtcNow
         });
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
         return new AuthResponse(await MapUserToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
     }
 

@@ -7,10 +7,16 @@ using Npgsql.TypeMapping;
 
 namespace backend.Services;
 
-public abstract class BaseService(NeighbourHelpDbContext context, ILogger logger)
+public abstract class BaseService
 {
-    protected readonly NeighbourHelpDbContext Context = context;
-    protected readonly ILogger Logger = logger;
+    protected readonly NeighbourHelpDbContext Context;
+    protected readonly ILogger Logger;
+
+    protected BaseService(NeighbourHelpDbContext context, ILogger logger)
+    {
+        Context = context;
+        Logger = logger;
+    }
 
     protected static bool IsValidEmail(string email)
     {
@@ -93,7 +99,7 @@ public abstract class BaseService(NeighbourHelpDbContext context, ILogger logger
 
     protected JobDto MapJobToDto(Job job)
     {
-        var bidCount = context.Bids.Count(b => b.Job_Id == job.Id);
+        var bidCount = Context.Bids.Count(b => b.Job_Id == job.Id);
 
         if (!Enum.TryParse<UserRole>(job.Posted_By_User.Role, true, out var roleEnum))
             roleEnum = UserRole.Homeowner; 

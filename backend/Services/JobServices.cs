@@ -7,11 +7,20 @@ using System.Net;
 
 namespace backend.Services;
 
-public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logger) : BaseService(context, logger), IJobService
+public class JobService : BaseService, IJobService
 {
+    private readonly NeighbourHelpDbContext _context;
+    private readonly ILogger _logger;
+
+    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger) : base(context, logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
     public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId, string userRole)
     {
-        var query = context.Jobs.AsQueryable();
+        var query = _context.Jobs.AsQueryable();
 
         if (userRole == UserRole.Handyman.ToDbString())
         {
@@ -64,7 +73,7 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
 
     public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 10)
     {
-        var query = context.Jobs.Where(j => j.Posted_By_User_Id == userId);
+        var query = _context.Jobs.Where(j => j.Posted_By_User_Id == userId);
         var totalCount = await query.CountAsync();
 
         var jobs = await query
@@ -80,7 +89,7 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
 
     public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId, string userRole)
     {
-        var job = await context.Jobs
+        var job = await _context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
             .FirstOrDefaultAsync(j => j.Id == jobId);
@@ -95,7 +104,7 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
             if (!userId.HasValue) 
                 throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
 
-            var hasAcceptedBid = await context.Bids.AnyAsync(b =>
+            var hasAcceptedBid = await _context.Bids.AnyAsync(b =>
                 b.Job_Id == jobId &&
                 b.Handyman_User_Id == userId.Value &&
                 b.Status == BidStatus.Accepted.ToDbString());
@@ -132,7 +141,7 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
             Updated_At_Utc = DateTime.UtcNow
         };
 
-        context.Jobs.Add(newJob);
+        _context.Jobs.Add(newJob);
 
         if (request.ImageUrls?.Any() == true)
         {
@@ -145,18 +154,18 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
                 Sort_Order = index,
                 Created_At_Utc = DateTime.UtcNow
             }).ToList();
-            context.Job_Images.AddRange(images);
+            _context.Job_Images.AddRange(images);
         }
 
-        await context.SaveChangesAsync();
-        logger.LogInformation("Job {JobId} created by User {UserId}", newJob.Id, userId);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Job {JobId} created by User {UserId}", newJob.Id, userId);
 
         return await RefreshAndMap(newJob.Id);
     }
 
     public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId, string userRole)
     {
-        var job = await context.Jobs
+        var job = await _context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
             .FirstOrDefaultAsync(j => j.Id == jobId);
@@ -179,24 +188,24 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
         job.Is_Emergency = request.IsEmergency;
         job.Updated_At_Utc = DateTime.UtcNow;
 
-        context.Jobs.Update(job);
-        await context.SaveChangesAsync();
-        logger.LogInformation("Job {JobId} updated by User {UserId}", jobId, userId);
+        _context.Jobs.Update(job);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Job {JobId} updated by User {UserId}", jobId, userId);
 
         return await RefreshAndMap(jobId);
     }
 
     public async Task DeleteJobAsync(Guid jobId, Guid userId, string userRole)
     {
-        var job = await context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId)
+        var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId)
             ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
         if (userRole != UserRole.Admin.ToDbString() && job.Posted_By_User_Id != userId)
             throw new HttpRequestException("You can only delete your own jobs", null, HttpStatusCode.Forbidden);
 
-        context.Jobs.Remove(job);
-        await context.SaveChangesAsync();
-        logger.LogInformation("Job {JobId} deleted by User {UserId}", jobId, userId);
+        _context.Jobs.Remove(job);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Job {JobId} deleted by User {UserId}", jobId, userId);
     }
 
     private void ValidateJobData(string title, string description, decimal? budget)
@@ -211,7 +220,7 @@ public class JobService(NeighbourHelpDbContext context, ILogger<JobService> logg
 
     private async Task<JobDto> RefreshAndMap(Guid jobId)
     {
-        var job = await context.Jobs
+        var job = await _context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
             .FirstAsync(j => j.Id == jobId);
