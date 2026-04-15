@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS handyman_verifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  identitycard_url TEXT,
   reviewed_by_user_id UUID REFERENCES users(id),
   reviewed_at_utc TIMESTAMPTZ,
   notes TEXT,

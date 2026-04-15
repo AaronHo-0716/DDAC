@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace backend.Models.Entities;
+﻿namespace backend.Models.Entities;
 
 public partial class Job_Image
 {

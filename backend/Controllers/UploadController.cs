@@ -13,15 +13,26 @@ namespace backend.Controllers;
 [RequestSizeLimit(10 * 1024 * 1024)]
 public class UploadController(IStorageService storageService) : BaseController
 {
-
     [HttpPost]
-    public async Task<ActionResult<UploadImageResponse>> UploadImage([FromForm] UploadImageRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UploadImage([FromForm] UploadImageRequest request, CancellationToken ct)
     {
-        if (request.File == null)
-            throw new HttpRequestException("No file was provided for upload.", null, System.Net.HttpStatusCode.BadRequest);
+        var userId = await GetCurrentUserIdAsync();
+        
         try
         {
-            var result = await storageService.UploadImageAsync(request.File, request.UploadType.ToPrefixString(), cancellationToken);
+            object result = request.UploadType switch
+            {
+                UploadTypes.JobImage => await storageService.UpdateJobImageAsync(request, ct),
+                
+                UploadTypes.AvatarImage => 
+                    await storageService.UpdateProfilePictureAsync(userId, request.File, ct),
+
+                UploadTypes.IdentityCardImage => 
+                    await storageService.UpdateIdentityCardAsync(userId, request.File, ct),
+
+                _ => throw new HttpRequestException("Invalid upload type provided.", null, System.Net.HttpStatusCode.BadRequest)
+            };
+
             return Ok(result);
         }
         catch (HttpRequestException ex)
@@ -30,18 +41,21 @@ public class UploadController(IStorageService storageService) : BaseController
         }
     }
 
-    [HttpPost("profile-picture")]
-    public async Task<ActionResult<UserDto>> UpdateProfilePicture([FromForm] UploadImageRequest request, CancellationToken cancellationToken)
-    {
-        if (request.File == null) throw new HttpRequestException("File is required.", null, System.Net.HttpStatusCode.BadRequest);
+    // [HttpPost("profile-picture")]
+    // public async Task<ActionResult<UserDto>> UpdateProfilePicture([FromForm] UploadImageRequest request, CancellationToken cancellationToken)
+    // {
+    //     if (request.File == null) throw new HttpRequestException("File is required.", null, System.Net.HttpStatusCode.BadRequest);
 
-        try
-        {
-            return Ok(await storageService.UpdateProfilePictureAsync(await GetCurrentUserIdAsync(), request.File, cancellationToken));
-        }
-        catch (HttpRequestException ex)
-        {
-            return HandleError(ex);
-        }
-    }
+    //     try
+    //     {
+    //         var user = await storageService.UpdateProfilePictureAsync(await GetCurrentUserIdAsync(), cancellationToken);
+    //         var upload = await storageService.UploadImageAsync(request.File, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", cancellationToken);
+    //         var result = await storageService.SaveUrlToDbAsync(request.UploadType, user.Id, upload, cancellationToken);
+    //         return Ok();
+    //     }
+    //     catch (HttpRequestException ex)
+    //     {
+    //         return HandleError(ex);
+    //     }
+    // }
 }

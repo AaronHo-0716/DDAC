@@ -2,7 +2,6 @@ using System.Text;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
-using Amazon.Extensions.Configuration.SystemsManager;
 using backend.Data;
 using backend.Data.Seeders;
 using backend.Middleware;
@@ -50,7 +49,7 @@ builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("auth_policy", opt =>
     {
-        opt.PermitLimit = 5; // 5 requests
+        opt.PermitLimit = 10; // 5 requests
         opt.Window = TimeSpan.FromSeconds(30); // per 30 seconds
         opt.QueueLimit = 0;
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;

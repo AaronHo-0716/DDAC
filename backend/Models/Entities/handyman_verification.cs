@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace backend.Models.Entities;
+﻿namespace backend.Models.Entities;
 
 public partial class Handyman_Verification
 {
@@ -10,6 +7,8 @@ public partial class Handyman_Verification
     public Guid User_Id { get; set; }
 
     public string Status { get; set; } = null!;
+
+    public string? IdentityCardURL { get; set; }
 
     public Guid? Reviewed_By_User_Id { get; set; }
 

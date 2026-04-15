@@ -1,8 +1,11 @@
 using backend.Models.DTOs;
+using backend.Constants;
+
 namespace backend.Services;
 
 public interface IStorageService
 {
-    Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken cancellationToken = default);
-    Task<UploadImageResponse> UploadImageAsync(IFormFile file, string prefix, CancellationToken cancellationToken = default);
+    Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct);
+    Task<JobDto> UpdateJobImageAsync(UploadImageRequest request, CancellationToken ct);
+    Task<HandymanVerificationDto> UpdateIdentityCardAsync(Guid userId, IFormFile file, CancellationToken ct);
 }

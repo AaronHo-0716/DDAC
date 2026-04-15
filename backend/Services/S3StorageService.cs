@@ -6,6 +6,8 @@ using backend.Constants;
 using backend.Data;
 using backend.Models.Config;
 using backend.Models.DTOs;
+using backend.Models.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace backend.Services;
@@ -20,59 +22,100 @@ public class S3StorageService(
     private readonly IAmazonS3 _s3Client = s3Client;
     private readonly S3StorageOptions _options = storageOptions.Value.S3;
 
-    public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken cancellationToken = default)
+    public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct)
     {
-        var user = await Context.Users.FindAsync([userId], cancellationToken)
+        var user = await Context.Users.FindAsync([userId], ct)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
 
-        var upload = await UploadImageAsync(file, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", cancellationToken);
-        
+        var upload = await UploadImageAsync(file, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", ct);
+
         user.AvatarUrl = upload.Url;
         user.Updated_At_Utc = DateTime.UtcNow;
 
-        await Context.SaveChangesAsync(cancellationToken);
+        await Context.SaveChangesAsync(ct);
+        
         Logger.LogInformation("Profile picture updated for user {UserId}", user.Id);
 
         return await MapUserToDto(user);
     }
 
-    public async Task<UploadImageResponse> UploadImageAsync(IFormFile file, string prefix, CancellationToken cancellationToken = default)
+    public async Task<HandymanVerificationDto> UpdateIdentityCardAsync(Guid userId, IFormFile file, CancellationToken ct)
+    {
+        var handyman = await Context.Handyman_Verifications
+            .Include(v => v.User)
+            .Where(x => x.User_Id == userId)
+            .OrderByDescending(x => x.Created_At_Utc)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new HttpRequestException("Handyman verification record not found.", null, HttpStatusCode.NotFound);
+
+        var upload = await UploadImageAsync(file, $"{UploadTypes.IdentityCardImage.ToPrefixString()}/{handyman.Id}", ct);
+
+        handyman.IdentityCardURL = upload.Url;
+        handyman.Updated_At_Utc = DateTime.UtcNow;
+
+        await Context.SaveChangesAsync(ct);
+        
+        Logger.LogInformation("Profile picture updated for user {UserId}", handyman.Id);
+
+        return new HandymanVerificationDto(
+                handyman.Id, 
+                handyman.User_Id, 
+                handyman.User.Name, 
+                handyman.Status, 
+                handyman.IdentityCardURL,
+                handyman.Created_At_Utc,
+                handyman.Updated_At_Utc
+            );
+    }
+
+    public async Task<JobDto> UpdateJobImageAsync(UploadImageRequest request, CancellationToken ct)
+    {
+        var job = await Context.Jobs
+                    .Include(j => j.Posted_By_User)
+                    .Include(j => j.Job_Images)
+                    .FirstOrDefaultAsync(j => j.Id == request.TargetId, ct)
+                    ?? throw new HttpRequestException("Job not found.", null, HttpStatusCode.NotFound);
+
+        var upload = await UploadImageAsync(request.File, $"{UploadTypes.JobImage.ToPrefixString()}/{job.Id}", ct);
+
+        var currentCount = await Context.Job_Images.CountAsync(i => i.Job_Id == job.Id, ct);
+
+        job.Updated_At_Utc = DateTime.UtcNow;
+
+        Context.Job_Images.Add(
+            new Job_Image
+            {
+                Id = Guid.NewGuid(),
+                Job_Id = job.Id,
+                Image_Url = upload.Url,
+                Object_Key = upload.ObjectKey,
+                Sort_Order = currentCount,
+                Created_At_Utc = DateTime.UtcNow
+            }
+        );
+
+        await Context.SaveChangesAsync(ct);
+
+        return MapJobToDto(job);
+    }
+
+    private async Task<UploadImageResponse> UploadImageAsync(IFormFile file, string prefix, CancellationToken ct)
     {
         ValidateImage(file);
-        await EnsureBucketExistsAsync(cancellationToken);
+        await EnsureBucketExistsAsync(ct);
 
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
         var keyPrefix = string.IsNullOrWhiteSpace(prefix) ? "uploads" : prefix.Trim('/');
-        
         var objectKey = $"{keyPrefix}/{DateTime.UtcNow:yyyy/MM}/{Guid.NewGuid()}{extension}";
 
         await using var stream = file.OpenReadStream();
-        var putRequest = new PutObjectRequest
-        {
-            BucketName = _options.BucketName,
-            Key = objectKey,
-            InputStream = stream,
-            ContentType = file.ContentType
-        };
+        var putRequest = new PutObjectRequest { BucketName = _options.BucketName, Key = objectKey, InputStream = stream, ContentType = file.ContentType };
+        await _s3Client.PutObjectAsync(putRequest, ct);
 
-        await _s3Client.PutObjectAsync(putRequest, cancellationToken);
+        var publicBaseUrl = string.IsNullOrWhiteSpace(_options.PublicBaseUrl) ? _options.ServiceUrl : _options.PublicBaseUrl;
+        var imageUrl = $"{publicBaseUrl.TrimEnd('/')}/{_options.BucketName}/{objectKey}";
 
-        var publicBaseUrl = string.IsNullOrWhiteSpace(_options.PublicBaseUrl)
-            ? _options.ServiceUrl
-            : _options.PublicBaseUrl;
-
-        var imageUrl = string.IsNullOrWhiteSpace(publicBaseUrl)
-            ? $"s3://{_options.BucketName}/{objectKey}"
-            : $"{publicBaseUrl.TrimEnd('/')}/{_options.BucketName}/{objectKey}";
-
-        Logger.LogInformation("Image uploaded to S3. Bucket: {Bucket}, Key: {Key}", _options.BucketName, objectKey);
-
-        return new UploadImageResponse(
-            ObjectKey: objectKey,
-            Url: imageUrl,
-            Size: file.Length,
-            ContentType: file.ContentType
-        );
+        return new UploadImageResponse(objectKey, imageUrl, file.Length, file.ContentType);
     }
 
     private async Task EnsureBucketExistsAsync(CancellationToken cancellationToken)

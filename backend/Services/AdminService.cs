@@ -154,7 +154,9 @@ public class AdminService : BaseService, IAdminService
                 v.User_Id, 
                 v.User.Name, 
                 VerificationStatus.Pending.ToDbString(), 
-                v.Created_At_Utc))
+                v.IdentityCardURL,
+                v.Created_At_Utc,
+                v.Updated_At_Utc))
             .ToListAsync();
     }
 

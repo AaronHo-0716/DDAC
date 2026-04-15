@@ -37,7 +37,9 @@ public record HandymanVerificationDto(
     Guid UserId,
     string UserName,
     string Status,
-    DateTime CreatedAtUtc
+    string? IdentityCardURL,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc
 );
 
 public record AssignJobRequest(Guid HandymanUserId);

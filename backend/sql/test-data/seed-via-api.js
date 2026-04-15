@@ -84,12 +84,23 @@ async function verifyHandymen() {
     }
 
     for (const v of pendingList) {
-        await apiRequest(`/admin/handymen/${v.id}/approve`, {
-            method: "PATCH",
-            token: adminToken.accessToken,
-            body: "Verified via automated seed script."
-        });
-        console.log(`Approved Handyman: ${v.userName} (ID: ${v.userId})`);
+        if (v.userName != "Handyman No verification") {
+            if (v.userName != "Handyman Rejected") {
+                await apiRequest(`/admin/handymen/${v.id}/approve`, {
+                    method: "PATCH",
+                    token: adminToken.accessToken,
+                    body: "Verified via automated seed script."
+                });
+                console.log(`Approved Handyman: ${v.userName} (ID: ${v.userId})`);
+            } else {
+                await apiRequest(`/admin/handymen/${v.id}/reject`, {
+                    method: "PATCH",
+                    token: adminToken.accessToken,
+                    body: "Verified via automated seed script."
+                });
+                console.log(`Rejected Handyman: ${v.userName} (ID: ${v.userId})`);
+            } 
+        } 
     }
 
     await logout(adminToken.accessToken, adminToken.refreshToken);
@@ -104,6 +115,8 @@ async function main() {
         { name: "Homeowner B", email: `hb-${suffix}@nh.test`, role: "homeowner" },
         { name: "Handyman A", email: `ma-${suffix}@nh.test`, role: "handyman" },
         { name: "Handyman B", email: `mb-${suffix}@nh.test`, role: "handyman" },
+        { name: "Handyman Rejected", email: `rr-${suffix}@nh.test`, role: "handyman" },
+        { name: "Handyman No verification", email: `nn-${suffix}@nh.test`, role: "handyman" },
     ];
 
     const users = [];
