@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Briefcase, CalendarClock } from "lucide-react";
+import { ArrowRight, Briefcase, CalendarClock, MessageCircle } from "lucide-react";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import StatusBadge from "@/app/components/ui/StatusBadge";
 import type { Bid, BidStatus } from "@/app/types";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import { bidsService } from "@/app/lib/api/bids";
 import { ApiClientError } from "@/app/lib/api/client";
+import { jobsService } from "@/app/lib/api/jobs";
+import { useChatWidget } from "@/app/lib/context/ChatWidgetContext";
 
 const FILTERS: Array<{ label: string; value: "all" | BidStatus }> = [
   { label: "All", value: "all" },
@@ -28,10 +30,12 @@ function fmtDate(iso: string) {
 
 export default function HandymanBidsPage() {
   const { authorized, loading } = useRequireRole("handyman");
+  const { openForBidChat } = useChatWidget();
   const [statusFilter, setStatusFilter] = useState<"all" | BidStatus>("all");
   const [myBids, setMyBids] = useState<Bid[]>([]);
   const [isLoadingBids, setIsLoadingBids] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [chatLoadingBidId, setChatLoadingBidId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authorized) return;
@@ -73,6 +77,28 @@ export default function HandymanBidsPage() {
     if (statusFilter === "all") return myBids;
     return myBids.filter((bid) => bid.status === statusFilter);
   }, [myBids, statusFilter]);
+
+  const handleMessageHomeowner = async (bid: Bid) => {
+    setChatLoadingBidId(bid.id);
+    setErrorMessage(null);
+    try {
+      const job = await jobsService.getJobById(bid.jobId);
+      openForBidChat({
+        jobId: bid.jobId,
+        bidId: bid.id,
+        otherUserId: job.postedBy.id,
+        otherUserName: job.postedBy.name,
+      });
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        setErrorMessage(error.message || "Unable to open chat.");
+      } else {
+        setErrorMessage("Unable to open chat.");
+      }
+    } finally {
+      setChatLoadingBidId(null);
+    }
+  };
 
   if (loading || !authorized) return null;
 
@@ -154,9 +180,21 @@ export default function HandymanBidsPage() {
                   <span className="inline-flex items-center gap-1"><Briefcase className="w-3.5 h-3.5" /> Bid</span>
                   <span className="inline-flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Tracking</span>
                 </div>
-                <Link href={`/jobs/${bid.jobId}`} className="text-sm font-semibold text-[#0B74FF] hover:underline">
-                  View Job
-                </Link>
+                <div className="flex items-center gap-3">
+                  {bid.status === "accepted" && (
+                    <button
+                      onClick={() => void handleMessageHomeowner(bid)}
+                      disabled={chatLoadingBidId === bid.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA] disabled:opacity-60"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      {chatLoadingBidId === bid.id ? "Opening..." : "Message Homeowner"}
+                    </button>
+                  )}
+                  <Link href={`/jobs/${bid.jobId}`} className="text-sm font-semibold text-[#0B74FF] hover:underline">
+                    View Job
+                  </Link>
+                </div>
               </div>
             </div>
           ))}

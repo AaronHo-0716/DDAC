@@ -32,6 +32,7 @@ export default function BidCard({ bid, onAccept, onMessage, onReport }: BidCardP
   const accepted = bid.status === "accepted";
   const pending = bid.status === "pending";
   const rejected = bid.status === "rejected";
+  const canMessage = pending || accepted;
 
   return (
     <div
@@ -107,7 +108,7 @@ export default function BidCard({ bid, onAccept, onMessage, onReport }: BidCardP
         </div>
       )}
 
-      {pending && (
+      {canMessage && (
         <div className="flex gap-2">
           <button
             onClick={() => onMessage?.(bid.id)}
@@ -115,12 +116,14 @@ export default function BidCard({ bid, onAccept, onMessage, onReport }: BidCardP
           >
             <MessageCircle className="w-3.5 h-3.5" /> Message
           </button>
-          <button
-            onClick={() => onAccept?.(bid.id)}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0B74FF] text-white rounded-lg text-sm font-medium hover:bg-[#0056CC] transition-colors"
-          >
-            <Check className="w-3.5 h-3.5" /> Accept
-          </button>
+          {pending && (
+            <button
+              onClick={() => onAccept?.(bid.id)}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0B74FF] text-white rounded-lg text-sm font-medium hover:bg-[#0056CC] transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" /> Accept
+            </button>
+          )}
         </div>
       )}
     </div>
