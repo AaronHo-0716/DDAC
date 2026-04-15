@@ -132,20 +132,6 @@ public class JobService : BaseService, IJobService
 
         _context.Jobs.Add(newJob);
 
-        if (request.ImageUrls?.Any() == true)
-        {
-            var images = request.ImageUrls.Select((url, index) => new Job_Image
-            {
-                Id = Guid.NewGuid(),
-                Job_Id = newJob.Id,
-                Image_Url = url,
-                Object_Key = $"job-{newJob.Id}/image-{index}",
-                Sort_Order = index,
-                Created_At_Utc = DateTime.UtcNow
-            }).ToList();
-            _context.Job_Images.AddRange(images);
-        }
-
         await _context.SaveChangesAsync();
         _logger.LogInformation("Job {JobId} created by User {UserId}", newJob.Id, userId);
 

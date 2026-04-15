@@ -2,7 +2,25 @@ namespace backend.Constants;
 
 public enum BidStatus { Pending, Accepted, Rejected, Retracted }
 
-public enum BidEventType { Created, Accepted, Rejected, Retracted, LockAdded, LockRemoved }
+public enum BidEventType
+{
+    Created,
+    Accepted,
+    Rejected,
+    Retracted,
+    LockAdded,
+    LockRemoved,
+    FlagAdded,
+    FlagRemoved,
+    ForceRejected
+}
+
+public enum BidModerationAction
+{
+    ForceReject,
+    Lock,
+    Flag
+}
 
 public static class BidConstants
 {
@@ -12,7 +30,18 @@ public static class BidConstants
     {
         BidEventType.LockAdded => "lock_added",
         BidEventType.LockRemoved => "lock_removed",
+        BidEventType.FlagAdded => "flag_added",
+        BidEventType.FlagRemoved => "flag_removed",
+        BidEventType.ForceRejected => "force_rejected",
         _ => type.ToString().ToLower()
+    };
+
+    public static string ToDbString(this BidModerationAction action) => action switch
+    {
+        BidModerationAction.ForceReject => "force_reject",
+        BidModerationAction.Lock => "lock",
+        BidModerationAction.Flag => "flag",
+        _ => action.ToString().ToLower()
     };
 
     public static BidStatus ParseFromDb(string status)

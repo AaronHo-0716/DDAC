@@ -1,5 +1,6 @@
 using backend.Models.DTOs;
 using backend.Services;
+using backend.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -140,7 +141,7 @@ public class AdminController(IAdminService adminService) : BaseController
 
         try
         {
-            await adminService.HandleBidActionAsync(bidId, "FORCE_REJECT", reason, adminId);
+            await adminService.HandleBidActionAsync(bidId, BidModerationAction.ForceReject.ToDbString(), reason, adminId);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -153,7 +154,7 @@ public class AdminController(IAdminService adminService) : BaseController
 
         try
         {
-            await adminService.HandleBidActionAsync(bidId, "LOCK", reason, adminId);
+            await adminService.HandleBidActionAsync(bidId, BidModerationAction.Lock.ToDbString(), reason, adminId);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -166,7 +167,7 @@ public class AdminController(IAdminService adminService) : BaseController
 
         try
         {
-            await adminService.HandleBidActionAsync(bidId, "FLAG", reason, adminId);
+            await adminService.HandleBidActionAsync(bidId, BidModerationAction.Flag.ToDbString(), reason, adminId);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }

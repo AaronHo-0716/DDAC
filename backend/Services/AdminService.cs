@@ -205,7 +205,7 @@ public class AdminService : BaseService, IAdminService
         
         job.Status = JobStatus.InProgress.ToDbString(); 
         await _context.SaveChangesAsync();
-        _logger.LogInformation("Job {JobId} force-assigned by Admin {AdminId}", jobId, adminId);
+        _logger.LogInformation($"Job {jobId} force-assigned by Admin {adminId}", jobId, adminId);
     }
 
     public async Task<IEnumerable<BidTransactionDto>> GetBidTransactionsAsync(string? eventType = null)
@@ -243,8 +243,42 @@ public class AdminService : BaseService, IAdminService
         var bid = await _context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
             ?? throw new HttpRequestException("Bid not found.", null, HttpStatusCode.NotFound);
 
-        if (actionType == "FORCE_REJECT") 
+        var normalizedActionType = actionType.Trim().ToLowerInvariant();
+        var normalizedReason = (reason ?? string.Empty).ToLowerInvariant();
+        var now = DateTime.UtcNow;
+
+        var eventTypeToStore = ResolveBidEventType(normalizedActionType, normalizedReason);
+
+        if (eventTypeToStore == BidEventType.ForceRejected.ToDbString())
             bid.Status = BidStatus.Rejected.ToDbString();
+
+        if (eventTypeToStore == BidEventType.LockAdded.ToDbString())
+        {
+            var existingLock = await _context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
+            if (existingLock == null)
+            {
+                _context.Bid_Locks.Add(new Bid_Lock
+                {
+                    Bid_Id = bidId,
+                    Locked_By_User_Id = adminId,
+                    Locked_Reason = reason,
+                    Locked_At_Utc = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                existingLock.Locked_By_User_Id = adminId;
+                existingLock.Locked_Reason = reason;
+                existingLock.Locked_At_Utc = DateTime.UtcNow;
+            }
+        }
+
+        if (eventTypeToStore == BidEventType.LockRemoved.ToDbString())
+        {
+            var existingLock = await _context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
+            if (existingLock != null)
+                _context.Bid_Locks.Remove(existingLock);
+        }
 
         _context.Bid_Transactions.Add(new Bid_Transaction {
             Id = Guid.NewGuid(), 
@@ -252,14 +286,31 @@ public class AdminService : BaseService, IAdminService
             Job_Id = bid.Job_Id, 
             Handyman_User_Id = bid.Handyman_User_Id,
             Homeowner_User_Id = bid.Job.Posted_By_User_Id, 
-            Event_Type = actionType.ToLower(), 
+            Event_Type = eventTypeToStore, 
             Event_By_User_Id = adminId,
             Event_Reason = reason, 
             Event_Metadata = "{}", 
-            Created_At_Utc = DateTime.UtcNow
+            Created_At_Utc = now
         });
 
         await _context.SaveChangesAsync();
+    }
+
+    private static string ResolveBidEventType(string normalizedActionType, string normalizedReason)
+    {
+        return normalizedActionType switch
+        {
+            var action when action == BidModerationAction.Flag.ToDbString() =>
+                normalizedReason.Contains("unflag") ? BidEventType.FlagRemoved.ToDbString() : BidEventType.FlagAdded.ToDbString(),
+
+            var action when action == BidModerationAction.Lock.ToDbString() =>
+                normalizedReason.Contains("unlock") ? BidEventType.LockRemoved.ToDbString() : BidEventType.LockAdded.ToDbString(),
+
+            var action when action == BidModerationAction.ForceReject.ToDbString() =>
+                BidEventType.ForceRejected.ToDbString(),
+
+            _ => throw new HttpRequestException("Invalid bid moderation action.", null, HttpStatusCode.BadRequest)
+        };
     }
 
     public async Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync()
