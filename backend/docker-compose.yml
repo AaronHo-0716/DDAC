@@ -5,7 +5,7 @@ services:
     restart: always
     environment:
       - POSTGRES_USER=neighbourhelp_user
-      - POSTGRES_PASSWORD=1234567890
+      - POSTGRES_PASSWORD=neighbourhelp_dev_password
       - POSTGRES_DB=neighbourhelp_postgres # Database name
     ports:
       - "5432:5432"
