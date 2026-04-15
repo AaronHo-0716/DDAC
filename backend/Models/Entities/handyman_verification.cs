@@ -10,6 +10,8 @@ public partial class Handyman_Verification
 
     public string? IdentityCardURL { get; set; }
 
+    public string? SelfieImageURL { get; set; }
+
     public Guid? Reviewed_By_User_Id { get; set; }
 
     public DateTime? Reviewed_At_Utc { get; set; }

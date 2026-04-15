@@ -38,6 +38,7 @@ public record HandymanVerificationDto(
     string UserName,
     string Status,
     string? IdentityCardURL,
+    string? SelfieImageUrl,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc
 );

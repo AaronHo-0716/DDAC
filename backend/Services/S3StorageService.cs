@@ -24,17 +24,20 @@ public class S3StorageService(
 
     public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct)
     {
-        var user = await Context.Users.FindAsync([userId], ct)
+        var user = await Context.Users
+            .Include(u => u.Handyman_Verification_User) 
+            .FirstOrDefaultAsync(u => u.Id == userId, ct)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
         
         var userDto = await MapUserToDto(user);
 
-        if (userDto.Role == UserRole.Handyman.ToDbString() && userDto.Verification == VerificationStatus.Approved.ToDbString())
-            throw new HttpRequestException("Profile images cannot be changed once a Handyman account has been approved. Please contact support for assistance.", null, HttpStatusCode.NotFound);
+        if (user.Role == UserRole.Handyman.ToDbString() && 
+            user.Handyman_Verification_User?.Status == VerificationStatus.Approved.ToDbString())
+                throw new HttpRequestException("Profile images cannot be changed once a Handyman account has been approved. Please contact support for assistance.", null, HttpStatusCode.NotFound);
 
         var upload = await UploadImageAsync(file, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", ct);
 
-        user.AvatarUrl = upload.Url;
+        user.AvatarUrl = upload.ObjectKey;
         user.Updated_At_Utc = DateTime.UtcNow;
 
         await Context.SaveChangesAsync(ct);
@@ -53,9 +56,12 @@ public class S3StorageService(
             .FirstOrDefaultAsync(ct)
             ?? throw new HttpRequestException("Handyman verification record not found.", null, HttpStatusCode.NotFound);
 
+        if (handyman.Status == VerificationStatus.Approved.ToDbString())
+            throw new HttpRequestException("Identity card images cannot be updated after approval. Please contact support for assistance", null, HttpStatusCode.NotFound);
+
         var upload = await UploadImageAsync(file, $"{UploadTypes.IdentityCardImage.ToPrefixString()}/{handyman.Id}", ct);
 
-        handyman.IdentityCardURL = upload.Url;
+        handyman.IdentityCardURL = upload.ObjectKey;
         handyman.Updated_At_Utc = DateTime.UtcNow;
 
         await Context.SaveChangesAsync(ct);
@@ -68,6 +74,7 @@ public class S3StorageService(
                 handyman.User.Name, 
                 handyman.Status, 
                 handyman.IdentityCardURL,
+                handyman.SelfieImageURL,
                 handyman.Created_At_Utc,
                 handyman.Updated_At_Utc
             );

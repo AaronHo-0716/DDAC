@@ -111,6 +111,7 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.User_Id).HasColumnName("user_id");
             entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.IdentityCardURL).HasColumnName("identitycard_url");
+            entity.Property(e => e.SelfieImageURL).HasColumnName("selfie_image_url");
             entity.Property(e => e.Reviewed_By_User_Id).HasColumnName("reviewed_by_user_id");
             entity.Property(e => e.Reviewed_At_Utc).HasColumnName("reviewed_at_utc");
             entity.Property(e => e.Notes).HasColumnName("notes");

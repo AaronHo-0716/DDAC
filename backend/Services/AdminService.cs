@@ -155,6 +155,7 @@ public class AdminService : BaseService, IAdminService
                 v.User.Name, 
                 VerificationStatus.Pending.ToDbString(), 
                 v.IdentityCardURL,
+                v.SelfieImageURL,
                 v.Created_At_Utc,
                 v.Updated_At_Utc))
             .ToListAsync();

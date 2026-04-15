@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS handyman_verifications (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
   identitycard_url TEXT,
+  selfie_image_url TEXT,
   reviewed_by_user_id UUID REFERENCES users(id),
   reviewed_at_utc TIMESTAMPTZ,
   notes TEXT,
@@ -118,6 +119,24 @@ CREATE TABLE IF NOT EXISTS handyman_verifications (
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT uq_handyman_verifications_user UNIQUE (user_id)
 );
+
+CREATE OR REPLACE FUNCTION sync_user_avatar_to_handyman()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE handyman_verifications
+    SET selfie_image_url = NEW.avatar_url,
+        updated_at_utc = NOW()
+    WHERE user_id = NEW.id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tr_sync_avatar ON users;
+
+CREATE TRIGGER tr_sync_avatar
+AFTER UPDATE OF avatar_url ON users
+FOR EACH ROW
+EXECUTE FUNCTION sync_user_avatar_to_handyman();
 
 CREATE TABLE IF NOT EXISTS bid_transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

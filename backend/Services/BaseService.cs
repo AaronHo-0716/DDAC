@@ -129,7 +129,7 @@ public abstract class BaseService
             CreatedAt: job.Created_At_Utc,
             UpdatedAt: job.Updated_At_Utc,
             BidCount: bidCount,
-            ImageUrls: job.Job_Images.OrderBy(img => img.Sort_Order).Select(img => img.Image_Url).ToList()
+            ImageUrls: job.Job_Images.OrderBy(img => img.Sort_Order).Select(img => img.Object_Key).ToList()
         );
     }
 
