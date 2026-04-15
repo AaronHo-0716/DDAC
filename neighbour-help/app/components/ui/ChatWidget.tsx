@@ -234,6 +234,23 @@ export default function ChatWidget() {
     void loadMessages(activeConversationId);
   }, [isOpen, activeConversationId, user, loadMessages]);
 
+  useEffect(() => {
+    if (!isOpen || !user) return;
+
+    const intervalId = window.setInterval(() => {
+      void refreshUnread();
+      void loadConversations();
+
+      if (activeConversationId) {
+        void loadMessages(activeConversationId);
+      }
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isOpen, user, activeConversationId, refreshUnread, loadConversations, loadMessages]);
+
   const handleSend = async () => {
     if (!activeConversationId || !user || sending) return;
     const value = draft.trim();
