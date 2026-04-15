@@ -658,7 +658,7 @@ resource "aws_instance" "monitoring_instance" {
                     - "--web.console.libraries=/etc/prometheus/console_libraries"
                     - "--web.console.templates=/etc/prometheus/consoles"
                     - "--web.enable-lifecycle"
-                    - "--web.external-url=http://neighbourhelp.me/grafana"
+                    - "--web.external-url=http://neighbourhelp.me/prometheus/"
 
                 grafana:
                   image: grafana/grafana:latest
