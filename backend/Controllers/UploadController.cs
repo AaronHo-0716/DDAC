@@ -40,22 +40,4 @@ public class UploadController(IStorageService storageService) : BaseController
             return HandleError(ex);
         }
     }
-
-    // [HttpPost("profile-picture")]
-    // public async Task<ActionResult<UserDto>> UpdateProfilePicture([FromForm] UploadImageRequest request, CancellationToken cancellationToken)
-    // {
-    //     if (request.File == null) throw new HttpRequestException("File is required.", null, System.Net.HttpStatusCode.BadRequest);
-
-    //     try
-    //     {
-    //         var user = await storageService.UpdateProfilePictureAsync(await GetCurrentUserIdAsync(), cancellationToken);
-    //         var upload = await storageService.UploadImageAsync(request.File, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", cancellationToken);
-    //         var result = await storageService.SaveUrlToDbAsync(request.UploadType, user.Id, upload, cancellationToken);
-    //         return Ok();
-    //     }
-    //     catch (HttpRequestException ex)
-    //     {
-    //         return HandleError(ex);
-    //     }
-    // }
 }

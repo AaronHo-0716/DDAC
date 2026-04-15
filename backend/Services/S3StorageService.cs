@@ -26,6 +26,11 @@ public class S3StorageService(
     {
         var user = await Context.Users.FindAsync([userId], ct)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
+        
+        var userDto = await MapUserToDto(user);
+
+        if (userDto.Role == UserRole.Handyman.ToDbString() && userDto.Verification == VerificationStatus.Approved.ToDbString())
+            throw new HttpRequestException("Profile images cannot be changed once a Handyman account has been approved. Please contact support for assistance.", null, HttpStatusCode.NotFound);
 
         var upload = await UploadImageAsync(file, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", ct);
 
