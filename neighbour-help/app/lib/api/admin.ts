@@ -32,6 +32,14 @@ export interface BidTransactionItem {
   locked: boolean;
 }
 
+export interface AdminOverview {
+  usersCreatedToday: number;
+  jobsPostedToday: number;
+  bidsCreatedToday: number;
+  openEmergencies: number;
+  blockedAccountCount: number;
+}
+
 interface RawUserDto {
   id?: string | null;
   name?: string | null;
@@ -62,6 +70,14 @@ interface RawUserReportDto {
   adminName?: string | null;
   reviewAtUtc?: string | null;
   adminNotes?: string | null;
+}
+
+interface RawAdminOverviewResponse {
+  usersCreatedToday?: number | null;
+  jobsPostedToday?: number | null;
+  bidsCreatedToday?: number | null;
+  openEmergencies?: number | null;
+  blockedAccountCount?: number | null;
 }
 
 function normalizeRole(value?: string | null): UserRole {
@@ -115,7 +131,22 @@ function toUserReport(row: RawUserReportDto): UserReport {
   };
 }
 
+function toAdminOverview(row?: RawAdminOverviewResponse | null): AdminOverview {
+  return {
+    usersCreatedToday: typeof row?.usersCreatedToday === "number" ? row.usersCreatedToday : 0,
+    jobsPostedToday: typeof row?.jobsPostedToday === "number" ? row.jobsPostedToday : 0,
+    bidsCreatedToday: typeof row?.bidsCreatedToday === "number" ? row.bidsCreatedToday : 0,
+    openEmergencies: typeof row?.openEmergencies === "number" ? row.openEmergencies : 0,
+    blockedAccountCount: typeof row?.blockedAccountCount === "number" ? row.blockedAccountCount : 0,
+  };
+}
+
 export const adminService = {
+  async getOverview(): Promise<AdminOverview> {
+    const response = await apiClient.get<RawAdminOverviewResponse>("/admin/overview");
+    return toAdminOverview(response);
+  },
+
   async createAdmin(name: string, email: string, password: string): Promise<AdminUserItem> {
     const created = await apiClient.post<RawUserDto>("/admin/new-admin", {
       name,

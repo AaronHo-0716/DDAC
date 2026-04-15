@@ -125,13 +125,14 @@ export const authService = {
   },
 
   /**
-   * POST /api/auth/profile-picture
-   * Uploads a profile image and persists avatarUrl on the user record.
+   * POST /api/uploads
+   * Uploads avatar image via the unified upload endpoint and persists avatarUrl.
    */
   async updateProfilePicture(file: File): Promise<User> {
     const formData = new FormData();
-    formData.append("file", file);
-    return apiClient.postForm<User>("/uploads/profile-picture", formData);
+    formData.append("File", file);
+    formData.append("UploadType", "AvatarImage");
+    return apiClient.postForm<User>("/uploads", formData);
   },
 
   /**

@@ -120,24 +120,18 @@ export default function CreateJobPage() {
     setSubmitError(null);
 
     try {
-      const uploadedImageUrls =
-        photos.length > 0
-          ? (
-              await Promise.all(
-                photos.map((photo) => uploadsService.uploadJobImage(photo)),
-              )
-            ).map((upload) => upload.url)
-          : [];
-
-      await jobsService.createJob({
+      const createdJob = await jobsService.createJob({
         title: form.title,
         description: form.description,
         category: form.category as JobCategory,
         location: form.location,
         budget: form.budget ? Number(form.budget) : undefined,
         isEmergency: form.isEmergency,
-        imageUrls: uploadedImageUrls,
       });
+
+      for (const photo of photos) {
+        await uploadsService.uploadJobImage(photo, createdJob.id);
+      }
 
       setSubmitting(false);
       setSubmitted(true);

@@ -15,6 +15,7 @@ import {
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import {
   adminService,
+  type AdminOverview,
   type AdminUserItem,
   type BidTransactionItem,
 } from "@/app/lib/api/admin";
@@ -30,6 +31,7 @@ export default function AdminPage() {
   const { authorized, loading } = useRequireRole("admin");
   const [users, setUsers] = useState<AdminUserItem[]>([]);
   const [transactions, setTransactions] = useState<BidTransactionItem[]>([]);
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,13 +44,15 @@ export default function AdminPage() {
       setFetching(true);
       setError(null);
       try {
-        const [usersData, bidData] = await Promise.all([
+        const [usersData, bidData, overviewData] = await Promise.all([
           adminService.getUsers(),
           adminService.getBidTransactions(),
+          adminService.getOverview(),
         ]);
         if (!cancelled) {
           setUsers(usersData);
           setTransactions(bidData);
+          setOverview(overviewData);
         }
       } catch (err) {
         if (!cancelled) {
@@ -65,11 +69,6 @@ export default function AdminPage() {
       cancelled = true;
     };
   }, [authorized]);
-
-  const startOfToday = useMemo(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  }, []);
 
   const pendingHandymen = useMemo(() => {
     return users
@@ -113,9 +112,6 @@ export default function AdminPage() {
   }, [transactions]);
 
   const metrics = useMemo(() => {
-    const newUsersToday = users.filter((u) => new Date(u.createdAt).getTime() >= startOfToday).length;
-    const bidsToday = transactions.filter((t) => new Date(t.createdAt).getTime() >= startOfToday).length;
-    const blockedAccounts = users.filter((u) => u.status === "blocked").length;
     const pendingVerificationCount = users.filter(
       (u) => u.role === "handyman" && u.verificationStatus === "pending"
     ).length;
@@ -123,23 +119,23 @@ export default function AdminPage() {
     return [
       {
         label: "New Users Today",
-        value: String(newUsersToday),
+        value: String(overview?.usersCreatedToday ?? 0),
         delta: `${users.length} total`,
         icon: Users,
         color: "text-blue-600",
         bg: "bg-blue-50",
       },
       {
-        label: "Pending Verifications",
-        value: String(pendingVerificationCount),
-        delta: "handyman",
+        label: "Jobs Posted Today",
+        value: String(overview?.jobsPostedToday ?? 0),
+        delta: `${overview?.openEmergencies ?? 0} emergency`,
         icon: Briefcase,
         color: "text-amber-600",
         bg: "bg-amber-50",
       },
       {
         label: "Bids Created Today",
-        value: String(bidsToday),
+        value: String(overview?.bidsCreatedToday ?? 0),
         delta: `${transactions.length} total`,
         icon: Gavel,
         color: "text-purple-600",
@@ -147,14 +143,14 @@ export default function AdminPage() {
       },
       {
         label: "Blocked Accounts",
-        value: String(blockedAccounts),
-        delta: "active moderation",
+        value: String(overview?.blockedAccountCount ?? 0),
+        delta: pendingVerificationCount > 0 ? `${pendingVerificationCount} pending verification` : "active moderation",
         icon: Ban,
         color: "text-red-600",
         bg: "bg-red-50",
       },
     ];
-  }, [startOfToday, transactions, users]);
+  }, [overview, transactions, users]);
 
   if (loading || !authorized) {
     return null;
