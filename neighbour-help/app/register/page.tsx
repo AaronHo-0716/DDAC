@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { UserPlus, Wrench, Home, ArrowRight, Eye, EyeOff } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import NotificationToast from "../components/ui/NotificationToast";
+import HandymanVerificationForms from "../components/ui/HandymanVerificationForms";
 import { ApiClientError } from "../lib/api/client";
 import { useAuth } from "../lib/context/AuthContext";
 import type { UserRole } from "../types";
@@ -28,6 +29,7 @@ function RegisterForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<UserRole>(initialRole);
+  const [hasVerificationDocs, setHasVerificationDocs] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
@@ -36,11 +38,18 @@ function RegisterForm() {
     email.trim() !== "" &&
     password.length >= 8 &&
     confirmPassword.length >= 8 &&
-    !passwordMismatch;
+    !passwordMismatch &&
+    (role !== "handyman" || hasVerificationDocs);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+
+    if (role === "handyman" && !hasVerificationDocs) {
+      setError("Please select both selfie and identification card images before registering as a handyman.");
+      return;
+    }
+
     setError(null);
 
     try {
@@ -136,6 +145,15 @@ function RegisterForm() {
               </button>
             </div>
           </div>
+
+          {role === "handyman" && (
+            <div>
+              <HandymanVerificationForms
+                mode="signup"
+                onFilesChange={setHasVerificationDocs}
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-[#111827] mb-1.5">Password</label>

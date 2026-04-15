@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import StatusBadge from "../components/ui/StatusBadge";
+import HandymanVerificationForms from "../components/ui/HandymanVerificationForms";
 import type { Job, JobCategory } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
 import { jobsService } from "../lib/api/jobs";
@@ -114,6 +115,7 @@ export default function HandymanPage() {
   const [categoryFilter, setCategoryFilter] = useState<JobCategory | "">("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showReverifyForms, setShowReverifyForms] = useState(false);
   const verificationStatus = user?.verification ?? "pending";
   const isApproved = verificationStatus === "approved";
 
@@ -199,10 +201,22 @@ export default function HandymanPage() {
                     : "Account verification pending"}
                 </p>
                 {verificationStatus === "rejected" ? (
-                  <p className="mt-1 text-sm">
-                    Your handyman verification was rejected. You can browse jobs,
-                    but bid submission is disabled. Please contact support or an admin.
-                  </p>
+                  <>
+                    <p className="mt-1 text-sm">
+                      Your handyman verification was rejected. You can browse jobs,
+                      but bid submission is disabled until you reverify.
+                    </p>
+                    <div className="mt-3">
+                      <PrimaryButton
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowReverifyForms((prev) => !prev)}
+                      >
+                        {showReverifyForms ? "Hide Reverify Form" : "Reverify"}
+                      </PrimaryButton>
+                    </div>
+                  </>
                 ) : (
                   <p className="mt-1 text-sm">
                     Your handyman account has not been verified yet. You can browse jobs,
@@ -211,6 +225,12 @@ export default function HandymanPage() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {verificationStatus === "rejected" && showReverifyForms && (
+          <div className="mb-6">
+            <HandymanVerificationForms mode="reverify" />
           </div>
         )}
 

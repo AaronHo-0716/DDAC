@@ -42,7 +42,17 @@ variable "instance_password" {
   sensitive   = true
 }
 
+variable "grafana_password" {
+  description = "Password for the Grafana admin account"
+  type        = string
+  sensitive   = true
+}
 
+variable "caddy_elastic_ip" {
+  description = "The existing Elastic IP address allocated for the Caddy instance"
+  type        = string
+  sensitive   = true
+}
 
 provider "aws" {
   region = var.aws_region
@@ -321,6 +331,30 @@ resource "aws_iam_role_policy" "ec2_describe_instances_policy" {
   })
 }
 
+# Attach a policy for CloudWatch read-only access for Grafana to monitor RDS, S3 and SES
+resource "aws_iam_role_policy" "cloudwatch_read_policy" {
+  name = "cloudwatch-read-policy"
+  role = aws_iam_role.ec2_ssm_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:DescribeAlarmsForMetric",
+          "cloudwatch:DescribeAlarmHistory",
+          "cloudwatch:DescribeAlarms",
+          "cloudwatch:ListMetrics",
+          "cloudwatch:GetMetricData",
+          "cloudwatch:GetInsightRuleReport"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+
 # Attach the AWS managed policy for SSM Core functionality
 resource "aws_iam_role_policy_attachment" "ssm_core_attachment" {
   role       = aws_iam_role.ec2_ssm_role.name
@@ -331,6 +365,17 @@ resource "aws_iam_role_policy_attachment" "ssm_core_attachment" {
 resource "aws_iam_instance_profile" "ec2_ssm_profile" {
   name = "ec2-ssm-profile"
   role = aws_iam_role.ec2_ssm_role.name
+}
+
+# Find the existing Elastic IP for Caddy using tags
+data "aws_eip" "caddy_existing_eip" {
+  public_ip = var.caddy_elastic_ip
+}
+
+# Attach it to the Caddy instance
+resource "aws_eip_association" "caddy_eip_assoc" {
+  instance_id   = aws_instance.caddy_nat_instance.id
+  allocation_id = data.aws_eip.caddy_existing_eip.id
 }
 
 # --- Compute: Combined Proxy + NAT Instance (Public DMZ) ---
@@ -371,6 +416,12 @@ resource "aws_instance" "caddy_nat_instance" {
                       rewrite * /api{path}
                       reverse_proxy ${aws_instance.app_instance.private_ip}:5073
                   }
+                  handle /grafana/* {
+                      reverse_proxy ${aws_instance.monitoring_instance.private_ip}:3000
+                  }
+                  handle /prometheus/* {
+                      reverse_proxy ${aws_instance.monitoring_instance.private_ip}:9090
+                  }
                   handle {
                       reverse_proxy ${aws_instance.frontend_instance.private_ip}:3000
                   }
@@ -395,7 +446,7 @@ resource "aws_instance" "caddy_nat_instance" {
 # --- Compute: App Tier (Private Subnet) ---
 resource "aws_instance" "app_instance" {
   ami                  = data.aws_ami.ubuntu_2404.id
-  instance_type        = "t3.large"
+  instance_type        = "t3.medium"
   subnet_id            = aws_subnet.private_app.id
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
   key_name             = var.key_name
@@ -554,6 +605,20 @@ resource "aws_instance" "monitoring_instance" {
               systemctl enable --now docker
               usermod -aG docker ubuntu
 
+              useradd -m -s /bin/bash user
+              echo "user:${var.instance_password}" | chpasswd
+              usermod -aG sudo user
+
+              if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
+                  sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+              fi
+
+              sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+              systemctl restart ssh
+
+
               mkdir -p /opt/monitoring
               cd /opt/monitoring
 
@@ -593,6 +658,7 @@ resource "aws_instance" "monitoring_instance" {
                     - "--web.console.libraries=/etc/prometheus/console_libraries"
                     - "--web.console.templates=/etc/prometheus/consoles"
                     - "--web.enable-lifecycle"
+                    - "--web.external-url=http://neighbourhelp.me/grafana"
 
                 grafana:
                   image: grafana/grafana:latest
@@ -604,7 +670,11 @@ resource "aws_instance" "monitoring_instance" {
                     - grafana_data:/var/lib/grafana
                   environment:
                     - GF_SECURITY_ADMIN_USER=admin
-                    - GF_SECURITY_ADMIN_PASSWORD=admin
+                    - GF_SECURITY_ADMIN_PASSWORD=${var.grafana_password}
+                    - GF_SERVER_DOMAIN=neighbourhelp.me
+                    - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana/
+                    - GF_SERVER_SERVE_FROM_SUB_PATH=true
+
                   depends_on:
                     - prometheus
 

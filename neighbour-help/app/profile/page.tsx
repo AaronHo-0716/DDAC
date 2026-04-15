@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CalendarDays, Mail, Shield, Star } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CalendarDays, Mail, Shield, Star, Upload, X } from "lucide-react";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import { useAuth } from "@/app/lib/context/AuthContext";
@@ -10,6 +10,29 @@ import { authService } from "@/app/lib/api/auth";
 function formatJoinedDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "Unknown" : d.toLocaleDateString();
+}
+
+const MAX_IMAGE_SIZE_MB = 10;
+const MAX_IMAGE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+const ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+];
+
+function validateImageFile(file: File): string | null {
+  if (file.size > MAX_IMAGE_BYTES) {
+    return `Image is too large. Maximum size is ${MAX_IMAGE_SIZE_MB}MB.`;
+  }
+
+  if (!file.type || !ALLOWED_MIME_TYPES.includes(file.type.toLowerCase())) {
+    return "Unsupported image format. Use JPG, PNG, WEBP, HEIC, or GIF.";
+  }
+
+  return null;
 }
 
 export default function ProfilePage() {
@@ -25,11 +48,14 @@ export default function ProfilePage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!user) return;
     setAvatarPreviewUrl(user.avatarUrl ?? "");
     setAvatarFile(null);
+    setError(null);
+    setMessage(null);
   }, [user]);
 
   if (loading || !authorized || !user) {
@@ -37,6 +63,30 @@ export default function ProfilePage() {
   }
 
   const hasChanges = avatarFile !== null;
+
+  const handleSelectFile = (incoming: FileList | null) => {
+    const selected = incoming?.[0] ?? null;
+
+    setMessage(null);
+
+    if (!selected) {
+      setAvatarFile(null);
+      return;
+    }
+
+    const validationError = validateImageFile(selected);
+    if (validationError) {
+      setAvatarFile(null);
+      setError(validationError);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setError(null);
+    setAvatarFile(selected);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,13 +182,51 @@ export default function ProfilePage() {
                 <label className="block text-sm font-medium text-[#111827] mb-1.5">
                   Profile Picture
                 </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-[#E5E7EB] text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
-                />
-                <p className="mt-2 text-xs text-[#6B7280]">Supported: image files up to 10MB.</p>
+
+                <div className="rounded-2xl border border-[#E5E7EB] p-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif"
+                    onChange={(e) => handleSelectFile(e.target.files)}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#111827] hover:bg-[#F7F8FA] transition-colors"
+                  >
+                    <Upload className="w-4 h-4" /> Choose Image
+                  </button>
+
+                  {avatarFile && (
+                    <div className="mt-3 flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-[#111827]">{avatarFile.name}</p>
+                        <p className="text-xs text-[#6B7280]">{(avatarFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAvatarFile(null);
+                          setError(null);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = "";
+                          }
+                        }}
+                        className="ml-3 flex h-7 w-7 items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F3F4F6]"
+                        aria-label="Remove selected image"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <p className="mt-2 text-xs text-[#6B7280]">
+                  Supported formats: JPG, PNG, WEBP, HEIC, GIF. Max {MAX_IMAGE_SIZE_MB}MB.
+                </p>
               </div>
 
               <div className="pt-1">
