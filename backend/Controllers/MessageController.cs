@@ -86,6 +86,7 @@ public class MessageController(IMessageService messageService) : BaseController
     }
 
     [HttpGet("unread-by-conversation")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<IEnumerable<UnreadGroupDto>>> GetUnreadByConversation()
     {
         var userId = await GetCurrentUserIdAsync();

@@ -36,6 +36,7 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpGet("users/{id}")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<UserDto>> GetUser(Guid id)
     {
         try { return Ok(await adminService.GetUserByIdAsync(id)); }
@@ -102,6 +103,7 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpGet("jobs/emergency")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<IEnumerable<JobDto>>> GetEmergencyJobs()
     {
         try { return Ok(await adminService.GetEmergencyJobsAsync()); }
@@ -109,6 +111,7 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpPatch("jobs/{id}/assign")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<IActionResult> AssignJob(Guid id, [FromBody] AssignJobRequest request)
     {
         var adminId = await GetCurrentUserIdAsync();
@@ -122,6 +125,7 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpGet("bid-transactions")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<IEnumerable<BidTransactionDto>>> GetTransactions([FromQuery] string? type)
     {
         try { return Ok(await adminService.GetBidTransactionsAsync(type)); }

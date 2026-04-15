@@ -53,6 +53,7 @@ public class AuthController(IAuthService authService) : BaseController
     }
 
     [HttpPost("refresh")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest request)
     {
         try {
@@ -70,4 +71,7 @@ public class AuthController(IAuthService authService) : BaseController
         await authService.Logout(request, await GetCurrentUserIdAsync());
         return Ok(new { message = "Logged out successfully." });
     }
+
+    // /api/auth/password/otp/request
+    // * POST /api/auth/password/otp/verify
 }

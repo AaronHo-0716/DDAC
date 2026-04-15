@@ -7,11 +7,10 @@ using System.Net;
 
 namespace backend.Services;
 
-public class MessageService(NeighbourHelpDbContext context, ILogger<MessageService> logger) : IMessageService
+public class MessageService(NeighbourHelpDbContext context) : IMessageService
 {
     public async Task<ConversationDto> GetOrCreateJobConversationAsync(CreateJobChatRequest request, Guid userId)
     {
-        // 1. Security: Validate Job/Bid relation
         var bid = await context.Bids
             .Include(b => b.Job)
             .FirstOrDefaultAsync(b => b.Id == request.BidId && b.Job_Id == request.JobId)
@@ -23,7 +22,6 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
         if (!isAuthorized) 
             throw new HttpRequestException("You are not authorized to start a chat for this bid.", null, HttpStatusCode.Forbidden);
 
-        // 2. Check existing
         var dbType = ConversationType.JobChat.ToDbString();
         var existing = await context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
@@ -31,7 +29,6 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
 
         if (existing != null) return await MapToDto(existing, userId);
 
-        // 3. Create new
         var conversation = new Conversation
         {
             Id = Guid.NewGuid(),
@@ -142,16 +139,18 @@ public class MessageService(NeighbourHelpDbContext context, ILogger<MessageServi
 
         if (participant == null) return;
 
-        participant.Unread_Count = 0;
-        participant.Last_Read_Message_Id = await context.Messages
+        var lastMessageId = await context.Messages
             .Where(m => m.Conversation_Id == conversationId)
             .OrderByDescending(m => m.Created_At_Utc)
-            .Select(m => m.Id)
+            .Select(m => (Guid?)m.Id) 
             .FirstOrDefaultAsync();
-
+            
+        participant.Last_Read_Message_Id = lastMessageId;
+        participant.Unread_Count = 0;
+        
         await context.SaveChangesAsync();
     }
-
+    
     public async Task<IEnumerable<ConversationDto>> GetUserConversationsAsync(Guid userId)
     {
         var conversations = await context.Conversation_Participants

@@ -11,6 +11,7 @@ namespace backend.Controllers;
 public class AdminMessageController(IMessageService messageService) : BaseController
 {
     [HttpPatch("conversations/{conversationId}/lock")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<IActionResult> LockConversation(Guid conversationId, [FromBody] string reason)
     {
         var adminId = await GetCurrentUserIdAsync();
@@ -24,6 +25,7 @@ public class AdminMessageController(IMessageService messageService) : BaseContro
     }
 
     [HttpPatch("conversations/{conversationId}/unlock")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<IActionResult> UnlockConversation(Guid conversationId)
     {
         var adminId = await GetCurrentUserIdAsync();
@@ -37,6 +39,7 @@ public class AdminMessageController(IMessageService messageService) : BaseContro
     }
 
     [HttpPatch("messages/{messageId}/hide")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<IActionResult> HideMessage(Guid messageId, [FromBody] string reason)
     {
         var adminId = await GetCurrentUserIdAsync();
@@ -50,6 +53,7 @@ public class AdminMessageController(IMessageService messageService) : BaseContro
     }
 
     [HttpPatch("messages/{messageId}/unhide")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<IActionResult> UnhideMessage(Guid messageId)
     {
         var adminId = await GetCurrentUserIdAsync();
@@ -63,6 +67,7 @@ public class AdminMessageController(IMessageService messageService) : BaseContro
     }
 
     [HttpPost("messages/{messageId}/flag")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<IActionResult> FlagMessage(Guid messageId, [FromBody] FlagMessageRequest request)
     {
         var adminId = await GetCurrentUserIdAsync();
@@ -76,6 +81,7 @@ public class AdminMessageController(IMessageService messageService) : BaseContro
     }
 
     [HttpGet("moderation-actions")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<IEnumerable<ModerationActionDto>>> GetModerationLog()
     {
         try { return Ok(await messageService.GetModerationActionsAsync()); }
