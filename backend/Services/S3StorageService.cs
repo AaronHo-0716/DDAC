@@ -2,6 +2,7 @@ using System.Net;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Util;
+using backend.Constants;
 using backend.Data;
 using backend.Models.Config;
 using backend.Models.DTOs;
@@ -24,7 +25,7 @@ public class S3StorageService(
         var user = await Context.Users.FindAsync([userId], cancellationToken)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
 
-        var upload = await UploadImageAsync(file, $"avatars/{user.Id}", cancellationToken);
+        var upload = await UploadImageAsync(file, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", cancellationToken);
         
         user.AvatarUrl = upload.Url;
         user.Updated_At_Utc = DateTime.UtcNow;
