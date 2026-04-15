@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Send } from "lucide-react";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
@@ -38,7 +38,7 @@ function formatDate(iso?: string) {
   });
 }
 
-export default function ReportsPage() {
+function ReportsPageContent() {
   const { authorized, loading, user } = useRequireRole(["homeowner", "handyman", "admin"]);
   const searchParams = useSearchParams();
 
@@ -270,5 +270,13 @@ export default function ReportsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ReportsPageContent />
+    </Suspense>
   );
 }
