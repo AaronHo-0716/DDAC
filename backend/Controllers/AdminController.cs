@@ -12,6 +12,7 @@ namespace backend.Controllers;
 public class AdminController(IAdminService adminService) : BaseController
 {
     [HttpGet("overview")]
+    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<AdminOverviewResponse>> GetOverview()
     {
         try { return Ok(await adminService.GetOverviewAsync()); }

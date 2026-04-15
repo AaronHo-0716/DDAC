@@ -53,7 +53,6 @@ public class AuthController(IAuthService authService) : BaseController
     }
 
     [HttpPost("refresh")]
-    [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest request)
     {
         try {
