@@ -1,0 +1,10 @@
+scrape_configs:
+  - job_name: "node_exporter"
+    ec2_sd_configs:
+      - region: ap-southeast-5
+        port: 9100
+    relabel_configs:
+      # Only scrape instances with the tag "Monitor: true" or similar
+      - source_labels: [__meta_ec2_tag_Name]
+        action: keep
+        regex: (App-Backend-Tier|App-Frontend-Tier|Caddy-NAT)
