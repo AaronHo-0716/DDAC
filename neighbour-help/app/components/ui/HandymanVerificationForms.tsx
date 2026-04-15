@@ -178,16 +178,18 @@ export default function HandymanVerificationForms({ mode, onFilesChange }: Handy
         />
       </div>
 
-      <div className="pt-1">
-        <PrimaryButton
-          type="button"
-          variant="secondary"
-          disabled={!selfieFile || !idCardFile}
-          onClick={() => setMessage("Verification submission will be enabled once backend endpoint is ready.")}
-        >
-          {mode === "reverify" ? "Submit Reverification" : "Submit Verification Documents"}
-        </PrimaryButton>
-      </div>
+      {mode === "reverify" && (
+        <div className="pt-1">
+          <PrimaryButton
+            type="button"
+            variant="secondary"
+            disabled={!selfieFile || !idCardFile}
+            onClick={() => setMessage("Verification submission will be enabled once backend endpoint is ready.")}
+          >
+            Submit Reverification
+          </PrimaryButton>
+        </div>
+      )}
     </div>
   );
 }
