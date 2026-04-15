@@ -3,7 +3,6 @@ using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Security.Claims;
 using System.Net;
 
 namespace backend.Controllers;

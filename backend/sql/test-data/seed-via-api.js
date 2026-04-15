@@ -50,6 +50,52 @@ async function registerUser({ name, email, role }) {
     };
 }
 
+async function loginUser(email, password) {
+    const data = await apiRequest("/auth/login", {
+        method: "POST",
+        body: { email, password },
+    });
+
+    return data.tokens;
+}
+
+async function logout(accessToken, refreshToken) {
+    await apiRequest("/auth/logout", {
+        method: "POST",
+        token: accessToken,
+        body: { refreshToken },
+    });
+}
+
+async function verifyHandymen() {
+    console.log("Fetching pending verifications...");
+
+    // Log in as admin
+    const adminToken = await loginUser("admin@NeighborHelp.test", "Password123!");
+
+    const pendingList = await apiRequest("/admin/handymen/pending-verification", {
+        token: adminToken.accessToken,
+        method: "GET"
+    });
+
+    if (!pendingList || pendingList.length === 0) {
+        console.log("No pending verifications found.");
+        return;
+    }
+
+    for (const v of pendingList) {
+        await apiRequest(`/admin/handymen/${v.id}/approve`, {
+            method: "PATCH",
+            token: adminToken.accessToken,
+            body: "Verified via automated seed script."
+        });
+        console.log(`Approved Handyman: ${v.userName} (ID: ${v.userId})`);
+    }
+
+    await logout(adminToken.accessToken, adminToken.refreshToken);
+    console.log("Admin logged out.");
+}
+
 async function main() {
     console.log(`API base: ${API_BASE}`);
 
@@ -68,6 +114,8 @@ async function main() {
 
     const homeowners = users.filter((u) => u.role === "homeowner");
     const handymen = users.filter((u) => u.role === "handyman");
+
+    await verifyHandymen();
 
     const jobBlueprint = [
         {
@@ -165,7 +213,6 @@ async function main() {
         bids.push({ jobId: job.id, ownerId: job.ownerId, bidIds: [bidOne.id, bidTwo.id] });
     }
 
-    // Create status variety for testing.
     for (let i = 0; i < bids.length; i += 1) {
         const b = bids[i];
         const owner = homeowners.find((h) => h.id === b.ownerId);

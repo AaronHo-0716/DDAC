@@ -1,9 +1,8 @@
 using backend.Models.DTOs;
-using Microsoft.AspNetCore.Http;
-
 namespace backend.Services;
 
 public interface IStorageService
 {
+    Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken cancellationToken = default);
     Task<UploadImageResponse> UploadImageAsync(IFormFile file, string prefix, CancellationToken cancellationToken = default);
 }

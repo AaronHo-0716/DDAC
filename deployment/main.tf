@@ -175,11 +175,11 @@ resource "aws_security_group" "public_sg" {
   }
 
   ingress {
-    description = "Allow all inbound from Private Subnets for NAT routing"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = [aws_subnet.private_app.cidr_block, aws_subnet.private_data.cidr_block]
+    description = "Allow Prometheus to scrape metrics from Node Exporter"
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.app_vpc.cidr_block]
   }
 
   egress {
@@ -301,6 +301,26 @@ resource "aws_iam_role_policy" "s3_upload_policy" {
   })
 }
 
+# Add EC2 DescribeInstances for Prometheus Service Discovery
+# Auto detect any EC2 instances for monitoring, no need fix IP
+resource "aws_iam_role_policy" "ec2_describe_instances_policy" {
+  name = "ec2-describe-instances-policy"
+  role = aws_iam_role.ec2_ssm_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Attach the AWS managed policy for SSM Core functionality
 resource "aws_iam_role_policy_attachment" "ssm_core_attachment" {
   role       = aws_iam_role.ec2_ssm_role.name
@@ -359,6 +379,14 @@ resource "aws_instance" "caddy_nat_instance" {
 
               systemctl enable --now caddy
               systemctl restart caddy
+
+              docker run -d --restart always \
+                --name node-exporter \
+                --net="host" \
+                --pid="host" \
+                -v "/:/host:ro,rslave" \
+                quay.io/prometheus/node-exporter:latest \
+                --path.rootfs=/host
               EOF
 
   tags = { Name = "App-Caddy-NAT" }
@@ -417,6 +445,14 @@ resource "aws_instance" "app_instance" {
               sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
               systemctl restart ssh
+
+              docker run -d --restart always \
+                --name node-exporter \
+                --net="host" \
+                --pid="host" \
+                -v "/:/host:ro,rslave" \
+                quay.io/prometheus/node-exporter:latest \
+                --path.rootfs=/host
               EOF
 
 
@@ -476,10 +512,119 @@ resource "aws_instance" "frontend_instance" {
               sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
               systemctl restart ssh
+
+              docker run -d --restart always \
+                --name node-exporter \
+                --net="host" \
+                --pid="host" \
+                -v "/:/host:ro,rslave" \
+                quay.io/prometheus/node-exporter:latest \
+                --path.rootfs=/host
               EOF
 
 
   tags = { Name = "App-Frontend-Tier" }
+}
+
+# --- Compute: Monitoring Tier (Private Subnet) ---
+resource "aws_instance" "monitoring_instance" {
+  ami                  = data.aws_ami.ubuntu_2404.id
+  instance_type        = "t3.medium"
+  subnet_id            = aws_subnet.private_app.id
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
+  key_name             = var.key_name
+
+  vpc_security_group_ids      = [aws_security_group.app_sg.id]
+  user_data_replace_on_change = true
+
+  user_data = <<-EOF
+              #!/bin/bash
+              export DEBIAN_FRONTEND=noninteractive
+
+              echo "Waiting for internet connectivity..."
+              for i in {1..30}; do
+                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
+                      break
+                  fi
+                  sleep 10
+              done
+
+              apt-get update -o Acquire::ForceIPv4=true
+              apt-get install -y docker.io docker-compose openssh-server unzip
+              systemctl enable --now docker
+              usermod -aG docker ubuntu
+
+              mkdir -p /opt/monitoring
+              cd /opt/monitoring
+
+              cat << 'PROMETHEUS' > prometheus.yml
+              global:
+                scrape_interval: 15s
+
+              scrape_configs:
+                - job_name: 'node_exporter'
+                  ec2_sd_configs:
+                    - region: ${var.aws_region}
+                      port: 9100
+                  relabel_configs:
+                    - source_labels: [__meta_ec2_tag_Name]
+                      action: keep
+                      regex: (App-Backend-Tier|App-Frontend-Tier|App-Caddy-NAT|App-Monitoring)
+                    - source_labels: [__meta_ec2_private_ip]
+                      target_label: instance
+              PROMETHEUS
+
+              cat << 'DOCKERCOMPOSE' > docker-compose.yml
+              version: "3.8"
+
+              services:
+                prometheus:
+                  image: prom/prometheus:latest
+                  container_name: prometheus
+                  restart: unless-stopped
+                  ports:
+                    - "9090:9090"
+                  volumes:
+                    - ./prometheus.yml:/etc/prometheus/prometheus.yml
+                    - prometheus_data:/prometheus
+                  command:
+                    - "--config.file=/etc/prometheus/prometheus.yml"
+                    - "--storage.tsdb.path=/prometheus"
+                    - "--web.console.libraries=/etc/prometheus/console_libraries"
+                    - "--web.console.templates=/etc/prometheus/consoles"
+                    - "--web.enable-lifecycle"
+
+                grafana:
+                  image: grafana/grafana:latest
+                  container_name: grafana
+                  restart: unless-stopped
+                  ports:
+                    - "3000:3000"
+                  volumes:
+                    - grafana_data:/var/lib/grafana
+                  environment:
+                    - GF_SECURITY_ADMIN_USER=admin
+                    - GF_SECURITY_ADMIN_PASSWORD=admin
+                  depends_on:
+                    - prometheus
+
+              volumes:
+                prometheus_data:
+                grafana_data:
+              DOCKERCOMPOSE
+
+              docker-compose up -d
+
+              docker run -d --restart always \
+                --name node-exporter \
+                --net="host" \
+                --pid="host" \
+                -v "/:/host:ro,rslave" \
+                quay.io/prometheus/node-exporter:latest \
+                --path.rootfs=/host
+              EOF
+
+  tags = { Name = "App-Monitoring" }
 }
 
 # --- Database: PostgreSQL RDS ---

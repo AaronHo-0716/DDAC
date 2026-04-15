@@ -8,22 +8,34 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/uploads")]
 [Authorize]
+[Consumes("multipart/form-data")]
+[RequestSizeLimit(10 * 1024 * 1024)]
 public class UploadController(IStorageService storageService) : BaseController
 {
     [HttpPost("job-image")]
-    [Consumes("multipart/form-data")]
-    [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<ActionResult<UploadImageResponse>> UploadJobImage([FromForm] UploadImageRequest request, CancellationToken cancellationToken)
     {
         if (request.File == null)
-        {
-            return BadRequest(new { message = "File is required." });
-        }
-
+            throw new HttpRequestException("No file was provided for upload.", null, System.Net.HttpStatusCode.BadRequest);
         try
         {
             var result = await storageService.UploadImageAsync(request.File, "job-images", cancellationToken);
             return Ok(result);
+        }
+        catch (HttpRequestException ex)
+        {
+            return HandleError(ex);
+        }
+    }
+
+    [HttpPost("profile-picture")]
+    public async Task<ActionResult<UserDto>> UpdateProfilePicture([FromForm] UploadImageRequest request, CancellationToken cancellationToken)
+    {
+        if (request.File == null) throw new HttpRequestException("File is required.", null, System.Net.HttpStatusCode.BadRequest);
+
+        try
+        {
+            return Ok(await storageService.UpdateProfilePictureAsync(await GetCurrentUserIdAsync(), request.File, cancellationToken));
         }
         catch (HttpRequestException ex)
         {

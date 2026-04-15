@@ -18,7 +18,8 @@ public class AuthService : BaseService, IAuthService
     private readonly IConfiguration _config;
     private readonly ILogger _logger;
 
-    public AuthService( NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger) : base(context, logger)
+    public AuthService(
+        NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger ) : base(context, logger)
     {
         _context = context;
         _config = config;

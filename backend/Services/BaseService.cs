@@ -3,7 +3,6 @@ using backend.Models.DTOs;
 using backend.Models.Entities;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
-using Npgsql.TypeMapping;
 
 namespace backend.Services;
 
