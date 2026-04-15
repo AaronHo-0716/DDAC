@@ -5,6 +5,9 @@ using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Net;
+using Amazon.S3;
+using backend.Models.Config;
+using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
@@ -13,7 +16,7 @@ public class BidService : BaseService, IBidService
     private readonly NeighbourHelpDbContext _context;
     private readonly ILogger _logger;
 
-    public BidService( NeighbourHelpDbContext context, ILogger<BidService> logger) : base(context, logger)
+    public BidService( NeighbourHelpDbContext context, ILogger<BidService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
     {
         _context = context;
         _logger = logger;

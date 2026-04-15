@@ -17,7 +17,7 @@ public class S3StorageService(
     ILogger<S3StorageService> logger,
     IAmazonS3 s3Client,
     IOptions<StorageOptions> storageOptions) 
-    : BaseService(context, logger), IStorageService
+    : BaseService(context, logger, s3Client, storageOptions), IStorageService
 {
     private readonly IAmazonS3 _s3Client = s3Client;
     private readonly S3StorageOptions _options = storageOptions.Value.S3;
@@ -73,7 +73,7 @@ public class S3StorageService(
                 handyman.User_Id, 
                 handyman.User.Name, 
                 handyman.Status, 
-                handyman.IdentityCardURL,
+                handyman.IdentityCardURL, 
                 handyman.SelfieImageURL,
                 handyman.Created_At_Utc,
                 handyman.Updated_At_Utc

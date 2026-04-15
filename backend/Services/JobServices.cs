@@ -4,6 +4,9 @@ using backend.Models.DTOs;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
+using Amazon.S3;
+using backend.Models.Config;
+using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
@@ -12,7 +15,7 @@ public class JobService : BaseService, IJobService
     private readonly NeighbourHelpDbContext _context;
     private readonly ILogger _logger;
 
-    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger) : base(context, logger)
+    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
     {
         _context = context;
         _logger = logger;

@@ -3,6 +3,10 @@ using backend.Models.DTOs;
 using backend.Models.Entities;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
+using Amazon.S3.Model;
+using backend.Models.Config;
+using Amazon.S3;
+using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
@@ -10,17 +14,36 @@ public abstract class BaseService
 {
     protected readonly NeighbourHelpDbContext Context;
     protected readonly ILogger Logger;
+    protected readonly IAmazonS3? S3Client;
+    protected readonly S3StorageOptions? StorageOptions;
 
-    protected BaseService(NeighbourHelpDbContext context, ILogger logger)
+    protected BaseService( NeighbourHelpDbContext context, ILogger logger, IAmazonS3? s3Client = null, IOptions<StorageOptions>? storageOptions = null)
     {
         Context = context;
         Logger = logger;
+        S3Client = s3Client;
+        StorageOptions = storageOptions?.Value?.S3; 
     }
 
     protected static bool IsValidEmail(string email)
     {
         try { return new System.Net.Mail.MailAddress(email).Address == email; }
         catch { return false; }
+    }
+
+    protected string GetPresignedUrl(string? objectKey, int expiryMinutes = 60)
+    {
+        if (string.IsNullOrEmpty(objectKey) || S3Client == null || StorageOptions == null) 
+            return null!;
+
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = StorageOptions.BucketName,
+            Key = objectKey,
+            Expires = DateTime.UtcNow.AddMinutes(expiryMinutes)
+        };
+
+        return S3Client.GetPreSignedURL(request);
     }
 
     protected async Task<UserDto> MapUserToDto(User user, string? statusOverride = null)
@@ -49,7 +72,7 @@ public abstract class BaseService
             user.Name.Trim(),
             user.Email.Trim(),
             roleEnum.ToDbString(),
-            user.AvatarUrl,
+            GetPresignedUrl(user.AvatarUrl),
             user.Rating,
             user.CreatedAtUtc,
             user.IsActive,
@@ -120,7 +143,7 @@ public abstract class BaseService
                 Name: job.Posted_By_User.Name,
                 Email: job.Posted_By_User.Email,
                 Role: roleEnum.ToDbString(), 
-                AvatarUrl: job.Posted_By_User.AvatarUrl,
+                AvatarUrl: GetPresignedUrl(job.Posted_By_User.AvatarUrl),
                 Rating: job.Posted_By_User.Rating,
                 CreatedAt: job.Posted_By_User.CreatedAtUtc,
                 IsActive: true,
@@ -129,7 +152,7 @@ public abstract class BaseService
             CreatedAt: job.Created_At_Utc,
             UpdatedAt: job.Updated_At_Utc,
             BidCount: bidCount,
-            ImageUrls: job.Job_Images.OrderBy(img => img.Sort_Order).Select(img => img.Object_Key).ToList()
+            ImageUrls: job.Job_Images.OrderBy(img => img.Sort_Order).Select(img => GetPresignedUrl(img.Object_Key)).ToList()
         );
     }
 
@@ -145,7 +168,7 @@ public abstract class BaseService
                 Name: bid.Handyman_User.Name,
                 Email: bid.Handyman_User.Email,
                 Role: roleEnum.ToDbString(), 
-                AvatarUrl: bid.Handyman_User.AvatarUrl,
+                AvatarUrl: GetPresignedUrl(bid.Handyman_User.AvatarUrl),
                 Rating: bid.Handyman_User.Rating,
                 CreatedAt: bid.Handyman_User.CreatedAtUtc,
                 IsActive: bid.Handyman_User.IsActive,

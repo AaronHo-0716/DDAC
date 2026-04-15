@@ -9,6 +9,9 @@ using System.Security.Claims;
 using System.Text;
 using System.Net;
 using System.Security.Cryptography;
+using Amazon.S3;
+using backend.Models.Config;
+using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
@@ -19,7 +22,7 @@ public class AuthService : BaseService, IAuthService
     private readonly ILogger _logger;
 
     public AuthService(
-        NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger ) : base(context, logger)
+        NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
     {
         _context = context;
         _config = config;

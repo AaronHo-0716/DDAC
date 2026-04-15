@@ -4,6 +4,9 @@ using backend.Models.Entities;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
+using Amazon.S3;
+using backend.Models.Config;
+using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
@@ -12,7 +15,7 @@ public class AdminService : BaseService, IAdminService
     private readonly NeighbourHelpDbContext _context;
     private readonly ILogger _logger;
 
-    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger) : base(context, logger)
+    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
     {
         _context = context;
         _logger = logger;
