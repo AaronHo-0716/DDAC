@@ -13,85 +13,62 @@ public class MessageController(IMessageService messageService) : BaseController
     [HttpPost("conversations/job")]
     public async Task<ActionResult<ConversationDto>> StartJobChat(CreateJobChatRequest request)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        try { return Ok(await messageService.GetOrCreateJobConversationAsync(request, userId)); }
+        try { return Ok(await messageService.GetOrCreateJobConversationAsync(request, await GetCurrentUserIdAsync())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPost("conversations/support")]
     public async Task<ActionResult<ConversationDto>> StartSupportChat(CreateSupportChatRequest request)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        try { return Ok(await messageService.GetOrCreateSupportConversationAsync(request, userId, GetUserRole())); }
+        try { return Ok(await messageService.GetOrCreateSupportConversationAsync(request, await GetCurrentUserIdAsync(), GetUserRole())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpGet("conversations")]
     public async Task<ActionResult<IEnumerable<ConversationDto>>> GetConversations()
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-        return Ok(await messageService.GetUserConversationsAsync(userId));
+        return Ok(await messageService.GetUserConversationsAsync(await GetCurrentUserIdAsync()));
     }
 
     [HttpGet("conversations/{conversationId}")]
     public async Task<ActionResult<ConversationDto>> GetConversation(Guid conversationId)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        try { return Ok(await messageService.GetConversationByIdAsync(conversationId, userId)); }
+        try { return Ok(await messageService.GetConversationByIdAsync(conversationId, await GetCurrentUserIdAsync())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpGet("conversations/{conversationId}/messages")]
     public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessages(Guid conversationId)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        try { return Ok(await messageService.GetConversationMessagesAsync(conversationId, userId)); }
+        try { return Ok(await messageService.GetConversationMessagesAsync(conversationId, await GetCurrentUserIdAsync())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPost("conversations/{conversationId}/messages")]
     public async Task<ActionResult<MessageDto>> SendMessage(Guid conversationId, SendMessageRequest request)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        try { return Ok(await messageService.SendMessageAsync(conversationId, userId, request)); }
+        try { return Ok(await messageService.SendMessageAsync(conversationId, await GetCurrentUserIdAsync(), request)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("conversations/{conversationId}/read")]
     public async Task<IActionResult> MarkRead(Guid conversationId)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-        await messageService.MarkAsReadAsync(conversationId, userId);
+        await messageService.MarkAsReadAsync(conversationId, await GetCurrentUserIdAsync());
         return NoContent();
     }
 
     [HttpGet("unread-count")]
     public async Task<ActionResult<int>> GetTotalUnread()
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-        return Ok(await messageService.GetTotalUnreadCountAsync(userId));
+        return Ok(await messageService.GetTotalUnreadCountAsync(await GetCurrentUserIdAsync()));
     }
 
     [HttpGet("unread-by-conversation")]
     [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<IEnumerable<UnreadGroupDto>>> GetUnreadByConversation()
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-        return Ok(await messageService.GetUnreadCountsByConversationAsync(userId));
+        return Ok(await messageService.GetUnreadCountsByConversationAsync(await GetCurrentUserIdAsync()));
     }
     
     private string GetUserRole() => User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "guest";

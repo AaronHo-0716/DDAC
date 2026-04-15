@@ -14,38 +14,31 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
     [HttpGet]
     public async Task<ActionResult<JobListResponse>> GetJobs([FromQuery] JobFilterQuery query)
     {
-        var userId = await GetCurrentUserIdAsync();
-        try { return Ok(await jobService.GetJobsAsync(query, userId)); }
+        try { return Ok(await jobService.GetJobsAsync(query, await GetCurrentUserIdAsync())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpGet("my")]
     public async Task<ActionResult<JobListResponse>> GetMyJobs([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        try { return Ok(await jobService.GetMyJobsAsync(userId, page, pageSize)); }
+        try { return Ok(await jobService.GetMyJobsAsync(await GetCurrentUserIdAsync(), page, pageSize)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<JobDto>> GetJobById(Guid id)
     {
-        var userId = await GetCurrentUserIdAsync();
-        try { return Ok(await jobService.GetJobByIdAsync(id, userId)); }
+
+        try { return Ok(await jobService.GetJobByIdAsync(id, await GetCurrentUserIdAsync())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPost]
     public async Task<ActionResult<JobDto>> CreateJob([FromBody] CreateJobRequest request)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
         try
         {
-            var job = await jobService.CreateJobAsync(request, userId);
+            var job = await jobService.CreateJobAsync(request, await GetCurrentUserIdAsync());
             return CreatedAtAction(nameof(GetJobById), new { id = job.Id }, job);
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -54,22 +47,16 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
     [HttpPut("{id}")]
     public async Task<ActionResult<JobDto>> UpdateJob(Guid id, [FromBody] UpdateJobRequest request)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        try { return Ok(await jobService.UpdateJobAsync(id, request, userId)); }
+        try { return Ok(await jobService.UpdateJobAsync(id, request, await GetCurrentUserIdAsync())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteJob(Guid id)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-
         try
         {
-            await jobService.DeleteJobAsync(id, userId);
+            await jobService.DeleteJobAsync(id, await GetCurrentUserIdAsync());
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -85,12 +72,9 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
     [HttpPost("{jobId}/bids")]
     public async Task<ActionResult<BidDto>> CreateBid(Guid jobId, [FromBody] CreateBidRequest request)
     {
-        var userId = await GetCurrentUserIdAsync();
-        if (userId == Guid.Empty) return Unauthorized();
-        
         try
         {
-            var bid = await bidService.CreateBidAsync(jobId, request, userId);
+            var bid = await bidService.CreateBidAsync(jobId, request, await GetCurrentUserIdAsync());
             return CreatedAtAction(nameof(GetBidsByJobId), new { jobId }, bid);
         }
         catch (HttpRequestException ex) { return HandleError(ex); }

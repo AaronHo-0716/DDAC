@@ -20,12 +20,9 @@ public class AdminReportController(IReportService reportService) : BaseControlle
     [HttpPatch("{id}/resolve")]
     public async Task<IActionResult> ResolveReport(Guid id, [FromBody] string notes)
     {
-        var adminId = await GetCurrentUserIdAsync();
-        if (adminId == Guid.Empty) return Unauthorized();
-
         try
         {
-            await reportService.ResolveReportAsync(id, notes, adminId);
+            await reportService.ResolveReportAsync(id, notes, await GetCurrentUserIdAsync());
             return NoContent();
         }
         catch (HttpRequestException ex)
@@ -37,12 +34,9 @@ public class AdminReportController(IReportService reportService) : BaseControlle
     [HttpPatch("{id}/review")]
     public async Task<IActionResult> ReviewReport(Guid id, [FromBody] string notes)
     {
-        var adminId = await GetCurrentUserIdAsync();
-        if (adminId == Guid.Empty) return Unauthorized();
-
         try
         {
-            await reportService.ReviewReportAsync(id, notes, adminId);
+            await reportService.ReviewReportAsync(id, notes, await GetCurrentUserIdAsync());
             return NoContent();
         }
         catch (HttpRequestException ex)

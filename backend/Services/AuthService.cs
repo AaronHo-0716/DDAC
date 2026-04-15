@@ -45,7 +45,7 @@ public class AuthService : BaseService, IAuthService
         if (!user.IsActive)
         {
             _logger.LogInformation("Blocked user {UserId} attempted login.", user.Id);
-            return new AuthResponse(await MapUserToDto(user), new TokenDto(string.Empty, string.Empty, 0));
+            throw new HttpRequestException("Access denied. The account is blocked.", null, HttpStatusCode.BadRequest);
         }
 
         return await GenerateAuthResponse(user);
@@ -81,25 +81,51 @@ public class AuthService : BaseService, IAuthService
 
         if (roleEnum == UserRole.Handyman)
         {
-            // 1. Create the verification record
-            _context.Handyman_Verifications.Add(new Handyman_Verification
-            {
-                Id = Guid.NewGuid(),
-                User_Id = newUser.Id,
-                Status = VerificationStatus.Pending.ToDbString(),
-                Created_At_Utc = DateTime.UtcNow,
-                Updated_At_Utc = DateTime.UtcNow
-            });
+            await SaveHandymanVerificationToDb(newUser);
 
-            // 2. Send Notification to all Admins
             await CreateNotifications(
-                            NotificationType.NewHandymanRegistration, 
-                            $"New handyman registration: {newUser.Name} requires verification."
-                        );
+                    NotificationType.NewHandymanRegistration, 
+                    $"New handyman registration: {newUser.Name} requires verification."
+                );
         }
 
         await _context.SaveChangesAsync();
         return await GenerateAuthResponse(newUser);
+    }
+
+    public async Task<HandymanVerificationDto> CreateHandymanVerification(Guid userId)
+    {
+        var user = await Context.Users
+            .Include(u => u.Handyman_Verification_User) 
+            .FirstOrDefaultAsync(u => u.Id == userId)
+            ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
+
+        if (user.Handyman_Verification_User?.Status == VerificationStatus.Approved.ToDbString()) 
+            throw new HttpRequestException("Cannot make new verification once a Handyman account has been approved. Please contact support for assistance.", null, HttpStatusCode.BadRequest);
+
+        var response = await SaveHandymanVerificationToDb(user);
+
+        await CreateNotifications(
+                NotificationType.ResubmitVerification, 
+                $"Handyman {user.Name} has resubmitted their verification."
+            );
+        
+        return response;
+    }
+
+    private async Task<HandymanVerificationDto> SaveHandymanVerificationToDb(User user)
+    {
+        var handyman = new Handyman_Verification
+        {
+            Id = Guid.NewGuid(),
+            User_Id = user.Id,
+            Status = VerificationStatus.Pending.ToDbString(),
+            Created_At_Utc = DateTime.UtcNow,
+            Updated_At_Utc = DateTime.UtcNow
+        };
+        _context.Handyman_Verifications.Add(handyman);
+        await _context.SaveChangesAsync();
+        return MapPendingToDto(handyman);
     }
 
     public async Task<AuthResponse> RefreshToken(string token)

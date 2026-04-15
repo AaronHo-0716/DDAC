@@ -11,7 +11,7 @@ public abstract class BaseController : ControllerBase
     protected async Task<Guid> GetCurrentUserIdAsync()
     {
         var email = User.FindFirstValue(ClaimTypes.Email);
-        if (string.IsNullOrEmpty(email)) return Guid.Empty;
+        if (string.IsNullOrEmpty(email)) throw new HttpRequestException("Unauthorized: invalid authentication token.", null, HttpStatusCode.Unauthorized);
 
         // Automatically resolve the DbContext from the internal DI container
         var context = HttpContext.RequestServices.GetRequiredService<NeighbourHelpDbContext>();

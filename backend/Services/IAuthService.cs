@@ -9,4 +9,5 @@ public interface IAuthService
     Task<UserDto> GetUserById(Guid userId);
     Task<AuthResponse> RefreshToken(string token);
     Task Logout(LogoutRequest request, Guid userId);
+    Task<HandymanVerificationDto> CreateHandymanVerification(Guid userId);
 }

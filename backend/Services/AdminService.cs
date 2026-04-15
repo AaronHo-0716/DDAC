@@ -119,7 +119,7 @@ public class AdminService : BaseService, IAdminService
         return await MapUserToDto(user);
     }
 
-    public async Task<UserDto?> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminId)
+    public async Task<UserDto> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminId)
     {
         if (block && targetId == adminId)
             throw new HttpRequestException("Security Error: You cannot block your own account.", null, HttpStatusCode.BadRequest);
@@ -142,7 +142,7 @@ public class AdminService : BaseService, IAdminService
         }
 
         _logger.LogInformation("User {UserId} unblocked by Admin {AdminId}", targetId, adminId);
-        return null;
+        return await MapUserToDto(user);
     }
 
     public async Task<IEnumerable<HandymanVerificationDto>> GetPendingVerificationsAsync()
@@ -164,7 +164,7 @@ public class AdminService : BaseService, IAdminService
             .ToListAsync();
     }
 
-    public async Task VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId)
+    public async Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId)
     {
         var verification = await _context.Handyman_Verifications
             .Include(v => v.User)
@@ -187,6 +187,8 @@ public class AdminService : BaseService, IAdminService
                     approve ? "Your handyman account has been approved!" : $"Your handyman verification was rejected. Reason: {notes}");
 
         await _context.SaveChangesAsync();
+
+        return MapPendingToDto(verification);
     }
 
     public async Task<IEnumerable<JobDto>> GetEmergencyJobsAsync()

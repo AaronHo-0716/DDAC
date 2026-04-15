@@ -183,4 +183,18 @@ public abstract class BaseService
             UpdatedAt: bid.Updated_At_Utc
         );
     }
+
+    protected HandymanVerificationDto MapPendingToDto(Handyman_Verification handyman)
+    {
+        return new HandymanVerificationDto(
+                handyman.Id, 
+                handyman.User_Id, 
+                handyman.User.Name, 
+                handyman.Status, 
+                handyman.IdentityCardURL, 
+                handyman.SelfieImageURL,
+                handyman.Created_At_Utc,
+                handyman.Updated_At_Utc
+        );
+    }
 }

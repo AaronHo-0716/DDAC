@@ -29,11 +29,9 @@ public class S3StorageService(
             .FirstOrDefaultAsync(u => u.Id == userId, ct)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
         
-        var userDto = await MapUserToDto(user);
-
         if (user.Role == UserRole.Handyman.ToDbString() && 
             user.Handyman_Verification_User?.Status == VerificationStatus.Approved.ToDbString())
-                throw new HttpRequestException("Profile images cannot be changed once a Handyman account has been approved. Please contact support for assistance.", null, HttpStatusCode.NotFound);
+                throw new HttpRequestException("Profile images cannot be changed once a Handyman account has been approved. Please contact support for assistance.", null, HttpStatusCode.BadRequest);
 
         var upload = await UploadImageAsync(file, $"{UploadTypes.AvatarImage.ToPrefixString()}/{user.Id}", ct);
 
@@ -57,7 +55,7 @@ public class S3StorageService(
             ?? throw new HttpRequestException("Handyman verification record not found.", null, HttpStatusCode.NotFound);
 
         if (handyman.Status == VerificationStatus.Approved.ToDbString())
-            throw new HttpRequestException("Identity card images cannot be updated after approval. Please contact support for assistance", null, HttpStatusCode.NotFound);
+            throw new HttpRequestException("Identity card images cannot be updated after approval. Please contact support for assistance", null, HttpStatusCode.BadRequest);
 
         var upload = await UploadImageAsync(file, $"{UploadTypes.IdentityCardImage.ToPrefixString()}/{handyman.Id}", ct);
 
@@ -68,16 +66,7 @@ public class S3StorageService(
         
         Logger.LogInformation("Profile picture updated for user {UserId}", handyman.Id);
 
-        return new HandymanVerificationDto(
-                handyman.Id, 
-                handyman.User_Id, 
-                handyman.User.Name, 
-                handyman.Status, 
-                handyman.IdentityCardURL, 
-                handyman.SelfieImageURL,
-                handyman.Created_At_Utc,
-                handyman.Updated_At_Utc
-            );
+        return MapPendingToDto(handyman);
     }
 
     public async Task<JobDto> UpdateJobImageAsync(UploadImageRequest request, CancellationToken ct)

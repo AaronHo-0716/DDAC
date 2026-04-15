@@ -28,10 +28,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
     {
         try {
-            var result = await authService.Login(request);
-
-            if (!result.User.IsActive) return StatusCode((int)HttpStatusCode.Forbidden, result);
-            
+            var result = await authService.Login(request);           
             return Ok(result);
         }
         catch (HttpRequestException ex) {
@@ -69,6 +66,20 @@ public class AuthController(IAuthService authService) : BaseController
     {
         await authService.Logout(request, await GetCurrentUserIdAsync());
         return Ok(new { message = "Logged out successfully." });
+    }
+
+    [Authorize(Roles = "handyman")]
+    [HttpPost("pending-verification")]
+    public async Task<IActionResult> ResubmitVerification()
+    {
+        try {
+            var userId = await GetCurrentUserIdAsync();
+            await authService.CreateHandymanVerification(userId);
+            return NoContent();
+        }
+        catch (HttpRequestException ex) {
+            return HandleError(ex);
+        }
     }
 
     // /api/auth/password/otp/request
