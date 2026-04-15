@@ -18,18 +18,11 @@ public class JobService : BaseService, IJobService
         _logger = logger;
     }
 
-    public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId, string userRole)
+    public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId)
     {
         var query = _context.Jobs.AsQueryable();
 
-        if (userRole == UserRole.Handyman.ToDbString())
-        {
-            query = query.Where(j => j.Status == JobStatus.Open.ToDbString());
-        }
-        else if (userRole == UserRole.Homeowner.ToDbString())
-        {
-            query = query.Where(j => j.Status == JobStatus.Open.ToDbString() || j.Posted_By_User_Id == userId);
-        }
+        query = query.Where(j => j.Status == JobStatus.Open.ToDbString() || j.Posted_By_User_Id == userId);
 
         if (!string.IsNullOrEmpty(filter.Category))
             query = query.Where(j => j.Category == filter.Category);
@@ -87,7 +80,7 @@ public class JobService : BaseService, IJobService
         return new JobListResponse(jobs.Select(MapJobToDto).ToList(), page, pageSize, totalCount);
     }
 
-    public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId, string userRole)
+    public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId)
     {
         var job = await _context.Jobs
             .Include(j => j.Posted_By_User)
@@ -99,7 +92,7 @@ public class JobService : BaseService, IJobService
 
         string openStatus = JobStatus.Open.ToDbString();
 
-        if (userRole == UserRole.Handyman.ToDbString() && job.Status != openStatus)
+        if (job.Status != openStatus && job.Posted_By_User_Id != userId)
         {
             if (!userId.HasValue) 
                 throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
@@ -111,11 +104,7 @@ public class JobService : BaseService, IJobService
 
             if (!hasAcceptedBid)
                 throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
-
         }
-
-        if (userRole == UserRole.Homeowner.ToDbString() && job.Status != openStatus && job.Posted_By_User_Id != userId)
-            throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
 
         return MapJobToDto(job);
     }
@@ -163,7 +152,7 @@ public class JobService : BaseService, IJobService
         return await RefreshAndMap(newJob.Id);
     }
 
-    public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId, string userRole)
+    public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId)
     {
         var job = await _context.Jobs
             .Include(j => j.Posted_By_User)
@@ -173,7 +162,7 @@ public class JobService : BaseService, IJobService
         if (job == null)
             throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
-        if (userRole != UserRole.Admin.ToDbString() && job.Posted_By_User_Id != userId)
+        if (job.Posted_By_User_Id != userId)
             throw new HttpRequestException("You can only update your own jobs", null, HttpStatusCode.Forbidden);
 
         ValidateJobData(request.Title, request.Description, request.Budget);
@@ -195,12 +184,12 @@ public class JobService : BaseService, IJobService
         return await RefreshAndMap(jobId);
     }
 
-    public async Task DeleteJobAsync(Guid jobId, Guid userId, string userRole)
+    public async Task DeleteJobAsync(Guid jobId, Guid userId)
     {
         var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId)
             ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
-        if (userRole != UserRole.Admin.ToDbString() && job.Posted_By_User_Id != userId)
+        if (job.Posted_By_User_Id != userId)
             throw new HttpRequestException("You can only delete your own jobs", null, HttpStatusCode.Forbidden);
 
         _context.Jobs.Remove(job);

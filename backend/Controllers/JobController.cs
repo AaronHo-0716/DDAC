@@ -15,7 +15,7 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
     public async Task<ActionResult<JobListResponse>> GetJobs([FromQuery] JobFilterQuery query)
     {
         var userId = await GetCurrentUserIdAsync();
-        try { return Ok(await jobService.GetJobsAsync(query, userId, GetUserRole())); }
+        try { return Ok(await jobService.GetJobsAsync(query, userId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -33,7 +33,7 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
     public async Task<ActionResult<JobDto>> GetJobById(Guid id)
     {
         var userId = await GetCurrentUserIdAsync();
-        try { return Ok(await jobService.GetJobByIdAsync(id, userId, GetUserRole())); }
+        try { return Ok(await jobService.GetJobByIdAsync(id, userId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -57,7 +57,7 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
         var userId = await GetCurrentUserIdAsync();
         if (userId == Guid.Empty) return Unauthorized();
 
-        try { return Ok(await jobService.UpdateJobAsync(id, request, userId, GetUserRole())); }
+        try { return Ok(await jobService.UpdateJobAsync(id, request, userId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -69,7 +69,7 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
 
         try
         {
-            await jobService.DeleteJobAsync(id, userId, GetUserRole());
+            await jobService.DeleteJobAsync(id, userId);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -90,7 +90,7 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
         
         try
         {
-            var bid = await bidService.CreateBidAsync(jobId, request, userId, GetUserRole());
+            var bid = await bidService.CreateBidAsync(jobId, request, userId);
             return CreatedAtAction(nameof(GetBidsByJobId), new { jobId }, bid);
         }
         catch (HttpRequestException ex) { return HandleError(ex); }

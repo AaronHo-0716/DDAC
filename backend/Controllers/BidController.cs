@@ -52,7 +52,7 @@ public class BidController(IBidService bidService) : BaseController
 
         try
         {
-            await bidService.DeleteBidAsync(bidId, userId, GetUserRole());
+            await bidService.DeleteBidAsync(bidId, userId);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }

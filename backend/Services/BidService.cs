@@ -40,10 +40,8 @@ public class BidService : BaseService, IBidService
         return await GetPagedBidsResponse(query, page, pageSize);
     }
 
-    public async Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request, Guid userId, string userRole)
+    public async Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request, Guid userId)
     {
-        ValidateHandymanRole(userRole);
-
         var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId) 
             ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
@@ -179,10 +177,8 @@ public class BidService : BaseService, IBidService
         return MapBidToDto(bid);
     }
 
-    public async Task DeleteBidAsync(Guid bidId, Guid userId, string userRole)
+    public async Task DeleteBidAsync(Guid bidId, Guid userId)
     {
-        ValidateHandymanRole(userRole);
-
         var bid = await _context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
             ?? throw new HttpRequestException($"Bid with id {bidId} not found", null, HttpStatusCode.NotFound);
 
