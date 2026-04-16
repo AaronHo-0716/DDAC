@@ -73,9 +73,17 @@ export default function BidCard({ bid, onAccept, onMessage, onReport }: BidCardP
       )}
 
       <div className="flex items-start gap-3 mb-3">
-        <div className="w-10 h-10 rounded-full bg-[#0B74FF] text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
-          {bid.handyman.name.charAt(0)}
-        </div>
+        {bid.handyman.avatarUrl ? (
+          <img
+            src={bid.handyman.avatarUrl}
+            alt={`${bid.handyman.name} avatar`}
+            className="w-10 h-10 rounded-full border border-[#E5E7EB] object-cover flex-shrink-0"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-[#0B74FF] text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
+            {bid.handyman.name.charAt(0)}
+          </div>
+        )}
         <div className="flex-1">
           <p className="font-semibold text-[#111827] text-sm">{bid.handyman.name}</p>
           <StarRating rating={bid.handyman.rating ?? 0} />

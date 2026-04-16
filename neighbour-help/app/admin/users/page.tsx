@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Ban, CheckCircle2, UserCheck, UserPlus, UserX } from "lucide-react";
+import { Ban, CheckCircle2, Eye, UserCheck, UserPlus, UserX, X } from "lucide-react";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import {
   adminService,
+  type AdminHandymanVerification,
   type AdminUserItem,
   type UserStatus,
   type VerificationStatus,
@@ -43,9 +44,15 @@ function verificationPill(status?: VerificationStatus) {
 export default function AdminUsersPage() {
   const { authorized, loading } = useRequireRole("admin");
   const [rows, setRows] = useState<AdminUserItem[]>([]);
+  const [pendingVerifications, setPendingVerifications] = useState<
+    AdminHandymanVerification[]
+  >([]);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [selectedHandymanId, setSelectedHandymanId] = useState<string | null>(
+    null
+  );
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | UserStatus>("all");
   const [newAdminName, setNewAdminName] = useState("");
@@ -64,8 +71,14 @@ export default function AdminUsersPage() {
       setFetching(true);
       setError(null);
       try {
-        const users = await adminService.getUsers();
-        if (!cancelled) setRows(users);
+        const [users, pending] = await Promise.all([
+          adminService.getUsers(),
+          adminService.getPendingVerificationRecords(),
+        ]);
+        if (!cancelled) {
+          setRows(users);
+          setPendingVerifications(pending);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load users.");
@@ -89,6 +102,20 @@ export default function AdminUsersPage() {
       return true;
     });
   }, [rows, roleFilter, statusFilter]);
+
+  const selectedHandyman = useMemo(
+    () => rows.find((row) => row.id === selectedHandymanId),
+    [rows, selectedHandymanId]
+  );
+
+  const selectedVerification = useMemo(
+    () =>
+      pendingVerifications.find(
+        (record) =>
+          record.userId === selectedHandymanId && record.status === "pending"
+      ),
+    [pendingVerifications, selectedHandymanId]
+  );
 
   if (loading || !authorized) {
     return null;
@@ -140,11 +167,28 @@ export default function AdminUsersPage() {
           row.id === id && row.role === "handyman" ? { ...row, verificationStatus: status } : row
         )
       );
+      if (status !== "pending") {
+        setPendingVerifications((prev) => prev.filter((record) => record.userId !== id));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update verification.");
     } finally {
       setPendingActionId(null);
     }
+  };
+
+  const openHandymanProfile = (id: string) => {
+    setSelectedHandymanId(id);
+  };
+
+  const closeHandymanProfile = () => {
+    setSelectedHandymanId(null);
+  };
+
+  const handleModalVerification = async (status: VerificationStatus) => {
+    if (!selectedHandyman?.id) return;
+    await updateVerification(selectedHandyman.id, status);
+    closeHandymanProfile();
   };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
@@ -325,23 +369,16 @@ export default function AdminUsersPage() {
                           </button>
                         )}
 
-                        {row.role === "handyman" && row.verificationStatus === "pending" && (
-                          <>
-                            <button
-                              onClick={() => void updateVerification(row.id, "approved")}
-                              disabled={pendingActionId === row.id}
-                              className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 inline-flex items-center gap-1"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Approve
-                            </button>
-                            <button
-                              onClick={() => void updateVerification(row.id, "rejected")}
-                              disabled={pendingActionId === row.id}
-                              className="text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 inline-flex items-center gap-1"
-                            >
-                              <Ban className="w-3.5 h-3.5" /> Reject
-                            </button>
-                          </>
+                        {row.role === "handyman" && (
+                          <button
+                            onClick={() => openHandymanProfile(row.id)}
+                            className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 inline-flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            {row.verificationStatus === "pending"
+                              ? "View Credentials"
+                              : "View Profile"}
+                          </button>
                         )}
                       </div>
                     </td>
@@ -357,6 +394,124 @@ export default function AdminUsersPage() {
             <div className="p-8 text-center text-sm text-[#6B7280]">No users in this filter.</div>
           )}
         </div>
+
+        {selectedHandyman && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-3xl rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[#F3F4F6] px-5 py-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-[#111827]">Handyman Profile</h2>
+                  <p className="text-xs text-[#6B7280]">Review credentials before moderation action.</p>
+                </div>
+                <button
+                  onClick={closeHandymanProfile}
+                  className="rounded-lg p-1.5 text-[#6B7280] hover:bg-[#F3F4F6]"
+                  aria-label="Close profile modal"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    {selectedHandyman.avatarUrl ? (
+                      <img
+                        src={selectedHandyman.avatarUrl}
+                        alt={`${selectedHandyman.name} avatar`}
+                        className="h-12 w-12 rounded-full border border-[#E5E7EB] object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0B74FF] text-sm font-bold text-white">
+                        {selectedHandyman.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-semibold text-[#111827]">{selectedHandyman.name}</p>
+                      <p className="text-xs text-[#6B7280]">{selectedHandyman.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs text-[#374151]">
+                    <p>
+                      Verification status: {" "}
+                      <span className="font-semibold">{selectedHandyman.verificationStatus ?? "-"}</span>
+                    </p>
+                    {selectedVerification && (
+                      <p className="mt-1 text-[#6B7280]">
+                        Submitted: {new Date(selectedVerification.createdAtUtc).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
+                      Selfie
+                    </p>
+                    {selectedVerification?.selfieImageUrl || selectedHandyman.avatarUrl ? (
+                      <img
+                        src={selectedVerification?.selfieImageUrl ?? selectedHandyman.avatarUrl}
+                        alt={`${selectedHandyman.name} selfie`}
+                        className="h-40 w-full rounded-xl border border-[#E5E7EB] object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[#D1D5DB] text-xs text-[#9CA3AF]">
+                        No selfie uploaded
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
+                      Identification Card
+                    </p>
+                    {selectedVerification?.identityCardUrl ? (
+                      <img
+                        src={selectedVerification.identityCardUrl}
+                        alt={`${selectedHandyman.name} identification card`}
+                        className="h-40 w-full rounded-xl border border-[#E5E7EB] object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[#D1D5DB] text-xs text-[#9CA3AF]">
+                        No identification card uploaded
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-[#F3F4F6] px-5 py-4">
+                <button
+                  onClick={closeHandymanProfile}
+                  className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB]"
+                >
+                  Close
+                </button>
+
+                {selectedHandyman.verificationStatus === "pending" && (
+                  <>
+                    <button
+                      onClick={() => void handleModalVerification("rejected")}
+                      disabled={pendingActionId === selectedHandyman.id}
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                    >
+                      <Ban className="h-3.5 w-3.5" /> Reject
+                    </button>
+                    <button
+                      onClick={() => void handleModalVerification("approved")}
+                      disabled={pendingActionId === selectedHandyman.id}
+                      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

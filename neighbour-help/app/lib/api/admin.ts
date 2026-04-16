@@ -13,8 +13,20 @@ export interface AdminUserItem {
   role: UserRole;
   status: UserStatus;
   verificationStatus?: VerificationStatus;
+  avatarUrl?: string;
   blockReason?: string;
   createdAt: string;
+}
+
+export interface AdminHandymanVerification {
+  id: string;
+  userId: string;
+  userName: string;
+  status: VerificationStatus;
+  identityCardUrl?: string;
+  selfieImageUrl?: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
 }
 
 export type AdminBidStatus = BidStatus | "retracted";
@@ -45,6 +57,7 @@ interface RawUserDto {
   name?: string | null;
   email?: string | null;
   role?: string | null;
+  avatarUrl?: string | null;
   isActive?: boolean | null;
   verification?: string | null;
   createdAt?: string | null;
@@ -53,7 +66,12 @@ interface RawUserDto {
 interface RawHandymanVerificationDto {
   id?: string | null;
   userId?: string | null;
+  userName?: string | null;
   status?: string | null;
+  identityCardURL?: string | null;
+  selfieImageUrl?: string | null;
+  createdAtUtc?: string | null;
+  updatedAtUtc?: string | null;
 }
 
 interface RawUserReportDto {
@@ -87,12 +105,55 @@ function normalizeRole(value?: string | null): UserRole {
   return "homeowner";
 }
 
+function normalizeVerificationStatus(value?: string | null): VerificationStatus {
+  const normalized = (value ?? "pending").toLowerCase();
+  if (normalized === "approved") return "approved";
+  if (normalized === "rejected") return "rejected";
+  return "pending";
+}
+
+const DEFAULT_STORAGE_PUBLIC_BASE_URL = "http://localhost:4566";
+const DEFAULT_STORAGE_BUCKET = "neighbourhelp-media";
+
+export function resolveStoredImageUrl(value?: string | null): string | undefined {
+  if (!value) return undefined;
+
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  const objectKey = value.replace(/^\/+/, "");
+  if (!objectKey) return undefined;
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_STORAGE_PUBLIC_BASE_URL ??
+    DEFAULT_STORAGE_PUBLIC_BASE_URL;
+  const bucketName =
+    process.env.NEXT_PUBLIC_STORAGE_BUCKET_NAME ?? DEFAULT_STORAGE_BUCKET;
+
+  return `${baseUrl.replace(/\/+$/, "")}/${bucketName}/${objectKey}`;
+}
+
+function toAdminHandymanVerification(
+  row: RawHandymanVerificationDto
+): AdminHandymanVerification {
+  return {
+    id: row.id ?? "",
+    userId: row.userId ?? "",
+    userName: row.userName ?? "Unknown handyman",
+    status: normalizeVerificationStatus(row.status),
+    identityCardUrl: resolveStoredImageUrl(row.identityCardURL),
+    selfieImageUrl: resolveStoredImageUrl(row.selfieImageUrl),
+    createdAtUtc: row.createdAtUtc ?? new Date(0).toISOString(),
+    updatedAtUtc: row.updatedAtUtc ?? new Date(0).toISOString(),
+  };
+}
+
 function toAdminUser(row: RawUserDto): AdminUserItem {
   const role = normalizeRole(row.role);
-  const verification = (row.verification ?? "").toLowerCase();
   const verificationStatus: VerificationStatus | undefined =
-    role === "handyman" && (verification === "pending" || verification === "approved" || verification === "rejected")
-      ? verification
+    role === "handyman"
+      ? normalizeVerificationStatus(row.verification)
       : undefined;
 
   return {
@@ -102,6 +163,7 @@ function toAdminUser(row: RawUserDto): AdminUserItem {
     role,
     status: row.isActive === false ? "blocked" : "active",
     verificationStatus,
+    avatarUrl: resolveStoredImageUrl(row.avatarUrl),
     createdAt: row.createdAt ?? new Date(0).toISOString(),
   };
 }
@@ -164,6 +226,15 @@ export const adminService = {
     if (!Array.isArray(users)) return [];
 
     return users.map((row) => toAdminUser(row));
+  },
+
+  async getPendingVerificationRecords(): Promise<AdminHandymanVerification[]> {
+    const pending = await apiClient.get<RawHandymanVerificationDto[]>(
+      "/admin/handymen/pending-verification"
+    );
+
+    if (!Array.isArray(pending)) return [];
+    return pending.map((row) => toAdminHandymanVerification(row));
   },
 
   async blockUser(userId: string): Promise<void> {

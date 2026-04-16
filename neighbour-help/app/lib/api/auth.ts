@@ -117,6 +117,14 @@ export const authService = {
   },
 
   /**
+   * POST /api/auth/pending-verification
+   * Creates/resubmits a handyman verification request for the authenticated user.
+   */
+  async submitPendingVerification(): Promise<void> {
+    await apiClient.post<void>("/auth/pending-verification", {});
+  },
+
+  /**
    * GET /api/auth/me
    * Returns the currently authenticated user.
    */
@@ -126,13 +134,33 @@ export const authService = {
 
   /**
    * POST /api/uploads
-   * Uploads avatar image via the unified upload endpoint and persists avatarUrl.
+   * Uploads avatar image via the unified upload endpoint.
+   * Backend may return either metadata or a user payload; refresh from /auth/me for canonical shape.
    */
   async updateProfilePicture(file: File): Promise<User> {
     const formData = new FormData();
     formData.append("File", file);
     formData.append("UploadType", "AvatarImage");
-    return apiClient.postForm<User>("/uploads", formData);
+    await apiClient.postForm<unknown>("/uploads", formData);
+    return apiClient.get<User>("/auth/me");
+  },
+
+  /**
+   * Uploads handyman selfie to avatar storage so it becomes the canonical profile photo.
+   */
+  async uploadSelfieForVerification(file: File): Promise<User> {
+    return this.updateProfilePicture(file);
+  },
+
+  /**
+   * POST /api/uploads
+   * Uploads handyman identity card image (stored as object key server-side).
+   */
+  async uploadIdentityCard(file: File): Promise<void> {
+    const formData = new FormData();
+    formData.append("File", file);
+    formData.append("UploadType", "IdentityCardImage");
+    await apiClient.postForm<unknown>("/uploads", formData);
   },
 
   /**
