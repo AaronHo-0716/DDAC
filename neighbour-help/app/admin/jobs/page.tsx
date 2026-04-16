@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Briefcase, Clock3, CheckCircle2, Search } from "lucide-react";
 import StatusBadge from "@/app/components/ui/StatusBadge";
-import { jobsService } from "@/app/lib/api/jobs";
+import { adminService } from "@/app/lib/api/admin";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import type { Job, JobStatus } from "@/app/types";
 
@@ -42,7 +42,7 @@ export default function AdminJobsPage() {
       setFetching(true);
       setError(null);
       try {
-        const response = await jobsService.getJobs({
+        const response = await adminService.getJobs({
           page: 1,
           pageSize: 200,
           status: statusFilter === "all" ? undefined : statusFilter,
@@ -51,7 +51,7 @@ export default function AdminJobsPage() {
         });
 
         if (!cancelled) {
-          setJobs(response.jobs);
+          setJobs(response);
         }
       } catch (err) {
         if (!cancelled) {
