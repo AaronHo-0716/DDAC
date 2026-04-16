@@ -62,6 +62,50 @@ public class JobService : BaseService, IJobService
         );
     }
 
+    public async Task<JobListResponse> AdminGetJobsAsync(JobFilterQuery filter, Guid? userId)
+    {
+        var query = Context.Jobs.AsQueryable();
+
+        if (!string.IsNullOrEmpty(filter.Category))
+            query = query.Where(j => j.Category == filter.Category);
+
+        if (filter.Status.HasValue)
+            query = query.Where(j => j.Status == filter.Status.Value.ToDbString());
+
+        if (!string.IsNullOrEmpty(filter.Search))
+        {
+            query = query.Where(j =>
+                j.Title.Contains(filter.Search) ||
+                j.Description.Contains(filter.Search) ||
+                j.Location_Text.Contains(filter.Search));
+        }
+
+        if (filter.IsEmergency.HasValue)
+            query = query.Where(j => j.Is_Emergency == filter.IsEmergency.Value);
+
+        if (filter.MaxDistanceKm.HasValue && userId.HasValue)
+        {
+            query = query.Where(j => j.Latitude != null && j.Longitude != null);
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var jobs = await query
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .OrderByDescending(j => j.Created_At_Utc)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        return new JobListResponse(
+            jobs.Select(MapJobToDto).ToList(),
+            filter.Page,
+            filter.PageSize,
+            totalCount
+        );
+    }
+
     public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {
         var query = Context.Jobs.Where(j => j.Posted_By_User_Id == userId);
@@ -166,6 +210,32 @@ public class JobService : BaseService, IJobService
         Logger.LogInformation("Job {JobId} updated by User {UserId}", jobId, userId);
 
         return await RefreshAndMap(jobId);
+    }
+
+    public async Task<JobDto> CompleteJobAsync(Guid jobId, Guid userId)
+    {
+        var job = await Context.Jobs
+            .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
+            .FirstOrDefaultAsync(j => j.Id == jobId)
+            ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
+
+        if (job.Posted_By_User_Id != userId)
+            throw new HttpRequestException("You can only complete your own jobs", null, HttpStatusCode.Forbidden);
+
+        if (job.Status == JobStatus.Completed.ToDbString())
+            return MapJobToDto(job);
+
+        if (job.Status != JobStatus.InProgress.ToDbString())
+            throw new HttpRequestException("Only in-progress jobs can be completed", null, HttpStatusCode.BadRequest);
+
+        job.Status = JobStatus.Completed.ToDbString();
+        job.Updated_At_Utc = DateTime.UtcNow;
+
+        await Context.SaveChangesAsync();
+        Logger.LogInformation("Job {JobId} marked as completed by User {UserId}", jobId, userId);
+
+        return MapJobToDto(job);
     }
 
     public async Task DeleteJobAsync(Guid jobId, Guid userId)

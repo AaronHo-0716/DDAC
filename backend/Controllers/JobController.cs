@@ -62,6 +62,16 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
+    [HttpPatch("{id}/complete")]
+    public async Task<ActionResult<JobDto>> CompleteJob(Guid id)
+    {
+        var userId = await GetCurrentUserIdAsync();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        try { return Ok(await jobService.CompleteJobAsync(id, userId)); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
+
     [HttpGet("{jobId}/bids")]
     public async Task<ActionResult<BidListResponse>> GetBidsByJobId(Guid jobId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
@@ -80,5 +90,4 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    private string GetUserRole() => User.FindFirst(ClaimTypes.Role)?.Value ?? "guest";
 }
