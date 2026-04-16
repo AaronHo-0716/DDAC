@@ -502,7 +502,7 @@ function dedupeBidTransactions(rows: BidTransactionItem[]): BidTransactionItem[]
 }
 
 const ADMIN_ALL_JOBS_ENDPOINT =
-  process.env.NEXT_PUBLIC_ADMIN_ALL_JOBS_ENDPOINT?.trim() || null;
+  process.env.NEXT_PUBLIC_ADMIN_ALL_JOBS_ENDPOINT?.trim() || "/admin/jobs";
 
 function buildJobQuery(params: JobsQueryParams = {}): URLSearchParams {
   const query = new URLSearchParams();
@@ -521,10 +521,6 @@ function buildJobQuery(params: JobsQueryParams = {}): URLSearchParams {
 }
 
 async function fetchPublicJobs(params: JobsQueryParams = {}): Promise<Job[]> {
-  if (!ADMIN_ALL_JOBS_ENDPOINT) {
-    return [];
-  }
-
   const query = buildJobQuery(params);
   const qs = query.toString();
   const payload = await apiClient.get<unknown>(

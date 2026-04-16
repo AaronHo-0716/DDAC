@@ -88,9 +88,7 @@ export default function AdminBidTransactionsPage() {
     try {
       await adminService.forceRejectBid(id);
       setRows((prev) =>
-        prev.map((row) =>
-          row.id === id ? { ...row, status: "rejected", flagged: true, locked: true } : row
-        )
+        prev.map((row) => (row.id === id ? { ...row, status: "rejected" } : row))
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reject bid.");

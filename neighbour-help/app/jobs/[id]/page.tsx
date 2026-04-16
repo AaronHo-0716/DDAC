@@ -63,6 +63,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [bidActionLoadingId, setBidActionLoadingId] = useState<string | null>(null);
   const [bidStatusFilter, setBidStatusFilter] = useState<"all" | Bid["status"]>("all");
   const [showBidModal, setShowBidModal] = useState(false);
+  const [completingJob, setCompletingJob] = useState(false);
+  const [showPayImage, setShowPayImage] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -168,6 +170,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     return bids.filter((bid) => bid.status === bidStatusFilter);
   }, [bids, bidStatusFilter]);
 
+  const acceptedBid = useMemo(
+    () => bids.find((bid) => bid.status === "accepted") ?? null,
+    [bids]
+  );
+
+  const canCompleteJob = !!job && isOwner && job.status === "in-progress" && !!acceptedBid;
+  const canPayForCompletedJob = !!job && isOwner && job.status === "completed";
+
   const handleSave = async () => {
     if (!job || !form || !hasChanges) return;
 
@@ -235,6 +245,22 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       setBidsError(err instanceof Error ? err.message : "Unable to reject bid.");
     } finally {
       setBidActionLoadingId(null);
+    }
+  };
+
+  const handleCompleteJob = async () => {
+    if (!job || !canCompleteJob) return;
+
+    setCompletingJob(true);
+    setError(null);
+    try {
+      const updated = await jobsService.completeJob(job.id);
+      setJob(updated);
+      setShowPayImage(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to complete job.");
+    } finally {
+      setCompletingJob(false);
     }
   };
 
@@ -421,6 +447,36 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   <PrimaryButton size="sm" onClick={() => setShowBidModal(true)}>
                     Submit Bid
                   </PrimaryButton>
+                </div>
+              )}
+
+              {isOwner && (canCompleteJob || canPayForCompletedJob) && (
+                <div className="mt-6 flex justify-end gap-2">
+                  {canCompleteJob && (
+                    <PrimaryButton size="sm" onClick={handleCompleteJob} disabled={completingJob}>
+                      {completingJob ? "Completing..." : "Complete Job"}
+                    </PrimaryButton>
+                  )}
+                  {canPayForCompletedJob && (
+                    <PrimaryButton
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setShowPayImage((prev) => !prev)}
+                    >
+                      Pay
+                    </PrimaryButton>
+                  )}
+                </div>
+              )}
+
+              {isOwner && canPayForCompletedJob && showPayImage && (
+                <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+                  <p className="text-sm font-semibold text-[#111827] mb-2">Payment Preview</p>
+                  <img
+                    src="/qr.jpeg"
+                    alt="Payment preview"
+                    className="h-52 w-full max-w-sm rounded-lg border border-[#E5E7EB] bg-white object-contain"
+                  />
                 </div>
               )}
             </>

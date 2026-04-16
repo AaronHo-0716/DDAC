@@ -187,4 +187,13 @@ export const jobsService = {
   async deleteJob(id: string): Promise<void> {
     return apiClient.delete<void>(`/jobs/${id}`);
   },
+
+  /**
+   * PATCH /api/jobs/:id/complete
+   * Marks an in-progress job as completed.
+   */
+  async completeJob(id: string): Promise<Job> {
+    const response = await apiClient.patch<RawJobDto>(`/jobs/${id}/complete`, {});
+    return normalizeJob(response);
+  },
 };
