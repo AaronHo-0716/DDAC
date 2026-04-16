@@ -15,6 +15,8 @@ import HandymanVerificationForms from "../components/ui/HandymanVerificationForm
 import type { Job, JobCategory } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
 import { jobsService } from "../lib/api/jobs";
+import { authService } from "../lib/api/auth";
+import { useAuth } from "../lib/context/AuthContext";
 
 const ALL_CATEGORIES: JobCategory[] = [
   "Plumbing",
@@ -109,9 +111,13 @@ function JobFeedCard({
 
 export default function HandymanPage() {
   const { authorized, loading, user } = useRequireRole("handyman");
+  const { refreshUser } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
+  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<JobCategory | "">("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -158,6 +164,35 @@ export default function HandymanPage() {
   if (loading || !authorized) {
     return null;
   }
+
+  const handleReverificationSubmit = async (files: {
+    selfieFile: File;
+    idCardFile: File;
+  }) => {
+    setVerificationSubmitting(true);
+    setVerificationError(null);
+    setVerificationSuccess(null);
+
+    try {
+      await authService.submitPendingVerification();
+      await authService.uploadSelfieForVerification(files.selfieFile);
+      await authService.uploadIdentityCard(files.idCardFile);
+      await refreshUser();
+
+      setVerificationSuccess(
+        "Your reverification documents were submitted successfully. Admin review is pending."
+      );
+      setShowReverifyForms(false);
+    } catch (err) {
+      setVerificationError(
+        err instanceof Error
+          ? err.message
+          : "Unable to submit reverification right now."
+      );
+    } finally {
+      setVerificationSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] py-8 px-4 sm:px-6 lg:px-8">
@@ -211,7 +246,11 @@ export default function HandymanPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => setShowReverifyForms((prev) => !prev)}
+                        onClick={() => {
+                          setVerificationError(null);
+                          setVerificationSuccess(null);
+                          setShowReverifyForms((prev) => !prev);
+                        }}
                       >
                         {showReverifyForms ? "Hide Reverify Form" : "Reverify"}
                       </PrimaryButton>
@@ -228,9 +267,25 @@ export default function HandymanPage() {
           </div>
         )}
 
+        {verificationError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {verificationError}
+          </div>
+        )}
+
+        {verificationSuccess && (
+          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {verificationSuccess}
+          </div>
+        )}
+
         {verificationStatus === "rejected" && showReverifyForms && (
           <div className="mb-6">
-            <HandymanVerificationForms mode="reverify" />
+            <HandymanVerificationForms
+              mode="reverify"
+              onSubmitVerification={handleReverificationSubmit}
+              submitting={verificationSubmitting}
+            />
           </div>
         )}
 

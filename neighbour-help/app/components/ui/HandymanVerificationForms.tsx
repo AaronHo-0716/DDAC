@@ -7,6 +7,9 @@ import PrimaryButton from "./PrimaryButton";
 interface HandymanVerificationFormsProps {
   mode: "signup" | "reverify";
   onFilesChange?: (hasRequiredFiles: boolean) => void;
+  onFilesSelected?: (files: { selfieFile: File | null; idCardFile: File | null }) => void;
+  onSubmitVerification?: (files: { selfieFile: File; idCardFile: File }) => Promise<void>;
+  submitting?: boolean;
 }
 
 const MAX_FILE_SIZE_MB = 10;
@@ -87,7 +90,13 @@ function FileField({
   );
 }
 
-export default function HandymanVerificationForms({ mode, onFilesChange }: HandymanVerificationFormsProps) {
+export default function HandymanVerificationForms({
+  mode,
+  onFilesChange,
+  onFilesSelected,
+  onSubmitVerification,
+  submitting = false,
+}: HandymanVerificationFormsProps) {
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [idCardFile, setIdCardFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +108,10 @@ export default function HandymanVerificationForms({ mode, onFilesChange }: Handy
   useEffect(() => {
     onFilesChange?.(!!selfieFile && !!idCardFile);
   }, [selfieFile, idCardFile, onFilesChange]);
+
+  useEffect(() => {
+    onFilesSelected?.({ selfieFile, idCardFile });
+  }, [selfieFile, idCardFile, onFilesSelected]);
 
   const handlePick = (
     file: File | null,
@@ -137,6 +150,33 @@ export default function HandymanVerificationForms({ mode, onFilesChange }: Handy
     }
   };
 
+  const handleSubmitVerification = async () => {
+    if (!selfieFile || !idCardFile) return;
+
+    if (!onSubmitVerification) {
+      setMessage("Verification submission is not available right now.");
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+
+    try {
+      await onSubmitVerification({ selfieFile, idCardFile });
+      setMessage(
+        mode === "reverify"
+          ? "Reverification submitted successfully."
+          : "Verification submitted successfully."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to submit verification right now."
+      );
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 space-y-4">
       <div>
@@ -144,7 +184,7 @@ export default function HandymanVerificationForms({ mode, onFilesChange }: Handy
           {mode === "reverify" ? "Reverification Documents" : "Handyman Verification Documents"}
         </h3>
         <p className="mt-1 text-sm text-[#6B7280]">
-          Upload a clear selfie and your identification card. These form fields are ready, but submission is not wired to backend yet.
+          Upload a clear selfie and your identification card for account verification review.
         </p>
       </div>
 
@@ -183,10 +223,10 @@ export default function HandymanVerificationForms({ mode, onFilesChange }: Handy
           <PrimaryButton
             type="button"
             variant="secondary"
-            disabled={!selfieFile || !idCardFile}
-            onClick={() => setMessage("Verification submission will be enabled once backend endpoint is ready.")}
+            disabled={!selfieFile || !idCardFile || submitting}
+            onClick={() => void handleSubmitVerification()}
           >
-            Submit Reverification
+            {submitting ? "Submitting..." : "Submit Reverification"}
           </PrimaryButton>
         </div>
       )}

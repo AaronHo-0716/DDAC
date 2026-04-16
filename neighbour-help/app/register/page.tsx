@@ -9,6 +9,7 @@ import NotificationToast from "../components/ui/NotificationToast";
 import HandymanVerificationForms from "../components/ui/HandymanVerificationForms";
 import { ApiClientError } from "../lib/api/client";
 import { useAuth } from "../lib/context/AuthContext";
+import { authService } from "../lib/api/auth";
 import type { UserRole } from "../types";
 
 function RegisterForm() {
@@ -30,6 +31,10 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<UserRole>(initialRole);
   const [hasVerificationDocs, setHasVerificationDocs] = useState(false);
+  const [verificationFiles, setVerificationFiles] = useState<{ selfieFile: File | null; idCardFile: File | null }>({
+    selfieFile: null,
+    idCardFile: null,
+  });
   const [error, setError] = useState<string | null>(null);
 
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
@@ -53,7 +58,26 @@ function RegisterForm() {
     setError(null);
 
     try {
-      await register({ name, email, password, role });
+      const registeredUser = await register({ name, email, password, role });
+
+      if (role === "handyman") {
+        const verification = (registeredUser.verification ?? "").toLowerCase();
+
+        // Some backend builds create pending verification during register,
+        // others expect an explicit pending-verification call.
+        if (verification !== "pending") {
+          await authService.submitPendingVerification();
+        }
+
+        if (verificationFiles.selfieFile) {
+          await authService.uploadSelfieForVerification(verificationFiles.selfieFile);
+        }
+
+        if (verificationFiles.idCardFile) {
+          await authService.uploadIdentityCard(verificationFiles.idCardFile);
+        }
+      }
+
       router.push(role === "handyman" ? "/handyman" : "/dashboard");
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -151,6 +175,7 @@ function RegisterForm() {
               <HandymanVerificationForms
                 mode="signup"
                 onFilesChange={setHasVerificationDocs}
+                onFilesSelected={setVerificationFiles}
               />
             </div>
           )}

@@ -17,12 +17,12 @@ public abstract class BaseService
     protected readonly IAmazonS3? S3Client;
     protected readonly S3StorageOptions? StorageOptions;
 
-    protected BaseService( NeighbourHelpDbContext context, ILogger logger, IAmazonS3? s3Client = null, IOptions<StorageOptions>? storageOptions = null)
+    protected BaseService(NeighbourHelpDbContext context, ILogger logger, IAmazonS3? s3Client = null, IOptions<StorageOptions>? storageOptions = null)
     {
         Context = context;
         Logger = logger;
         S3Client = s3Client;
-        StorageOptions = storageOptions?.Value?.S3; 
+        StorageOptions = storageOptions?.Value?.S3;
     }
 
     protected static bool IsValidEmail(string email)
@@ -33,8 +33,10 @@ public abstract class BaseService
 
     protected string GetPresignedUrl(string? objectKey, int expiryMinutes = 60)
     {
-        if (string.IsNullOrEmpty(objectKey) || S3Client == null || StorageOptions == null) 
+        if (string.IsNullOrEmpty(objectKey) || S3Client == null || StorageOptions == null)
             return null!;
+
+        if (objectKey.StartsWith("http")) return objectKey;
 
         var request = new GetPreSignedUrlRequest
         {
@@ -43,9 +45,28 @@ public abstract class BaseService
             Expires = DateTime.UtcNow.AddMinutes(expiryMinutes)
         };
 
-        return S3Client.GetPreSignedURL(request);
-    }
+        // 1. Generate the raw URL (will point to http://localstack:4566)
+        string url = S3Client.GetPreSignedURL(request);
 
+        // 2. Real-World Logic: If a PublicBaseUrl is defined, swap the hosts
+        if (!string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl))
+        {
+            var internalUri = new Uri(url);
+            var publicUri = new Uri(StorageOptions.PublicBaseUrl);
+
+            // Replace the protocol, host, and port with the public-facing ones
+            var builder = new UriBuilder(internalUri)
+            {
+                Scheme = publicUri.Scheme,
+                Host = publicUri.Host,
+                Port = publicUri.Port
+            };
+
+            url = builder.ToString();
+        }
+
+        return url;
+    }
     protected async Task<UserDto> MapUserToDto(User user, string? statusOverride = null)
     {
         if (!Enum.TryParse<UserRole>(user.Role, true, out var roleEnum))
@@ -124,8 +145,8 @@ public abstract class BaseService
         var bidCount = Context.Bids.Count(b => b.Job_Id == job.Id);
 
         if (!Enum.TryParse<UserRole>(job.Posted_By_User.Role, true, out var roleEnum))
-            roleEnum = UserRole.Homeowner; 
-            // Fallback to Homeowner if the role in DB is invalid or empty
+            roleEnum = UserRole.Homeowner;
+        // Fallback to Homeowner if the role in DB is invalid or empty
 
         return new JobDto(
             Id: job.Id,
@@ -142,12 +163,12 @@ public abstract class BaseService
                 Id: job.Posted_By_User.Id,
                 Name: job.Posted_By_User.Name,
                 Email: job.Posted_By_User.Email,
-                Role: roleEnum.ToDbString(), 
+                Role: roleEnum.ToDbString(),
                 AvatarUrl: GetPresignedUrl(job.Posted_By_User.AvatarUrl),
                 Rating: job.Posted_By_User.Rating,
                 CreatedAt: job.Posted_By_User.CreatedAtUtc,
                 IsActive: true,
-                Verification: VerificationStatus.Approved.ToDbString() 
+                Verification: VerificationStatus.Approved.ToDbString()
             ),
             CreatedAt: job.Created_At_Utc,
             UpdatedAt: job.Updated_At_Utc,
@@ -167,7 +188,7 @@ public abstract class BaseService
                 Id: bid.Handyman_User.Id,
                 Name: bid.Handyman_User.Name,
                 Email: bid.Handyman_User.Email,
-                Role: roleEnum.ToDbString(), 
+                Role: roleEnum.ToDbString(),
                 AvatarUrl: GetPresignedUrl(bid.Handyman_User.AvatarUrl),
                 Rating: bid.Handyman_User.Rating,
                 CreatedAt: bid.Handyman_User.CreatedAtUtc,
@@ -187,11 +208,11 @@ public abstract class BaseService
     protected HandymanVerificationDto MapPendingToDto(Handyman_Verification handyman)
     {
         return new HandymanVerificationDto(
-                handyman.Id, 
-                handyman.User_Id, 
-                handyman.User.Name, 
-                handyman.Status, 
-                handyman.IdentityCardURL, 
+                handyman.Id,
+                handyman.User_Id,
+                handyman.User.Name,
+                handyman.Status,
+                handyman.IdentityCardURL,
                 handyman.SelfieImageURL,
                 handyman.Created_At_Utc,
                 handyman.Updated_At_Utc
