@@ -1,4 +1,4 @@
-import { ApiClientError, apiClient } from "./client";
+import { apiClient } from "./client";
 import type {
   BidStatus,
   Job,
@@ -501,6 +501,9 @@ function dedupeBidTransactions(rows: BidTransactionItem[]): BidTransactionItem[]
   return Array.from(map.values()).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
 
+const ADMIN_ALL_JOBS_ENDPOINT =
+  process.env.NEXT_PUBLIC_ADMIN_ALL_JOBS_ENDPOINT?.trim() || null;
+
 function buildJobQuery(params: JobsQueryParams = {}): URLSearchParams {
   const query = new URLSearchParams();
 
@@ -518,71 +521,18 @@ function buildJobQuery(params: JobsQueryParams = {}): URLSearchParams {
 }
 
 async function fetchPublicJobs(params: JobsQueryParams = {}): Promise<Job[]> {
+  if (!ADMIN_ALL_JOBS_ENDPOINT) {
+    return [];
+  }
+
   const query = buildJobQuery(params);
   const qs = query.toString();
-  const payload = await apiClient.get<unknown>(`/jobs${qs ? `?${qs}` : ""}`);
+  const payload = await apiClient.get<unknown>(
+    `${ADMIN_ALL_JOBS_ENDPOINT}${qs ? `?${qs}` : ""}`
+  );
   const rows = extractJobRows(payload);
   if (!rows) return [];
   return rows.map((row) => normalizeJob(row));
-}
-
-async function fetchAdminJobsViaDedicatedEndpoint(
-  params: JobsQueryParams = {}
-): Promise<Job[] | null> {
-  const query = buildJobQuery(params);
-  const qs = query.toString();
-  const paths = ["/admin/jobs", "/admin/jobs/all"];
-
-  for (const path of paths) {
-    try {
-      const payload = await apiClient.get<unknown>(`${path}${qs ? `?${qs}` : ""}`);
-      const rows = extractJobRows(payload);
-      if (rows !== null) {
-        return rows.map((row) => normalizeJob(row));
-      }
-    } catch (error) {
-      if (error instanceof ApiClientError && [404, 405].includes(error.statusCode)) {
-        continue;
-      }
-      continue;
-    }
-  }
-
-  return null;
-}
-
-async function fetchAdminJobsWithFallback(params: JobsQueryParams = {}): Promise<Job[]> {
-  const adminJobs = await fetchAdminJobsViaDedicatedEndpoint(params);
-  if (adminJobs !== null) return adminJobs;
-
-  if (params.status) {
-    return fetchPublicJobs(params);
-  }
-
-  const baseParams = { ...params };
-  delete baseParams.status;
-
-  const statusQueries: Array<Job["status"]> = ["open", "in-progress", "completed"];
-  const settled = await Promise.allSettled(
-    statusQueries.map((status) => fetchPublicJobs({ ...baseParams, status }))
-  );
-
-  const merged = new Map<string, Job>();
-  settled.forEach((result) => {
-    if (result.status === "fulfilled") {
-      result.value.forEach((job) => {
-        merged.set(job.id, job);
-      });
-    }
-  });
-
-  if (merged.size > 0) {
-    return Array.from(merged.values()).sort(
-      (a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)
-    );
-  }
-
-  return fetchPublicJobs(baseParams);
 }
 
 export const adminService = {
@@ -592,7 +542,7 @@ export const adminService = {
   },
 
   async getJobs(params: JobsQueryParams = {}): Promise<Job[]> {
-    return fetchAdminJobsWithFallback(params);
+    return fetchPublicJobs(params);
   },
 
   async createAdmin(name: string, email: string, password: string): Promise<AdminUserItem> {
@@ -721,7 +671,7 @@ export const adminService = {
     });
 
     const [jobs, bidsByJob] = await Promise.all([
-      fetchAdminJobsWithFallback({ page: 1, pageSize: 1000 }),
+      fetchPublicJobs({ page: 1, pageSize: 1000 }),
       Promise.all(
         Array.from(uniqueJobIds).map(async (jobId) => {
           try {
