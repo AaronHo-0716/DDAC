@@ -41,6 +41,37 @@ function verificationPill(status?: VerificationStatus) {
   );
 }
 
+const VERIFICATION_CACHE_STORAGE_KEY = "nh_admin_handyman_verification_cache_v1";
+const VERIFICATION_ID_STORAGE_KEY = "nh_admin_handyman_verification_ids_v1";
+
+function loadVerificationCache(): Record<string, AdminHandymanVerification> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = localStorage.getItem(VERIFICATION_CACHE_STORAGE_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as Record<string, AdminHandymanVerification>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadVerificationIdMap(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = localStorage.getItem(VERIFICATION_ID_STORAGE_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function AdminUsersPage() {
   const { authorized, loading } = useRequireRole("admin");
   const [rows, setRows] = useState<AdminUserItem[]>([]);
@@ -53,6 +84,13 @@ export default function AdminUsersPage() {
   const [selectedHandymanId, setSelectedHandymanId] = useState<string | null>(
     null
   );
+  const [verificationCache, setVerificationCache] = useState<
+    Record<string, AdminHandymanVerification>
+  >(() => loadVerificationCache());
+  const [verificationRecordIdByUser, setVerificationRecordIdByUser] = useState<
+    Record<string, string>
+  >(() => loadVerificationIdMap());
+  const [verificationDetailLoading, setVerificationDetailLoading] = useState(false);
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | UserStatus>("all");
   const [newAdminName, setNewAdminName] = useState("");
@@ -61,6 +99,28 @@ export default function AdminUsersPage() {
   const [creatingAdmin, setCreatingAdmin] = useState(false);
   const [createAdminError, setCreateAdminError] = useState<string | null>(null);
   const [createAdminSuccess, setCreateAdminSuccess] = useState<string | null>(null);
+
+  const cacheVerificationRecords = (records: AdminHandymanVerification[]) => {
+    if (records.length === 0) return;
+
+    setVerificationCache((prev) => {
+      const next = { ...prev };
+      records.forEach((record) => {
+        next[record.userId] = record;
+      });
+      return next;
+    });
+
+    setVerificationRecordIdByUser((prev) => {
+      const next = { ...prev };
+      records.forEach((record) => {
+        if (record.id) {
+          next[record.userId] = record.id;
+        }
+      });
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!authorized) return;
@@ -78,6 +138,7 @@ export default function AdminUsersPage() {
         if (!cancelled) {
           setRows(users);
           setPendingVerifications(pending);
+          cacheVerificationRecords(pending);
         }
       } catch (err) {
         if (!cancelled) {
@@ -95,6 +156,16 @@ export default function AdminUsersPage() {
     };
   }, [authorized]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(VERIFICATION_CACHE_STORAGE_KEY, JSON.stringify(verificationCache));
+  }, [verificationCache]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(VERIFICATION_ID_STORAGE_KEY, JSON.stringify(verificationRecordIdByUser));
+  }, [verificationRecordIdByUser]);
+
   const filtered = useMemo(() => {
     return rows.filter((row) => {
       if (roleFilter !== "all" && row.role !== roleFilter) return false;
@@ -109,12 +180,15 @@ export default function AdminUsersPage() {
   );
 
   const selectedVerification = useMemo(
-    () =>
-      pendingVerifications.find(
-        (record) =>
-          record.userId === selectedHandymanId && record.status === "pending"
-      ),
-    [pendingVerifications, selectedHandymanId]
+    () => {
+      if (!selectedHandymanId) return undefined;
+
+      return (
+        pendingVerifications.find((record) => record.userId === selectedHandymanId) ??
+        verificationCache[selectedHandymanId]
+      );
+    },
+    [pendingVerifications, selectedHandymanId, verificationCache]
   );
 
   if (loading || !authorized) {
@@ -160,13 +234,39 @@ export default function AdminUsersPage() {
   const updateVerification = async (id: string, status: VerificationStatus) => {
     setPendingActionId(id);
     setError(null);
+
+    const pendingRecord = pendingVerifications.find((record) => record.userId === id);
+    const verificationRecordId = pendingRecord?.id ?? verificationRecordIdByUser[id];
+
     try {
-      await adminService.updateVerification(id, status);
+      await adminService.updateVerification(id, status, verificationRecordId);
       setRows((prev) =>
         prev.map((row) =>
           row.id === id && row.role === "handyman" ? { ...row, verificationStatus: status } : row
         )
       );
+
+      setVerificationCache((prev) => {
+        const existing = pendingRecord ?? prev[id];
+        if (!existing) return prev;
+
+        return {
+          ...prev,
+          [id]: {
+            ...existing,
+            status,
+            updatedAtUtc: new Date().toISOString(),
+          },
+        };
+      });
+
+      if (pendingRecord?.id) {
+        setVerificationRecordIdByUser((prev) => ({
+          ...prev,
+          [id]: pendingRecord.id,
+        }));
+      }
+
       if (status !== "pending") {
         setPendingVerifications((prev) => prev.filter((record) => record.userId !== id));
       }
@@ -177,12 +277,30 @@ export default function AdminUsersPage() {
     }
   };
 
-  const openHandymanProfile = (id: string) => {
+  const openHandymanProfile = async (id: string) => {
     setSelectedHandymanId(id);
+
+    const pendingRecord = pendingVerifications.find((record) => record.userId === id);
+    const cachedRecord = verificationCache[id];
+
+    if (pendingRecord || (cachedRecord?.identityCardUrl && cachedRecord?.selfieImageUrl)) {
+      return;
+    }
+
+    setVerificationDetailLoading(true);
+    try {
+      const details = await adminService.getHandymanVerification(id, verificationRecordIdByUser[id]);
+      if (details) {
+        cacheVerificationRecords([details]);
+      }
+    } finally {
+      setVerificationDetailLoading(false);
+    }
   };
 
   const closeHandymanProfile = () => {
     setSelectedHandymanId(null);
+    setVerificationDetailLoading(false);
   };
 
   const handleModalVerification = async (status: VerificationStatus) => {
@@ -371,7 +489,7 @@ export default function AdminUsersPage() {
 
                         {row.role === "handyman" && (
                           <button
-                            onClick={() => openHandymanProfile(row.id)}
+                            onClick={() => void openHandymanProfile(row.id)}
                             className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 inline-flex items-center gap-1"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -442,6 +560,9 @@ export default function AdminUsersPage() {
                         Submitted: {new Date(selectedVerification.createdAtUtc).toLocaleString()}
                       </p>
                     )}
+                    {verificationDetailLoading && !selectedVerification && (
+                      <p className="mt-1 text-[#6B7280]">Loading verification documents...</p>
+                    )}
                   </div>
                 </div>
 
@@ -450,7 +571,11 @@ export default function AdminUsersPage() {
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
                       Selfie
                     </p>
-                    {selectedVerification?.selfieImageUrl || selectedHandyman.avatarUrl ? (
+                    {verificationDetailLoading && !selectedVerification ? (
+                      <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[#D1D5DB] text-xs text-[#9CA3AF]">
+                        Loading verification selfie...
+                      </div>
+                    ) : selectedVerification?.selfieImageUrl || selectedHandyman.avatarUrl ? (
                       <img
                         src={selectedVerification?.selfieImageUrl ?? selectedHandyman.avatarUrl}
                         alt={`${selectedHandyman.name} selfie`}
@@ -467,7 +592,11 @@ export default function AdminUsersPage() {
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
                       Identification Card
                     </p>
-                    {selectedVerification?.identityCardUrl ? (
+                    {verificationDetailLoading && !selectedVerification ? (
+                      <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[#D1D5DB] text-xs text-[#9CA3AF]">
+                        Loading identification card...
+                      </div>
+                    ) : selectedVerification?.identityCardUrl ? (
                       <img
                         src={selectedVerification.identityCardUrl}
                         alt={`${selectedHandyman.name} identification card`}
