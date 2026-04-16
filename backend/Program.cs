@@ -164,6 +164,7 @@ builder.Services.AddScoped<IBidService, BidService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<IStorageService, S3StorageService>();
 
 var app = builder.Build();

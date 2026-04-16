@@ -27,6 +27,7 @@ public partial class NeighbourHelpDbContext : DbContext
     public virtual DbSet<Conversation_Participant> Conversation_Participants { get; set; }
     public virtual DbSet<Message> Messages { get; set; }
     public virtual DbSet<Message_Moderation_Action> Message_Moderation_Actions { get; set; }
+    public virtual DbSet<User_Rating> User_Ratings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -346,6 +347,26 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.HasOne(d => d.Message).WithMany(p => p.Moderation_Actions).HasForeignKey(d => d.Message_Id).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(d => d.Conversation).WithMany(p => p.Moderation_Actions).HasForeignKey(d => d.Conversation_Id).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(d => d.Admin_User).WithMany().HasForeignKey(d => d.Admin_User_Id).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // --- 16. User Rating ---
+        modelBuilder.Entity<User_Rating>(entity =>
+        {
+            entity.ToTable("user_ratings");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            
+            entity.Property(e => e.RaterUserId).HasColumnName("rater_user_id");
+            entity.Property(e => e.TargetUserId).HasColumnName("target_user_id");
+            entity.Property(e => e.Score).HasColumnName("score");
+            entity.Property(e => e.Comment).HasColumnName("comment");
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAtUtc).HasColumnName("updated_at_utc").HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.RaterUser).WithMany().HasForeignKey(d => d.RaterUserId);
+            entity.HasOne(d => d.TargetUser).WithMany().HasForeignKey(d => d.TargetUserId);
+            
+            entity.HasIndex(e => new { e.RaterUserId, e.TargetUserId }).IsUnique();
         });
 
         OnModelCreatingPartial(modelBuilder);

@@ -299,3 +299,17 @@ CREATE INDEX IF NOT EXISTS ix_message_moderation_actions_conversation_created
 
 CREATE INDEX IF NOT EXISTS ix_message_moderation_actions_message_created
   ON message_moderation_actions(message_id, created_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS user_ratings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    rater_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    score INT NOT NULL CHECK (score >= 1 AND score <= 5),
+    comment TEXT,
+    created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_rater_target UNIQUE (rater_user_id, target_user_id),
+    CONSTRAINT chk_not_self_rating CHECK (rater_user_id <> target_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_ratings_target_id ON user_ratings(target_user_id, created_at_utc DESC);
