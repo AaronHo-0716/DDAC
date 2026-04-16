@@ -10,7 +10,7 @@ namespace backend.Controllers;
 public class AdminRatingController(IRatingService ratingService) : BaseController
 {
     [HttpGet]
-    public async Task<ActionResult<UserRatingSummaryDto>> GetHandymansRatings([FromQuery] int page = 1, int pageSize = 10)
+    public async Task<ActionResult<HandymanRatingListResponse>> GetHandymansRatings([FromQuery] int page = 1, int pageSize = 10)
     {
         try
         {
