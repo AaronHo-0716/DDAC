@@ -5,6 +5,7 @@ namespace backend.Models.DTOs;
 public record BidDto(
     Guid Id,
     Guid JobId,
+    string JobName,
     UserDto Handyman,
     decimal Price,
     DateTime EstimatedArrival,

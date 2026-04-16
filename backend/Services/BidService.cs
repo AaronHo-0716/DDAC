@@ -59,7 +59,7 @@ public class BidService : BaseService, IBidService
         if (!isVerified)
             throw new HttpRequestException("Your handyman account is not verified yet.", null, HttpStatusCode.BadRequest);
 
-        if (await Context.Bids.AnyAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId))
+        if (await Context.Bids.AnyAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId && b.Status == BidStatus.Pending.ToDbString()))
             throw new HttpRequestException("You have already placed a bid on this job", null, HttpStatusCode.BadRequest);
 
         var bid = new Bid
@@ -199,6 +199,7 @@ public class BidService : BaseService, IBidService
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Include(b => b.Handyman_User)
+            .Include(b => b.Job)
             .ToListAsync();
 
         return new BidListResponse(bids.Select(MapBidToDto).ToList(), page, pageSize, totalCount);
@@ -225,6 +226,7 @@ public class BidService : BaseService, IBidService
     {
         var bid = await Context.Bids
             .Include(b => b.Handyman_User)
+            .Include(b => b.Job)
             .FirstOrDefaultAsync(b => b.Id == bidId);
         return MapBidToDto(bid!);
     }

@@ -10,7 +10,7 @@ namespace backend.Controllers;
 [ApiController]
 [Route("api/admin")]
 [Authorize(Roles = "admin")]
-public class AdminController(IAdminService adminService) : BaseController
+public class AdminController(IAdminService adminService, IJobService jobService) : BaseController
 {
     [HttpGet("overview")]
     public async Task<ActionResult<AdminOverviewResponse>> GetOverview()
@@ -103,6 +103,15 @@ public class AdminController(IAdminService adminService) : BaseController
     public async Task<ActionResult<IEnumerable<JobDto>>> GetEmergencyJobs()
     {
         try { return Ok(await adminService.GetEmergencyJobsAsync()); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
+
+
+    [HttpGet("jobs")]
+    [Obsolete("Use specific moderation logs where available.")]
+    public async Task<ActionResult<IEnumerable<JobDto>>> GetJobs()
+    {
+        try { return Ok(await jobService.AdminGetJobsAsync(new JobFilterQuery(), null)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 

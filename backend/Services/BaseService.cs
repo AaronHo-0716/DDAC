@@ -184,6 +184,7 @@ public abstract class BaseService
         return new BidDto(
             Id: bid.Id,
             JobId: bid.Job_Id,
+            JobName: bid.Job.Title,
             Handyman: new UserDto(
                 Id: bid.Handyman_User.Id,
                 Name: bid.Handyman_User.Name,

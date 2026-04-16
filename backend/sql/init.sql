@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS bids (
   message TEXT NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
   is_recommended BOOLEAN NOT NULL DEFAULT FALSE,
+  locked BOOLEAN NOT NULL DEFAULT FALSE,
+  flagged BOOLEAN NOT NULL DEFAULT FALSE,
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT chk_bids_price_positive CHECK (price > 0)
