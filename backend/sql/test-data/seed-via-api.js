@@ -72,7 +72,6 @@ async function verifyHandymen() {
 
     const adminToken = await loginUser("admin@neighborhelp.test", "Password123!");
 
-    // FIX: Access .data because the response is now paginated
     const response = await apiRequest("/admin/handymen/pending-verification", {
         token: adminToken.accessToken,
         method: "GET"
@@ -86,8 +85,10 @@ async function verifyHandymen() {
     }
 
     for (const v of pendingList) {
-        // Logic for specific seed names
-        if (v.userName === "Handyman No verification") continue;
+        if (v.userName === "Handyman No verification") {
+            console.log(`Leaving Handyman as Pending: ${v.userName}`);
+            continue;
+        }
 
         if (v.userName === "Handyman Rejected") {
             await apiRequest(`/admin/handymen/${v.id}/reject`, {
@@ -129,9 +130,13 @@ async function main() {
     }
 
     const homeowners = users.filter((u) => u.role === "homeowner");
-    const handymen = users.filter((u) => u.role === "handyman");
+    const allHandymen = users.filter((u) => u.role === "handyman");
 
     await verifyHandymen();
+
+    const verifiedHandymen = allHandymen.filter((h) => {
+        return h.name !== "Handyman Rejected" && h.name !== "Handyman No verification";
+    });
 
     const jobBlueprint = [
         { title: `Leaking sink pipe ${suffix}`, category: "Plumbing", budget: 180, isEmergency: false },
@@ -151,35 +156,39 @@ async function main() {
         jobs.push({ ...createdJob, owner });
     }
 
-    console.log("Placing bids and creating ratings...");
+    console.log(`Placing bids using ${verifiedHandymen.length} verified handymen...`);
     for (let i = 0; i < jobs.length; i += 1) {
         const job = jobs[i];
-        const handyman = handymen[i % handymen.length];
+        const handyman = verifiedHandymen[i % verifiedHandymen.length];
 
-        // 1. Place Bid
-        const bid = await apiRequest(`/jobs/${job.id}/bids`, {
-            method: "POST",
-            token: handyman.accessToken,
-            body: { price: 150, estimatedArrival: futureIso(24), message: "I can do this!" },
-        });
+        try {
+            // 1. Place Bid
+            const bid = await apiRequest(`/jobs/${job.id}/bids`, {
+                method: "POST",
+                token: handyman.accessToken,
+                body: { price: 150, estimatedArrival: futureIso(24), message: "I can do this!" },
+            });
 
-        // 2. Accept Bid (to simulate completed work)
-        await apiRequest(`/bids/${bid.id}/accept`, {
-            method: "PATCH",
-            token: job.owner.accessToken,
-        });
+            // 2. Accept Bid
+            await apiRequest(`/bids/${bid.id}/accept`, {
+                method: "PATCH",
+                token: job.owner.accessToken,
+            });
 
-        // 3. NEW: Create Rating
-        await apiRequest(`/ratings`, {
-            method: "POST",
-            token: job.owner.accessToken,
-            body: {
-                targetUserId: handyman.id,
-                score: 5,
-                comment: "Excellent work! Highly recommended."
-            }
-        });
-        console.log(`Rated Handyman ${handyman.name} for Job ${job.title}`);
+            // 3. Create Rating
+            await apiRequest(`/ratings`, {
+                method: "POST",
+                token: job.owner.accessToken,
+                body: {
+                    targetUserId: handyman.id,
+                    score: 5,
+                    comment: "Excellent work! Highly recommended."
+                }
+            });
+            console.log(`Successfully processed cycle for: ${handyman.name}`);
+        } catch (err) {
+            console.error(`Error during bidding for ${handyman.name}: ${err.message}`);
+        }
     }
 
     console.log("\nSeed completed successfully.");
