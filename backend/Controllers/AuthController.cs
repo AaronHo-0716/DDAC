@@ -70,12 +70,11 @@ public class AuthController(IAuthService authService) : BaseController
 
     [Authorize(Roles = "handyman")]
     [HttpPost("pending-verification")]
-    public async Task<IActionResult> ResubmitVerification()
+    public async Task<ActionResult<HandymanVerificationDto>> ResubmitVerification()
     {
         try {
             var userId = await GetCurrentUserIdAsync();
-            await authService.CreateHandymanVerification(userId);
-            return NoContent();
+            return Ok(await authService.CreateHandymanVerification(userId));
         }
         catch (HttpRequestException ex) {
             return HandleError(ex);

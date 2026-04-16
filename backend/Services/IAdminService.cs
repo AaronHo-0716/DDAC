@@ -7,7 +7,7 @@ public interface IAdminService
     Task<AdminOverviewResponse> GetOverviewAsync();
     Task<UserDto> CreateAdminAsync(RegisterRequest request);
     Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request);
-    Task<UserDto> GetUserByIdAsync(Guid id);
+    Task<object> GetUserByIdAsync(Guid id, bool searchByHandyman = false);
     Task<UserDto> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken);
     Task<IEnumerable<HandymanVerificationDto>> GetPendingVerificationsAsync();
     Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId);

@@ -45,7 +45,7 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpPatch("users/{id}/block")]
-    public async Task<IActionResult> BlockUser(Guid id, [FromBody] BlockUserRequest request)
+    public async Task<ActionResult<UserDto>> BlockUser(Guid id, [FromBody] BlockUserRequest request)
     {
         var adminId = await GetCurrentUserIdAsync();
 
@@ -58,15 +58,11 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpPatch("users/{id}/unblock")]
-    public async Task<IActionResult> UnblockUser(Guid id)
+    public async Task<ActionResult<UserDto>> UnblockUser(Guid id)
     {
         var adminId = await GetCurrentUserIdAsync();
 
-        try
-        {
-            await adminService.UpdateUserBlockStatusAsync(id, false, null, adminId);
-            return NoContent();
-        }
+        try { return Ok(await adminService.UpdateUserBlockStatusAsync(id, false, null, adminId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -77,29 +73,29 @@ public class AdminController(IAdminService adminService) : BaseController
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
+    [HttpGet("handyman/{userId}")]
+    [Obsolete("Use specific moderation logs where available.")]
+    public async Task<ActionResult<HandymanVerificationDto>> GetHandymanById(Guid id)
+    {
+        try { return Ok(await adminService.GetUserByIdAsync(id, true)); }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
+
     [HttpPatch("handymen/{id}/approve")]
-    public async Task<IActionResult> ApproveHandyman(Guid id, [FromBody] string notes)
+    public async Task<ActionResult<HandymanVerificationDto>> ApproveHandyman(Guid id, [FromBody] string notes)
     {
         var adminId = await GetCurrentUserIdAsync();
 
-        try
-        {
-            await adminService.VerifyHandymanAsync(id, true, notes, adminId);
-            return NoContent();
-        }
+        try { return Ok(await adminService.VerifyHandymanAsync(id, true, notes, adminId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("handymen/{id}/reject")]
-    public async Task<IActionResult> RejectHandyman(Guid id, [FromBody] string notes)
+    public async Task<ActionResult<HandymanVerificationDto>> RejectHandyman(Guid id, [FromBody] string notes)
     {
         var adminId = await GetCurrentUserIdAsync();
 
-        try
-        {
-            await adminService.VerifyHandymanAsync(id, false, notes, adminId);
-            return NoContent();
-        }
+        try { return Ok(await adminService.VerifyHandymanAsync(id, false, notes, adminId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 

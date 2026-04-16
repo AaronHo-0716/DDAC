@@ -102,21 +102,29 @@ public class AdminService : BaseService, IAdminService
         return await Task.WhenAll(mappingTasks);
     }
 
-    public async Task<UserDto> GetUserByIdAsync(Guid id)
+    public async Task<object> GetUserByIdAsync(Guid id, bool searchByHandyman = false)
     {
-        var user = await _context.Users.FindAsync(id) 
-            ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
-        
-        string? statusStr = null;
-        if (user.Role == UserRole.Handyman.ToDbString())
-        {
-            statusStr = await _context.Handyman_Verifications
-                .Where(v => v.User_Id == user.Id)
-                .Select(v => v.Status)
-                .FirstOrDefaultAsync();
-        }
+        if (!searchByHandyman) {
+            var user = await _context.Users.FindAsync(id) 
+                ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
+            
+            string? statusStr = null;
+            if (user.Role == UserRole.Handyman.ToDbString())
+            {
+                statusStr = await _context.Handyman_Verifications
+                    .Where(v => v.User_Id == user.Id)
+                    .Select(v => v.Status)
+                    .FirstOrDefaultAsync();
+            }
 
-        return await MapUserToDto(user);
+            return await MapUserToDto(user);
+        } else
+        {
+            var user = await _context.Handyman_Verifications.FindAsync(id) 
+                ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
+            
+            return MapPendingToDto(user);
+        }
     }
 
     public async Task<UserDto> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminId)
