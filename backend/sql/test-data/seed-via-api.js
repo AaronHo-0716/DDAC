@@ -70,37 +70,40 @@ async function logout(accessToken, refreshToken) {
 async function verifyHandymen() {
     console.log("Fetching pending verifications...");
 
-    // Log in as admin
-    const adminToken = await loginUser("admin@NeighborHelp.test", "Password123!");
+    const adminToken = await loginUser("admin@neighborhelp.test", "Password123!");
 
-    const pendingList = await apiRequest("/admin/handymen/pending-verification", {
+    // FIX: Access .data because the response is now paginated
+    const response = await apiRequest("/admin/handymen/pending-verification", {
         token: adminToken.accessToken,
         method: "GET"
     });
 
-    if (!pendingList || pendingList.length === 0) {
+    const pendingList = response.data || [];
+
+    if (pendingList.length === 0) {
         console.log("No pending verifications found.");
         return;
     }
 
     for (const v of pendingList) {
-        if (v.userName != "Handyman No verification") {
-            if (v.userName != "Handyman Rejected") {
-                await apiRequest(`/admin/handymen/${v.id}/approve`, {
-                    method: "PATCH",
-                    token: adminToken.accessToken,
-                    body: "Verified via automated seed script."
-                });
-                console.log(`Approved Handyman: ${v.userName} (ID: ${v.userId})`);
-            } else {
-                await apiRequest(`/admin/handymen/${v.id}/reject`, {
-                    method: "PATCH",
-                    token: adminToken.accessToken,
-                    body: "Verified via automated seed script."
-                });
-                console.log(`Rejected Handyman: ${v.userName} (ID: ${v.userId})`);
-            } 
-        } 
+        // Logic for specific seed names
+        if (v.userName === "Handyman No verification") continue;
+
+        if (v.userName === "Handyman Rejected") {
+            await apiRequest(`/admin/handymen/${v.id}/reject`, {
+                method: "PATCH",
+                token: adminToken.accessToken,
+                body: "Identity document was blurry."
+            });
+            console.log(`Rejected Handyman: ${v.userName}`);
+        } else {
+            await apiRequest(`/admin/handymen/${v.id}/approve`, {
+                method: "PATCH",
+                token: adminToken.accessToken,
+                body: "Verified via automated seed script."
+            });
+            console.log(`Approved Handyman: ${v.userName}`);
+        }
     }
 
     await logout(adminToken.accessToken, adminToken.refreshToken);
@@ -131,127 +134,55 @@ async function main() {
     await verifyHandymen();
 
     const jobBlueprint = [
-        {
-            title: `Leaking sink pipe ${suffix}`,
-            description: "Kitchen sink has a persistent leak. Need inspection and fix.",
-            category: "Plumbing",
-            location: "TTDI, Kuala Lumpur",
-            budget: 180,
-            isEmergency: false,
-        },
-        {
-            title: `Ceiling fan not spinning ${suffix}`,
-            description: "Bedroom fan wiring issue, fan stops after a few seconds.",
-            category: "Electrical",
-            location: "Bangsar, Kuala Lumpur",
-            budget: 220,
-            isEmergency: false,
-        },
-        {
-            title: `Cabinet hinge replacement ${suffix}`,
-            description: "Kitchen cabinet hinge is broken and door is misaligned.",
-            category: "Carpentry",
-            location: "Cheras, Kuala Lumpur",
-            budget: 140,
-            isEmergency: false,
-        },
-        {
-            title: `Washing machine drain issue ${suffix}`,
-            description: "Washer does not drain after cycle, likely pump blockage.",
-            category: "Appliance Repair",
-            location: "Setapak, Kuala Lumpur",
-            budget: 260,
-            isEmergency: true,
-        },
-        {
-            title: `Bathroom fixture tightening ${suffix}`,
-            description: "Multiple loose fixtures in bathroom need tightening.",
-            category: "General Maintenance",
-            location: "Ampang, Kuala Lumpur",
-            budget: 120,
-            isEmergency: false,
-        },
-        {
-            title: `Power socket replacement ${suffix}`,
-            description: "Wall socket is loose and has burn marks.",
-            category: "Electrical",
-            location: "Mont Kiara, Kuala Lumpur",
-            budget: 200,
-            isEmergency: true,
-        },
+        { title: `Leaking sink pipe ${suffix}`, category: "Plumbing", budget: 180, isEmergency: false },
+        { title: `Ceiling fan repair ${suffix}`, category: "Electrical", budget: 220, isEmergency: false },
+        { title: `Cabinet replacement ${suffix}`, category: "Carpentry", budget: 140, isEmergency: false },
+        { title: `Washing machine fix ${suffix}`, category: "Appliance Repair", budget: 260, isEmergency: true },
     ];
 
     const jobs = [];
     for (let i = 0; i < jobBlueprint.length; i += 1) {
         const owner = homeowners[i % homeowners.length];
-        const body = {
-            ...jobBlueprint[i],
-            latitude: 3.14 + i * 0.001,
-            longitude: 101.69 + i * 0.001,
-            imageUrls: [],
-        };
-
         const createdJob = await apiRequest("/jobs", {
             method: "POST",
             token: owner.accessToken,
-            body,
+            body: { ...jobBlueprint[i], description: "Seeded job description", location: "Kuala Lumpur" },
         });
-
-        jobs.push({ ...createdJob, ownerId: owner.id, ownerEmail: owner.email });
+        jobs.push({ ...createdJob, owner });
     }
 
-    const bids = [];
+    console.log("Placing bids and creating ratings...");
     for (let i = 0; i < jobs.length; i += 1) {
         const job = jobs[i];
-        const bidOne = await apiRequest(`/jobs/${job.id}/bids`, {
+        const handyman = handymen[i % handymen.length];
+
+        // 1. Place Bid
+        const bid = await apiRequest(`/jobs/${job.id}/bids`, {
             method: "POST",
-            token: handymen[0].accessToken,
-            body: {
-                price: Math.max(60, Number(job.budget || 200) - 20),
-                estimatedArrival: futureIso(24 + i),
-                message: "I can handle this job with proper tools and clear pricing.",
-            },
+            token: handyman.accessToken,
+            body: { price: 150, estimatedArrival: futureIso(24), message: "I can do this!" },
         });
 
-        const bidTwo = await apiRequest(`/jobs/${job.id}/bids`, {
-            method: "POST",
-            token: handymen[1].accessToken,
-            body: {
-                price: Math.max(70, Number(job.budget || 200) - 10),
-                estimatedArrival: futureIso(26 + i),
-                message: "Available soon and experienced with similar fixes.",
-            },
+        // 2. Accept Bid (to simulate completed work)
+        await apiRequest(`/bids/${bid.id}/accept`, {
+            method: "PATCH",
+            token: job.owner.accessToken,
         });
 
-        bids.push({ jobId: job.id, ownerId: job.ownerId, bidIds: [bidOne.id, bidTwo.id] });
+        // 3. NEW: Create Rating
+        await apiRequest(`/ratings`, {
+            method: "POST",
+            token: job.owner.accessToken,
+            body: {
+                targetUserId: handyman.id,
+                score: 5,
+                comment: "Excellent work! Highly recommended."
+            }
+        });
+        console.log(`Rated Handyman ${handyman.name} for Job ${job.title}`);
     }
 
-    for (let i = 0; i < bids.length; i += 1) {
-        const b = bids[i];
-        const owner = homeowners.find((h) => h.id === b.ownerId);
-        if (!owner) continue;
-
-        if (i < 2) {
-            await apiRequest(`/bids/${b.bidIds[0]}/accept`, {
-                method: "PATCH",
-                token: owner.accessToken,
-            });
-        } else if (i === 2) {
-            await apiRequest(`/bids/${b.bidIds[1]}/reject`, {
-                method: "PATCH",
-                token: owner.accessToken,
-            });
-        }
-    }
-
-    console.log("\nSeed via API completed successfully.");
-    console.log(`Created users: ${users.length}`);
-    console.log(`Created jobs: ${jobs.length}`);
-    console.log(`Created bids: ${jobs.length * 2}`);
-    console.log("\nLogin credentials for new users:");
-    for (const u of users) {
-        console.log(`- ${u.role}: ${u.email} / ${PASSWORD}`);
-    }
+    console.log("\nSeed completed successfully.");
 }
 
 main().catch((err) => {
