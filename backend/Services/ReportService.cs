@@ -9,14 +9,8 @@ namespace backend.Services;
 
 public class ReportService : BaseService, IReportService
 {
-    private readonly NeighbourHelpDbContext _context;
-    private readonly ILogger _logger;
-
     public ReportService( NeighbourHelpDbContext context, ILogger<ReportService> logger) : base(context, logger)
-    {
-        _context = context;
-        _logger = logger;
-    }
+    { }
 
     public async Task CreateReportAsync(CreateReportRequest request, Guid reporterId)
     {
@@ -24,7 +18,7 @@ public class ReportService : BaseService, IReportService
         if (request.TargetUserId == reporterId) 
         throw new HttpRequestException("Self-reporting is not allowed.", null, HttpStatusCode.BadRequest);
         
-        var targetExists = await _context.Users.AnyAsync(u => u.Id == request.TargetUserId);
+        var targetExists = await Context.Users.AnyAsync(u => u.Id == request.TargetUserId);
         if (!targetExists) throw new HttpRequestException("The user you are trying to report no longer exists.", null, HttpStatusCode.NotFound);
 
         var report = new User_Report
@@ -38,31 +32,42 @@ public class ReportService : BaseService, IReportService
             Created_At_Utc = DateTime.UtcNow
         };
 
-        _context.User_Reports.Add(report);
+        Context.User_Reports.Add(report);
         
         await CreateNotifications(NotificationType.NewUserReport, $"New user report filed: {request.Reason}");
 
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
         
-        _logger.LogInformation("User {ReporterId} filed a report against {TargetId}", reporterId, request.TargetUserId);
+        Logger.LogInformation("User {ReporterId} filed a report against {TargetId}", reporterId, request.TargetUserId);
     }
 
-    public async Task<IEnumerable<UserReportDto>> GetMyReportsAsync(Guid userId)
+    public async Task<ReportListResponse> GetMyReportsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {
-        var reports = await _context.User_Reports
+        var query = Context.User_Reports
             .Include(r => r.Reporter)
             .Include(r => r.Target_User)
             .Include(r => r.Reviewed_By_Admin)
-            .Where(r => r.Reporter_Id == userId)
+            .Where(r => r.Reporter_Id == userId);
+
+        var totalCount = await query.CountAsync();
+
+        var reports = await query
             .OrderByDescending(r => r.Created_At_Utc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
-        return reports.Select(MapToDto);
+        return new ReportListResponse(
+            Data: reports.Select(MapToDto).ToList(),
+            TotalCount: totalCount,
+            Page: page,
+            PageSize: pageSize
+        );
     }
 
-    public async Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatus? status = null)
+    public async Task<ReportListResponse> GetAllReportsAsync(ReportStatus? status = null, int page = 1, int pageSize = 1000)
     {
-        var query = _context.User_Reports
+        var query = Context.User_Reports
             .Include(r => r.Reporter)
             .Include(r => r.Target_User)
             .Include(r => r.Reviewed_By_Admin)
@@ -74,13 +79,25 @@ public class ReportService : BaseService, IReportService
             query = query.Where(r => r.Status == statusStr);
         }
 
-        var reports = await query.OrderByDescending(r => r.Created_At_Utc).ToListAsync();
-        return reports.Select(MapToDto);
+        var totalCount = await query.CountAsync();
+
+        var reports = await query
+            .OrderByDescending(r => r.Created_At_Utc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new ReportListResponse(
+            Data: reports.Select(MapToDto).ToList(),
+            TotalCount: totalCount,
+            Page: page,
+            PageSize: pageSize
+        );
     }
 
     public async Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId)
     {
-        var report = await _context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
+        var report = await Context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
             ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 
         if (report.Status == ReportStatus.Resolved.ToDbString())
@@ -89,13 +106,13 @@ public class ReportService : BaseService, IReportService
         report.Status = ReportStatus.Resolved.ToDbString();
         UpdateModerationDetails(report, adminNotes, adminId);
 
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
+        await Context.SaveChangesAsync();
+        Logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
     }
 
     public async Task ReviewReportAsync(Guid reportId, string adminNotes, Guid adminId)
     {
-        var report = await _context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
+        var report = await Context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
             ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 
         if (report.Status == ReportStatus.Resolved.ToDbString())
@@ -105,8 +122,8 @@ public class ReportService : BaseService, IReportService
         report.Status = ReportStatus.Reviewed.ToDbString();
         UpdateModerationDetails(report, adminNotes, adminId);
 
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Report {ReportId} status updated to 'Reviewed' by Admin {AdminId}", reportId, adminId);
+        await Context.SaveChangesAsync();
+        Logger.LogInformation("Report {ReportId} status updated to 'Reviewed' by Admin {AdminId}", reportId, adminId);
     }
 
     private static void UpdateModerationDetails(User_Report report, string notes, Guid adminId)

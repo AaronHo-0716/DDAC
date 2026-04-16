@@ -13,30 +13,25 @@ namespace backend.Services;
 
 public class BidService : BaseService, IBidService
 {
-    private readonly NeighbourHelpDbContext _context;
-    private readonly ILogger _logger;
+    public BidService( NeighbourHelpDbContext context, ILogger<BidService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
+        : base(context, logger, s3Client, storageOptions)
+    { }
 
-    public BidService( NeighbourHelpDbContext context, ILogger<BidService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
+    public async Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 1000)
     {
-        _context = context;
-        _logger = logger;
-    }
-
-    public async Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 10)
-    {
-        if (!await _context.Jobs.AnyAsync(j => j.Id == jobId))
+        if (!await Context.Jobs.AnyAsync(j => j.Id == jobId))
             throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
-        var query = _context.Bids
+        var query = Context.Bids
             .Where(b => b.Job_Id == jobId)
             .OrderByDescending(b => b.Created_At_Utc);
 
         return await GetPagedBidsResponse(query, page, pageSize);
     }
 
-    public async Task<BidListResponse> GetMyBidsAsync(Guid userId, int page = 1, int pageSize = 10)
+    public async Task<BidListResponse> GetMyBidsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {
-        var query = _context.Bids
+        var query = Context.Bids
             .Where(b => b.Handyman_User_Id == userId)
             .OrderByDescending(b => b.Created_At_Utc);
 
@@ -45,7 +40,7 @@ public class BidService : BaseService, IBidService
 
     public async Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request, Guid userId)
     {
-        var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId) 
+        var job = await Context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId) 
             ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
         if (job.Status != JobStatus.Open.ToDbString())
@@ -54,17 +49,17 @@ public class BidService : BaseService, IBidService
         if (job.Posted_By_User_Id == userId)
             throw new HttpRequestException("You cannot bid on your own job", null, HttpStatusCode.BadRequest);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        var user = await Context.Users.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null || !user.IsActive)
             throw new HttpRequestException("User account is inactive or blocked", null, HttpStatusCode.Forbidden);
 
-        var isVerified = await _context.Handyman_Verifications
+        var isVerified = await Context.Handyman_Verifications
             .AnyAsync(v => v.User_Id == userId && v.Status == VerificationStatus.Approved.ToDbString());
             
         if (!isVerified)
             throw new HttpRequestException("Your handyman account is not verified yet.", null, HttpStatusCode.BadRequest);
 
-        if (await _context.Bids.AnyAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId))
+        if (await Context.Bids.AnyAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId))
             throw new HttpRequestException("You have already placed a bid on this job", null, HttpStatusCode.BadRequest);
 
         var bid = new Bid
@@ -81,15 +76,15 @@ public class BidService : BaseService, IBidService
             Updated_At_Utc = DateTime.UtcNow
         };
 
-        _context.Bids.Add(bid);
+        Context.Bids.Add(bid);
 
         var metadata = JsonSerializer.Serialize(new { price = request.Price, estimated_arrival = request.EstimatedArrival });
         AddBidTransaction(bid.Id, jobId, userId, job.Posted_By_User_Id, BidEventType.Created, userId, "Bid created by handyman", metadata);
 
         CreateNotification(job.Posted_By_User_Id, NotificationType.BidReceived, $"{user.Name} has placed a bid of ${request.Price}", jobId);
 
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Bid {BidId} created for Job {JobId} by Handyman {UserId}", bid.Id, jobId, userId);
+        await Context.SaveChangesAsync();
+        Logger.LogInformation("Bid {BidId} created for Job {JobId} by Handyman {UserId}", bid.Id, jobId, userId);
 
         return await GetBidDtoWithUser(bid.Id);
     }
@@ -99,7 +94,7 @@ public class BidService : BaseService, IBidService
         if (userRole != UserRole.Homeowner.ToDbString() && userRole != UserRole.Admin.ToDbString())
             throw new HttpRequestException("Unauthorized role for this action", null, HttpStatusCode.Forbidden);
 
-        var bid = await _context.Bids
+        var bid = await Context.Bids
             .Include(b => b.Job)
             .Include(b => b.Handyman_User)
             .FirstOrDefaultAsync(b => b.Id == bidId) 
@@ -114,13 +109,13 @@ public class BidService : BaseService, IBidService
         if (bid.Job.Status != JobStatus.Open.ToDbString())
             throw new HttpRequestException("Cannot accept a bid for a job that is not open", null, HttpStatusCode.BadRequest);
 
-        using var transaction = await _context.Database.BeginTransactionAsync();
+        using var transaction = await Context.Database.BeginTransactionAsync();
         try
         {
             bid.Status = BidStatus.Accepted.ToDbString();
             bid.Updated_At_Utc = DateTime.UtcNow;
 
-            var otherPendingBids = await _context.Bids
+            var otherPendingBids = await Context.Bids
                 .Where(b => b.Job_Id == bid.Job_Id && b.Id != bid.Id && b.Status == BidStatus.Pending.ToDbString())
                 .ToListAsync();
 
@@ -140,7 +135,7 @@ public class BidService : BaseService, IBidService
             AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Accepted, userId, "Bid accepted by job owner");
             CreateNotification(bid.Handyman_User_Id, NotificationType.BidAccepted, $"Your bid for '{bid.Job.Title}' has been accepted!", bid.Job_Id);
 
-            await _context.SaveChangesAsync();
+            await Context.SaveChangesAsync();
             await transaction.CommitAsync();
             
             return await GetBidDtoWithUser(bid.Id);
@@ -148,7 +143,7 @@ public class BidService : BaseService, IBidService
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            _logger.LogError(ex, "Failed to accept bid {BidId}", bidId);
+            Logger.LogError(ex, "Failed to accept bid {BidId}", bidId);
             throw;
         }
     }
@@ -158,7 +153,7 @@ public class BidService : BaseService, IBidService
         if (userRole != UserRole.Homeowner.ToDbString() && userRole != UserRole.Admin.ToDbString())
             throw new HttpRequestException("Unauthorized role for this action", null, HttpStatusCode.Forbidden);
 
-        var bid = await _context.Bids
+        var bid = await Context.Bids
             .Include(b => b.Job)
             .Include(b => b.Handyman_User)
             .FirstOrDefaultAsync(b => b.Id == bidId) 
@@ -176,13 +171,13 @@ public class BidService : BaseService, IBidService
         AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Bid rejected by job owner");
         CreateNotification(bid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was rejected", bid.Job_Id);
 
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
         return MapBidToDto(bid);
     }
 
     public async Task DeleteBidAsync(Guid bidId, Guid userId)
     {
-        var bid = await _context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
+        var bid = await Context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
             ?? throw new HttpRequestException($"Bid with id {bidId} not found", null, HttpStatusCode.NotFound);
 
         if (bid.Handyman_User_Id != userId)
@@ -193,8 +188,8 @@ public class BidService : BaseService, IBidService
 
         AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Retracted, userId, "Bid deleted/retracted by handyman");
 
-        _context.Bids.Remove(bid);
-        await _context.SaveChangesAsync();
+        Context.Bids.Remove(bid);
+        await Context.SaveChangesAsync();
     }
 
     private async Task<BidListResponse> GetPagedBidsResponse(IQueryable<Bid> query, int page, int pageSize)
@@ -211,7 +206,7 @@ public class BidService : BaseService, IBidService
 
     private void AddBidTransaction(Guid bidId, Guid jobId, Guid handymanId, Guid homeownerId, BidEventType type, Guid actorId, string reason, string metadata = "{}")
     {
-        _context.Bid_Transactions.Add(new Bid_Transaction
+        Context.Bid_Transactions.Add(new Bid_Transaction
         {
             Id = Guid.NewGuid(),
             Bid_Id = bidId,
@@ -228,7 +223,7 @@ public class BidService : BaseService, IBidService
 
     private async Task<BidDto> GetBidDtoWithUser(Guid bidId)
     {
-        var bid = await _context.Bids
+        var bid = await Context.Bids
             .Include(b => b.Handyman_User)
             .FirstOrDefaultAsync(b => b.Id == bidId);
         return MapBidToDto(bid!);

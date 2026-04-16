@@ -19,9 +19,6 @@ public class S3StorageService(
     IOptions<StorageOptions> storageOptions) 
     : BaseService(context, logger, s3Client, storageOptions), IStorageService
 {
-    private readonly IAmazonS3 _s3Client = s3Client;
-    private readonly S3StorageOptions _options = storageOptions.Value.S3;
-
     public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct)
     {
         var user = await Context.Users
@@ -110,50 +107,50 @@ public class S3StorageService(
         var objectKey = $"{keyPrefix}/{DateTime.UtcNow:yyyy/MM}/{Guid.NewGuid()}{extension}";
 
         await using var stream = file.OpenReadStream();
-        var putRequest = new PutObjectRequest { BucketName = _options.BucketName, Key = objectKey, InputStream = stream, ContentType = file.ContentType };
-        await _s3Client.PutObjectAsync(putRequest, ct);
+        var putRequest = new PutObjectRequest { BucketName = StorageOptions.BucketName, Key = objectKey, InputStream = stream, ContentType = file.ContentType };
+        await S3Client.PutObjectAsync(putRequest, ct);
 
-        var publicBaseUrl = string.IsNullOrWhiteSpace(_options.PublicBaseUrl) ? _options.ServiceUrl : _options.PublicBaseUrl;
-        var imageUrl = $"{publicBaseUrl.TrimEnd('/')}/{_options.BucketName}/{objectKey}";
+        var publicBaseUrl = string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl) ? StorageOptions.ServiceUrl : StorageOptions.PublicBaseUrl;
+        var imageUrl = $"{publicBaseUrl.TrimEnd('/')}/{StorageOptions.BucketName}/{objectKey}";
 
         return new UploadImageResponse(objectKey, imageUrl, file.Length, file.ContentType);
     }
 
     private async Task EnsureBucketExistsAsync(CancellationToken cancellationToken)
     {
-        if (!_options.AutoCreateBucket) return;
+        if (!StorageOptions.AutoCreateBucket) return;
 
-        var exists = await AmazonS3Util.DoesS3BucketExistV2Async(_s3Client, _options.BucketName);
+        var exists = await AmazonS3Util.DoesS3BucketExistV2Async(S3Client, StorageOptions.BucketName);
         if (exists) return;
 
         try
         {
-            await _s3Client.PutBucketAsync(new PutBucketRequest
+            await S3Client.PutBucketAsync(new PutBucketRequest
             {
-                BucketName = _options.BucketName,
-                BucketRegionName = _options.Region,
+                BucketName = StorageOptions.BucketName,
+                BucketRegionName = StorageOptions.Region,
                 UseClientRegion = true
             }, cancellationToken);
             
-            Logger.LogInformation("Created missing S3 bucket {BucketName}", _options.BucketName);
+            Logger.LogInformation("Created missing S3 bucket {BucketName}", StorageOptions.BucketName);
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
-            Logger.LogDebug("S3 bucket {BucketName} was created concurrently.", _options.BucketName);
+            Logger.LogDebug("S3 bucket {BucketName} was created concurrently.", StorageOptions.BucketName);
         }
     }
 
     private void ValidateImage(IFormFile file)
     {
-        if (string.IsNullOrWhiteSpace(_options.BucketName))
+        if (string.IsNullOrWhiteSpace(StorageOptions.BucketName))
             throw new HttpRequestException("Storage configuration error: Bucket name is missing.", null, HttpStatusCode.InternalServerError);
 
         if (file == null || file.Length <= 0)
             throw new HttpRequestException("The uploaded file is empty.", null, HttpStatusCode.BadRequest);
 
-        var maxBytes = _options.MaxFileSizeMb * 1024 * 1024;
+        var maxBytes = StorageOptions.MaxFileSizeMb * 1024 * 1024;
         if (file.Length > maxBytes)
-            throw new HttpRequestException($"File too large. Max allowed size is {_options.MaxFileSizeMb}MB.", null, HttpStatusCode.BadRequest);
+            throw new HttpRequestException($"File too large. Max allowed size is {StorageOptions.MaxFileSizeMb}MB.", null, HttpStatusCode.BadRequest);
 
         if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             throw new HttpRequestException("Invalid file type. Only image files are allowed.", null, HttpStatusCode.BadRequest);

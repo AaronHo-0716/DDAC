@@ -50,7 +50,7 @@ public class RatingService(
         await RecalculateUserAverageAsync(request.TargetUserId);
     }
 
-    public async Task<UserRatingSummaryDto> GetUserRatingsAsync(Guid userId, int page = 1, int pageSize = 10)
+    public async Task<UserRatingSummaryDto> GetUserRatingsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {
         var targetUser = await Context.Users.FindAsync(userId)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
@@ -81,7 +81,7 @@ public class RatingService(
         );
     }
 
-    public async Task<HandymanRatingListResponse> GetVerifiedHandymenReportAsync(int page = 1, int pageSize = 10)
+    public async Task<HandymanRatingListResponse> GetVerifiedHandymenReportAsync(int page = 1, int pageSize = 1000)
     {
         // 1. Get all approved handyman verification records
         var query = Context.Handyman_Verifications
@@ -101,13 +101,13 @@ public class RatingService(
         foreach (var ver in verifications)
         {
             // 2. Fetch recent ratings for this specific handyman
-            var recentRatings = await Context.User_Ratings
+            var Ratings = await Context.User_Ratings
                 .Include(r => r.RaterUser)
                 .Where(r => r.TargetUserId == ver.User_Id)
                 .OrderByDescending(r => r.CreatedAtUtc)
                 .ToListAsync();
 
-            var ratingDtos = recentRatings.Select(r => new RatingDto(
+            var ratingDtos = Ratings.Select(r => new RatingDto(
                 r.Id,
                 r.RaterUserId,
                 r.RaterUser.Name,
@@ -135,11 +135,7 @@ public class RatingService(
             );
 
             // 5. Construct the Rating Summary
-            var summaryDto = new UserRatingSummaryDto(
-                AverageRating: ver.User.Rating ?? 0,
-                TotalRatings: totalRatingsCount,
-                RecentRatings: ratingDtos
-            );
+            var summaryDto = new UserRatingSummaryDto( ver.User.Rating ?? 0, totalRatingsCount, ratingDtos );
 
             reportData.Add(new HandymanRatingReportDto(verDto, summaryDto));
         }

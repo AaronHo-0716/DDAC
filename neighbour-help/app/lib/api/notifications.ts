@@ -15,8 +15,11 @@ interface RawNotificationDto {
 }
 
 interface RawNotificationListResponse {
-  notifications?: RawNotificationDto[] | null;
+  data?: RawNotificationDto[] | null; 
   unreadCount?: number | null;
+  totalCount?: number | null;
+  page?: number | null;
+  pageSize?: number | null;
 }
 
 const KNOWN_NOTIFICATION_TYPES: NotificationEventType[] = [
@@ -48,22 +51,26 @@ function normalizeNotification(row: RawNotificationDto): Notification {
 }
 
 function normalizeListResponse(raw: RawNotificationListResponse): NotificationListResponse {
-  const notifications = Array.isArray(raw.notifications)
-    ? raw.notifications.map(normalizeNotification)
+  const notifications = Array.isArray(raw.data)
+    ? raw.data.map(normalizeNotification)
     : [];
 
   const derivedUnreadCount = notifications.filter((n) => !n.read).length;
 
   return {
     notifications,
-    unreadCount:
-      typeof raw.unreadCount === "number" ? raw.unreadCount : derivedUnreadCount,
-  };
+    unreadCount: typeof raw.unreadCount === "number" ? raw.unreadCount : derivedUnreadCount,
+    totalCount: raw.totalCount ?? 0,
+    page: raw.page ?? 1,
+    pageSize: raw.pageSize ?? 10
+  } as NotificationListResponse; 
 }
 
 export const notificationsService = {
-  async getNotifications(): Promise<NotificationListResponse> {
-    const response = await apiClient.get<RawNotificationListResponse>("/notifications");
+  async getNotifications(page = 1, pageSize = 1000): Promise<NotificationListResponse> {
+    const response = await apiClient.get<RawNotificationListResponse>(
+      `/notifications?page=${page}&pageSize=${pageSize}`
+    );
     return normalizeListResponse(response);
   },
 

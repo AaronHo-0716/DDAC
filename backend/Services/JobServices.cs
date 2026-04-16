@@ -12,18 +12,13 @@ namespace backend.Services;
 
 public class JobService : BaseService, IJobService
 {
-    private readonly NeighbourHelpDbContext _context;
-    private readonly ILogger _logger;
-
-    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
-    {
-        _context = context;
-        _logger = logger;
-    }
+    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
+        : base(context, logger, s3Client, storageOptions)
+    { }
 
     public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId)
     {
-        var query = _context.Jobs.AsQueryable();
+        var query = Context.Jobs.AsQueryable();
 
         query = query.Where(j => j.Status == JobStatus.Open.ToDbString() || j.Posted_By_User_Id == userId);
 
@@ -67,9 +62,9 @@ public class JobService : BaseService, IJobService
         );
     }
 
-    public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 10)
+    public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {
-        var query = _context.Jobs.Where(j => j.Posted_By_User_Id == userId);
+        var query = Context.Jobs.Where(j => j.Posted_By_User_Id == userId);
         var totalCount = await query.CountAsync();
 
         var jobs = await query
@@ -85,7 +80,7 @@ public class JobService : BaseService, IJobService
 
     public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId)
     {
-        var job = await _context.Jobs
+        var job = await Context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
             .FirstOrDefaultAsync(j => j.Id == jobId);
@@ -100,7 +95,7 @@ public class JobService : BaseService, IJobService
             if (!userId.HasValue) 
                 throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
 
-            var hasAcceptedBid = await _context.Bids.AnyAsync(b =>
+            var hasAcceptedBid = await Context.Bids.AnyAsync(b =>
                 b.Job_Id == jobId &&
                 b.Handyman_User_Id == userId.Value &&
                 b.Status == BidStatus.Accepted.ToDbString());
@@ -133,17 +128,17 @@ public class JobService : BaseService, IJobService
             Updated_At_Utc = DateTime.UtcNow
         };
 
-        _context.Jobs.Add(newJob);
+        Context.Jobs.Add(newJob);
 
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Job {JobId} created by User {UserId}", newJob.Id, userId);
+        await Context.SaveChangesAsync();
+        Logger.LogInformation("Job {JobId} created by User {UserId}", newJob.Id, userId);
 
         return await RefreshAndMap(newJob.Id);
     }
 
     public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId)
     {
-        var job = await _context.Jobs
+        var job = await Context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
             .FirstOrDefaultAsync(j => j.Id == jobId);
@@ -166,24 +161,24 @@ public class JobService : BaseService, IJobService
         job.Is_Emergency = request.IsEmergency;
         job.Updated_At_Utc = DateTime.UtcNow;
 
-        _context.Jobs.Update(job);
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Job {JobId} updated by User {UserId}", jobId, userId);
+        Context.Jobs.Update(job);
+        await Context.SaveChangesAsync();
+        Logger.LogInformation("Job {JobId} updated by User {UserId}", jobId, userId);
 
         return await RefreshAndMap(jobId);
     }
 
     public async Task DeleteJobAsync(Guid jobId, Guid userId)
     {
-        var job = await _context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId)
+        var job = await Context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId)
             ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
         if (job.Posted_By_User_Id != userId)
             throw new HttpRequestException("You can only delete your own jobs", null, HttpStatusCode.Forbidden);
 
-        _context.Jobs.Remove(job);
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Job {JobId} deleted by User {UserId}", jobId, userId);
+        Context.Jobs.Remove(job);
+        await Context.SaveChangesAsync();
+        Logger.LogInformation("Job {JobId} deleted by User {UserId}", jobId, userId);
     }
 
     private void ValidateJobData(string title, string description, decimal? budget)
@@ -198,7 +193,7 @@ public class JobService : BaseService, IJobService
 
     private async Task<JobDto> RefreshAndMap(Guid jobId)
     {
-        var job = await _context.Jobs
+        var job = await Context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
             .FirstAsync(j => j.Id == jobId);

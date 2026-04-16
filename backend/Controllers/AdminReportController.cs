@@ -12,7 +12,7 @@ namespace backend.Controllers;
 public class AdminReportController(IReportService reportService) : BaseController 
 {
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<UserReportDto>>> GetReports([FromQuery] ReportStatus? status)
+    public async Task<ActionResult<IEnumerable<ReportListResponse>>> GetReports([FromQuery] ReportStatus? status)
     {
         return Ok(await reportService.GetAllReportsAsync(status));
     }

@@ -30,7 +30,7 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpGet("users")]
-    public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers([FromQuery] UserSearchRequest request)
+    public async Task<ActionResult<IEnumerable<UserListResponse>>> GetUsers([FromQuery] UserSearchRequest request)
     {
         try { return Ok(await adminService.GetAllUsers(request)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -67,14 +67,13 @@ public class AdminController(IAdminService adminService) : BaseController
     }
 
     [HttpGet("handymen/pending-verification")]
-    public async Task<ActionResult<IEnumerable<HandymanVerificationDto>>> GetPendingVerifications()
+    public async Task<ActionResult<IEnumerable<HandymanVerificationListResponse>>> GetPendingVerifications()
     {
         try { return Ok(await adminService.GetPendingVerificationsAsync()); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
-
-    [HttpGet("handyman/{userId}")]
-    [Obsolete("Use specific moderation logs where available.")]
+    
+    [HttpGet("handyman/{id}")]
     public async Task<ActionResult<HandymanVerificationDto>> GetHandymanById(Guid id)
     {
         try { return Ok(await adminService.GetUserByIdAsync(id, true)); }

@@ -4,9 +4,9 @@ namespace backend.Services;
 
 public interface IBidService
 {
-    Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 10);
+    Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 1000);
 
-    Task<BidListResponse> GetMyBidsAsync(Guid userId, int page = 1, int pageSize = 10);
+    Task<BidListResponse> GetMyBidsAsync(Guid userId, int page = 1, int pageSize = 1000);
 
     Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request, Guid userId);
 

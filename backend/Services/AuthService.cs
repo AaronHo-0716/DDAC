@@ -17,16 +17,12 @@ namespace backend.Services;
 
 public class AuthService : BaseService, IAuthService
 {
-    private readonly NeighbourHelpDbContext _context;
     private readonly IConfiguration _config;
-    private readonly ILogger _logger;
 
-    public AuthService(
-        NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
+    public AuthService(NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
+        : base(context, logger, s3Client, storageOptions)
     {
-        _context = context;
         _config = config;
-        _logger = logger;
     }
     
     public async Task<AuthResponse> Login(LoginRequest request)
@@ -34,17 +30,17 @@ public class AuthService : BaseService, IAuthService
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
             throw new HttpRequestException("Email and password are required.", null, HttpStatusCode.BadRequest);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
+        var user = await Context.Users.FirstOrDefaultAsync(u => u.Email == request.Email.ToLower().Trim());
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            _logger.LogWarning("Failed login attempt for email: {Email}", request.Email);
+            Logger.LogWarning("Failed login attempt for email: {Email}", request.Email);
             throw new HttpRequestException("Invalid email or password.", null, HttpStatusCode.Unauthorized);
         }
 
         if (!user.IsActive)
         {
-            _logger.LogInformation("Blocked user {UserId} attempted login.", user.Id);
+            Logger.LogInformation("Blocked user {UserId} attempted login.", user.Id);
             throw new HttpRequestException("Access denied. The account is blocked.", null, HttpStatusCode.BadRequest);
         }
 
@@ -60,7 +56,7 @@ public class AuthService : BaseService, IAuthService
             throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
 
         var emailLower = request.Email.ToLower().Trim();
-        if (await _context.Users.AnyAsync(u => u.Email == emailLower))
+        if (await Context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("A user with this email already exists.", null, HttpStatusCode.Conflict);
 
         if (!Enum.TryParse<UserRole>(request.Role, true, out var roleEnum) || roleEnum == UserRole.Admin)
@@ -77,7 +73,7 @@ public class AuthService : BaseService, IAuthService
             TokenVersion = 1
         };
 
-        _context.Users.Add(newUser);
+        Context.Users.Add(newUser);
 
         if (roleEnum == UserRole.Handyman)
         {
@@ -89,7 +85,7 @@ public class AuthService : BaseService, IAuthService
                 );
         }
 
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
         return await GenerateAuthResponse(newUser);
     }
 
@@ -123,14 +119,14 @@ public class AuthService : BaseService, IAuthService
             Created_At_Utc = DateTime.UtcNow,
             Updated_At_Utc = DateTime.UtcNow
         };
-        _context.Handyman_Verifications.Add(handyman);
-        await _context.SaveChangesAsync();
+        Context.Handyman_Verifications.Add(handyman);
+        await Context.SaveChangesAsync();
         return MapPendingToDto(handyman);
     }
 
     public async Task<AuthResponse> RefreshToken(string token)
     {
-        var existingToken = await _context.Refresh_Tokens
+        var existingToken = await Context.Refresh_Tokens
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.Token_Hash == token);
 
@@ -150,8 +146,8 @@ public class AuthService : BaseService, IAuthService
             Created_At_Utc = DateTime.UtcNow
         };
 
-        _context.Refresh_Tokens.Add(newRefreshToken);
-        await _context.SaveChangesAsync();
+        Context.Refresh_Tokens.Add(newRefreshToken);
+        await Context.SaveChangesAsync();
 
         var (accessToken, expiresIn) = CreateJwtToken(existingToken.User);
         return new AuthResponse(await MapUserToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
@@ -159,7 +155,7 @@ public class AuthService : BaseService, IAuthService
 
     public async Task Logout(LogoutRequest request, Guid userId)
     {
-        var tokenEntry = await _context.Refresh_Tokens
+        var tokenEntry = await Context.Refresh_Tokens
             .FirstOrDefaultAsync(t => t.Token_Hash == request.RefreshToken && t.User_Id == userId);
 
         if (tokenEntry != null) {
@@ -167,15 +163,15 @@ public class AuthService : BaseService, IAuthService
             tokenEntry.Replaced_By_Token_Hash = "LOGOUT";
         }
 
-        var user = await _context.Users.FindAsync(userId);
+        var user = await Context.Users.FindAsync(userId);
         if (user != null) user.TokenVersion++;
 
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
     }
 
     public async Task<UserDto> GetUserById(Guid userId)
     {
-        var user = await _context.Users.FindAsync(userId) 
+        var user = await Context.Users.FindAsync(userId) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
         return await MapUserToDto(user);
     }
@@ -206,14 +202,14 @@ public class AuthService : BaseService, IAuthService
     {
         var (accessToken, expiresIn) = CreateJwtToken(user);
         var refreshTokenStr = GenerateSecureRandomString();
-        _context.Refresh_Tokens.Add(new Refresh_Token {
+        Context.Refresh_Tokens.Add(new Refresh_Token {
             Id = Guid.NewGuid(), 
             User_Id = user.Id, 
             Token_Hash = refreshTokenStr,
             Expires_At_Utc = DateTime.UtcNow.AddDays(AuthConstants.RefreshTokenExpiryDays), 
             Created_At_Utc = DateTime.UtcNow
         });
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
         return new AuthResponse(await MapUserToDto(user), new TokenDto(accessToken, refreshTokenStr, expiresIn));
     }
 

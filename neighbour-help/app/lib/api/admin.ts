@@ -63,6 +63,13 @@ interface RawUserDto {
   createdAt?: string | null;
 }
 
+interface UserListResponse {
+  data: RawUserDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
 interface RawHandymanVerificationDto {
   id?: string | null;
   userId?: string | null;
@@ -72,6 +79,13 @@ interface RawHandymanVerificationDto {
   selfieImageUrl?: string | null;
   createdAtUtc?: string | null;
   updatedAtUtc?: string | null;
+}
+
+interface HandymanVerificationListResponse {
+  data: RawHandymanVerificationDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
 }
 
 interface RawUserReportDto {
@@ -88,6 +102,13 @@ interface RawUserReportDto {
   adminName?: string | null;
   reviewAtUtc?: string | null;
   adminNotes?: string | null;
+}
+
+interface ReportListResponse {
+  data: RawUserReportDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
 }
 
 interface RawAdminOverviewResponse {
@@ -220,21 +241,28 @@ export const adminService = {
     return toAdminUser(created);
   },
 
-  async getUsers(): Promise<AdminUserItem[]> {
-    const users = await apiClient.get<RawUserDto[]>("/admin/users?page=1&pageSize=200");
-
-    if (!Array.isArray(users)) return [];
-
-    return users.map((row) => toAdminUser(row));
-  },
-
-  async getPendingVerificationRecords(): Promise<AdminHandymanVerification[]> {
-    const pending = await apiClient.get<RawHandymanVerificationDto[]>(
-      "/admin/handymen/pending-verification"
+  async getUsers(page = 1, pageSize = 200): Promise<AdminUserItem[]> {
+    const response = await apiClient.get<UserListResponse>(
+      `/admin/users?page=${page}&pageSize=${pageSize}`
     );
 
-    if (!Array.isArray(pending)) return [];
-    return pending.map((row) => toAdminHandymanVerification(row));
+    if (!response || !Array.isArray(response.data)) {
+      return [];
+  }
+
+    return response.data.map((row) => toAdminUser(row));
+  },
+
+  async getPendingVerificationRecords(page = 1, pageSize = 1000): Promise<AdminHandymanVerification[]> {
+    const response = await apiClient.get<HandymanVerificationListResponse>(
+      `/admin/handymen/pending-verification?page=${page}&pageSize=${pageSize}`
+    );
+
+    if (!response || !Array.isArray(response.data)) {
+      return [];
+    }
+
+    return response.data.map((row) => toAdminHandymanVerification(row));
   },
 
   async blockUser(userId: string): Promise<void> {
@@ -319,16 +347,22 @@ export const adminService = {
     );
   },
 
-  async getReports(status?: ReportStatus): Promise<UserReport[]> {
+  async getReports(status?: ReportStatus, page = 1, pageSize = 1000): Promise<UserReport[]> {
     const query = new URLSearchParams();
+    
     if (status) query.set("status", status);
+    query.set("page", page.toString());
+    query.set("pageSize", pageSize.toString());
 
-    const suffix = query.toString();
-    const path = suffix ? `/admin/report?${suffix}` : "/admin/report";
-    const reports = await apiClient.get<RawUserReportDto[]>(path);
+    const path = `/admin/report?${query.toString()}`;
+    
+    const response = await apiClient.get<ReportListResponse>(path);
 
-    if (!Array.isArray(reports)) return [];
-    return reports.map((row) => toUserReport(row));
+    if (!response || !Array.isArray(response.data)) {
+      return [];
+    }
+
+    return response.data.map((row) => toUserReport(row));
   },
 
   async resolveReport(reportId: string, notes: string): Promise<void> {

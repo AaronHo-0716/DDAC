@@ -53,3 +53,17 @@ public record BidTransactionDto(
     string? EventReason,
     DateTime CreatedAtUtc
 );
+
+public record UserListResponse(
+    IEnumerable<UserDto> Data,
+    int TotalCount,
+    int Page,
+    int PageSize
+);
+
+public record HandymanVerificationListResponse(
+    IEnumerable<HandymanVerificationDto> Data,
+    int TotalCount,
+    int Page,
+    int PageSize
+);

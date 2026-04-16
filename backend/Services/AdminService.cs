@@ -12,14 +12,9 @@ namespace backend.Services;
 
 public class AdminService : BaseService, IAdminService
 {
-    private readonly NeighbourHelpDbContext _context;
-    private readonly ILogger _logger;
-
-    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) : base(context, logger, s3Client, storageOptions)
-    {
-        _context = context;
-        _logger = logger;
-    }
+    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
+        : base(context, logger, s3Client, storageOptions)
+    { }
 
     public async Task<AdminOverviewResponse> GetOverviewAsync()
     {
@@ -27,11 +22,11 @@ public class AdminService : BaseService, IAdminService
         var openStatus = JobStatus.Open.ToDbString();
 
         return new AdminOverviewResponse(
-            UsersCreatedToday: await _context.Users.CountAsync(u => u.CreatedAtUtc >= today),
-            JobsPostedToday: await _context.Jobs.CountAsync(j => j.Created_At_Utc >= today),
-            BidsCreatedToday: await _context.Bids.CountAsync(b => b.Created_At_Utc >= today),
-            OpenEmergencies: await _context.Jobs.CountAsync(j => j.Is_Emergency && j.Status == openStatus),
-            BlockedAccountCount: await _context.Users.CountAsync(u => !u.IsActive)
+            UsersCreatedToday: await Context.Users.CountAsync(u => u.CreatedAtUtc >= today),
+            JobsPostedToday: await Context.Jobs.CountAsync(j => j.Created_At_Utc >= today),
+            BidsCreatedToday: await Context.Bids.CountAsync(b => b.Created_At_Utc >= today),
+            OpenEmergencies: await Context.Jobs.CountAsync(j => j.Is_Emergency && j.Status == openStatus),
+            BlockedAccountCount: await Context.Users.CountAsync(u => !u.IsActive)
         );
     }
 
@@ -41,7 +36,7 @@ public class AdminService : BaseService, IAdminService
             throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
 
         var emailLower = request.Email.ToLower().Trim();
-        if (await _context.Users.AnyAsync(u => u.Email == emailLower))
+        if (await Context.Users.AnyAsync(u => u.Email == emailLower))
             throw new HttpRequestException("A user with this email already exists.", null, HttpStatusCode.Conflict);
 
         var newUser = new User
@@ -55,17 +50,17 @@ public class AdminService : BaseService, IAdminService
             TokenVersion = 1
         };
 
-        _context.Users.Add(newUser);
-        await _context.SaveChangesAsync();
+        Context.Users.Add(newUser);
+        await Context.SaveChangesAsync();
 
-        _logger.LogInformation("New admin added with email: {Email}", request.Email);
+        Logger.LogInformation("New admin added with email: {Email}", request.Email);
         return await MapUserToDto(newUser);
     }
 
-    public async Task<IEnumerable<UserDto>> GetAllUsers(UserSearchRequest request)
+    public async Task<UserListResponse> GetAllUsers(UserSearchRequest request)
     {
-        var query = _context.Users.AsNoTracking();
-    
+        var query = Context.Users.AsNoTracking();
+
         if (!string.IsNullOrWhiteSpace(request.Name))
             query = query.Where(u => u.Name.ToLower().Contains(request.Name.ToLower()));
         if (!string.IsNullOrWhiteSpace(request.Email))
@@ -74,13 +69,15 @@ public class AdminService : BaseService, IAdminService
             query = query.Where(u => u.Role == request.Role.Value.ToDbString());
         if (request.IsActive.HasValue)
             query = query.Where(u => u.IsActive == request.IsActive.Value);
-    
+
         if (request.Verification.HasValue)
         {
             var veriStr = request.Verification.Value.ToDbString();
-            query = query.Where(u => _context.Handyman_Verifications.Any(v => v.User_Id == u.Id && v.Status == veriStr));
+            query = query.Where(u => Context.Handyman_Verifications.Any(v => v.User_Id == u.Id && v.Status == veriStr));
         }
-    
+
+        var totalCount = await query.CountAsync();
+
         var users = await query
             .OrderByDescending(u => u.CreatedAtUtc)
             .Skip((request.Page - 1) * request.PageSize)
@@ -88,30 +85,31 @@ public class AdminService : BaseService, IAdminService
             .ToListAsync();
     
         var pagedUserIds = users.Select(u => u.Id).ToList();
-        var verificationStatuses = await _context.Handyman_Verifications
+        var verificationStatuses = await Context.Handyman_Verifications
             .Where(v => pagedUserIds.Contains(v.User_Id))
             .ToDictionaryAsync(v => v.User_Id, v => v.Status);
-    
+
         var mappingTasks = users.Select(u => 
         {
             var statusStr = verificationStatuses.GetValueOrDefault(u.Id);
-            
             return MapUserToDto(u, statusStr); 
         });
-    
-        return await Task.WhenAll(mappingTasks);
+
+        var mappedData = await Task.WhenAll(mappingTasks);
+
+        return new UserListResponse(mappedData, totalCount, request.Page, request.PageSize);
     }
 
     public async Task<object> GetUserByIdAsync(Guid id, bool searchByHandyman = false)
     {
         if (!searchByHandyman) {
-            var user = await _context.Users.FindAsync(id) 
+            var user = await Context.Users.FindAsync(id) 
                 ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
             
             string? statusStr = null;
             if (user.Role == UserRole.Handyman.ToDbString())
             {
-                statusStr = await _context.Handyman_Verifications
+                statusStr = await Context.Handyman_Verifications
                     .Where(v => v.User_Id == user.Id)
                     .Select(v => v.Status)
                     .FirstOrDefaultAsync();
@@ -120,7 +118,7 @@ public class AdminService : BaseService, IAdminService
             return await MapUserToDto(user);
         } else
         {
-            var user = await _context.Handyman_Verifications.FindAsync(id) 
+            var user = await Context.Handyman_Verifications.FindAsync(id) 
                 ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
             
             return MapPendingToDto(user);
@@ -132,7 +130,7 @@ public class AdminService : BaseService, IAdminService
         if (block && targetId == adminId)
             throw new HttpRequestException("Security Error: You cannot block your own account.", null, HttpStatusCode.BadRequest);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == targetId) 
+        var user = await Context.Users.FirstOrDefaultAsync(u => u.Id == targetId) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
 
         user.IsActive = !block;
@@ -141,40 +139,51 @@ public class AdminService : BaseService, IAdminService
         user.Blocked_By_User_Id = block ? adminId : null;
         user.TokenVersion++;
 
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
 
         if (block)
         {
-            _logger.LogInformation("User {UserId} blocked by Admin {AdminId}.", targetId, adminId);
+            Logger.LogInformation("User {UserId} blocked by Admin {AdminId}.", targetId, adminId);
             return await MapUserToDto(user);
         }
 
-        _logger.LogInformation("User {UserId} unblocked by Admin {AdminId}", targetId, adminId);
+        Logger.LogInformation("User {UserId} unblocked by Admin {AdminId}", targetId, adminId);
         return await MapUserToDto(user);
     }
 
-    public async Task<IEnumerable<HandymanVerificationDto>> GetPendingVerificationsAsync()
+    public async Task<HandymanVerificationListResponse> GetPendingVerificationsAsync(int page = 1, int pageSize = 1000)
     {
         var pendingStatus = VerificationStatus.Pending.ToDbString();
         
-        return await _context.Handyman_Verifications
+        var query = Context.Handyman_Verifications
             .Include(v => v.User)
-            .Where(v => v.Status == pendingStatus)
-            .Select(v => new HandymanVerificationDto(
-                v.Id, 
-                v.User_Id, 
-                v.User.Name, 
-                VerificationStatus.Pending.ToDbString(), 
-                v.IdentityCardURL,
-                v.SelfieImageURL,
-                v.Created_At_Utc,
-                v.Updated_At_Utc))
+            .Where(v => v.Status == pendingStatus);
+
+        var totalCount = await query.CountAsync();
+
+        var verifications = await query
+            .OrderByDescending(v => v.Created_At_Utc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
+
+        var data = verifications.Select(v => new HandymanVerificationDto(
+            v.Id, 
+            v.User_Id, 
+            v.User.Name, 
+            v.Status, 
+            GetPresignedUrl(v.IdentityCardURL),
+            GetPresignedUrl(v.SelfieImageURL),
+            v.Created_At_Utc,
+            v.Updated_At_Utc
+        ));
+
+        return new HandymanVerificationListResponse(data, totalCount, page, pageSize);
     }
 
     public async Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId)
     {
-        var verification = await _context.Handyman_Verifications
+        var verification = await Context.Handyman_Verifications
             .Include(v => v.User)
             .FirstOrDefaultAsync(v => v.Id == id) 
             ?? throw new HttpRequestException("Verification record not found.", null, HttpStatusCode.NotFound);
@@ -194,7 +203,7 @@ public class AdminService : BaseService, IAdminService
                     NotificationType.VerificationResult, 
                     approve ? "Your handyman account has been approved!" : $"Your handyman verification was rejected. Reason: {notes}");
 
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
 
         return MapPendingToDto(verification);
     }
@@ -203,7 +212,7 @@ public class AdminService : BaseService, IAdminService
     {
         var openStatus = JobStatus.Open.ToDbString();
         
-        var jobs = await _context.Jobs
+        var jobs = await Context.Jobs
             .Include(j => j.Posted_By_User)
             .Where(j => j.Is_Emergency && j.Status == openStatus)
             .ToListAsync();
@@ -213,17 +222,17 @@ public class AdminService : BaseService, IAdminService
 
     public async Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId)
     {
-        var job = await _context.Jobs.FindAsync(jobId) 
+        var job = await Context.Jobs.FindAsync(jobId) 
             ?? throw new HttpRequestException("Job not found.", null, HttpStatusCode.NotFound);
         
         job.Status = JobStatus.InProgress.ToDbString(); 
-        await _context.SaveChangesAsync();
-        _logger.LogInformation($"Job {jobId} force-assigned by Admin {adminId}", jobId, adminId);
+        await Context.SaveChangesAsync();
+        Logger.LogInformation($"Job {jobId} force-assigned by Admin {adminId}", jobId, adminId);
     }
 
     public async Task<IEnumerable<BidTransactionDto>> GetBidTransactionsAsync(string? eventType = null)
     {
-        var query = _context.Bid_Transactions.AsQueryable();
+        var query = Context.Bid_Transactions.AsQueryable();
         if (!string.IsNullOrEmpty(eventType)) 
             query = query.Where(t => t.Event_Type == eventType.ToLower());
 
@@ -234,7 +243,7 @@ public class AdminService : BaseService, IAdminService
 
     public async Task<BidTransactionDto> GetBidTransactionByIdAsync(Guid id)
     {
-        var transaction = await _context.Bid_Transactions.FindAsync(id);
+        var transaction = await Context.Bid_Transactions.FindAsync(id);
 
         if (transaction == null)
         {
@@ -253,7 +262,7 @@ public class AdminService : BaseService, IAdminService
 
     public async Task HandleBidActionAsync(Guid bidId, string actionType, string reason, Guid adminId)
     {
-        var bid = await _context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
+        var bid = await Context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
             ?? throw new HttpRequestException("Bid not found.", null, HttpStatusCode.NotFound);
 
         var normalizedActionType = actionType.Trim().ToLowerInvariant();
@@ -267,10 +276,10 @@ public class AdminService : BaseService, IAdminService
 
         if (eventTypeToStore == BidEventType.LockAdded.ToDbString())
         {
-            var existingLock = await _context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
+            var existingLock = await Context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
             if (existingLock == null)
             {
-                _context.Bid_Locks.Add(new Bid_Lock
+                Context.Bid_Locks.Add(new Bid_Lock
                 {
                     Bid_Id = bidId,
                     Locked_By_User_Id = adminId,
@@ -288,12 +297,12 @@ public class AdminService : BaseService, IAdminService
 
         if (eventTypeToStore == BidEventType.LockRemoved.ToDbString())
         {
-            var existingLock = await _context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
+            var existingLock = await Context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
             if (existingLock != null)
-                _context.Bid_Locks.Remove(existingLock);
+                Context.Bid_Locks.Remove(existingLock);
         }
 
-        _context.Bid_Transactions.Add(new Bid_Transaction {
+        Context.Bid_Transactions.Add(new Bid_Transaction {
             Id = Guid.NewGuid(), 
             Bid_Id = bidId, 
             Job_Id = bid.Job_Id, 
@@ -306,7 +315,7 @@ public class AdminService : BaseService, IAdminService
             Created_At_Utc = now
         });
 
-        await _context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
     }
 
     private static string ResolveBidEventType(string normalizedActionType, string normalizedReason)
@@ -328,7 +337,7 @@ public class AdminService : BaseService, IAdminService
 
     public async Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync()
     {
-        return await _context.Admin_Actions
+        return await Context.Admin_Actions
             .OrderByDescending(a => a.Created_At_Utc)
             .Select(a => new AdminActionDto(a.Id, a.Admin_User_Id, a.Action_Type, a.Target_Type, a.Target_Id, a.Reason, a.Created_At_Utc))
             .ToListAsync();

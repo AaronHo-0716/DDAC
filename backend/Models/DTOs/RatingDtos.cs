@@ -20,7 +20,7 @@ public record RatingDto(
 public record UserRatingSummaryDto(
     decimal AverageRating,
     int TotalRatings,
-    List<RatingDto> RecentRatings
+    List<RatingDto> Ratings
 );
 
 public record HandymanRatingReportDto(

@@ -5,9 +5,9 @@ namespace backend.Services;
 
 public interface IReportService
 {
-    Task<IEnumerable<UserReportDto>> GetAllReportsAsync(ReportStatus? status = null);
+    Task<ReportListResponse> GetAllReportsAsync(ReportStatus? status = null, int page = 1, int pageSize = 1000);
     Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId);
     Task ReviewReportAsync(Guid reportId, string adminNotes, Guid adminId);
     Task CreateReportAsync(CreateReportRequest request, Guid reporterId);
-    Task<IEnumerable<UserReportDto>> GetMyReportsAsync(Guid userId);
+    Task<ReportListResponse> GetMyReportsAsync(Guid userId, int page = 1, int pageSize = 1000);
 }

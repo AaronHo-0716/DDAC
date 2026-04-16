@@ -23,3 +23,10 @@ public record UserReportDto(
     DateTime? ReviewAtUtc,
     string? AdminNotes = null
 );
+
+public record ReportListResponse(
+    List<UserReportDto> Data,
+    int TotalCount,
+    int Page,
+    int PageSize
+);

@@ -12,6 +12,9 @@ public record NotificationDto(
 );
 
 public record NotificationListResponse(
-    List<NotificationDto> Notifications,
-    int UnreadCount
+    List<NotificationDto> Data,
+    int UnreadCount, 
+    int TotalCount, 
+    int Page,
+    int PageSize
 );

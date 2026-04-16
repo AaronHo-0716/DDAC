@@ -21,6 +21,13 @@ interface RawCreateReportResponse {
   message?: string | null;
 }
 
+interface ReportListResponse {
+  data: RawUserReportDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
 function normalizeReportStatus(value?: string | null): ReportStatus {
   const normalized = (value ?? "pending").toLowerCase();
   if (normalized === "reviewed") return "reviewed";
@@ -52,9 +59,15 @@ export const reportsService = {
     return response.message ?? "Report submitted successfully.";
   },
 
-  async getMyReports(): Promise<UserReport[]> {
-    const response = await apiClient.get<RawUserReportDto[]>("/report/me");
-    if (!Array.isArray(response)) return [];
-    return response.map(normalizeReport);
+  async getMyReports(page = 1, pageSize = 1000): Promise<UserReport[]> {
+    const response = await apiClient.get<ReportListResponse>(
+      `/report/me?page=${page}&pageSize=${pageSize}`
+    );
+
+    if (!response || !Array.isArray(response.data)) {
+      return [];
+    }
+
+    return response.data.map(normalizeReport);
   },
 };

@@ -11,11 +11,11 @@ namespace backend.Controllers;
 public class NotificationController(INotificationService notificationService) : BaseController
 {
     [HttpGet]
-    public async Task<ActionResult<NotificationListResponse>> GetNotifications()
+    public async Task<ActionResult<NotificationListResponse>> GetNotifications([FromBody] [FromQuery] int page = 1, int pageSize = 1000)
     {
         var userId = await GetCurrentUserIdAsync();
-
-        return Ok(await notificationService.GetUserNotificationsAsync(userId));
+    
+        return Ok(await notificationService.GetUserNotificationsAsync(userId, page, pageSize));
     }
 
     [HttpPatch("{id}/read")]

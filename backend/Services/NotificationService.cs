@@ -9,18 +9,30 @@ namespace backend.Services;
 
 public class NotificationService( NeighbourHelpDbContext context, ILogger<NotificationService> logger) : INotificationService
 {
-    public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId)
+    public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {
-        var notifications = await context.Notifications
-            .Where(n => n.User_Id == userId)
-            .OrderByDescending(n => n.Created_At_Utc)
-            .ToListAsync();
+        var baseQuery = context.Notifications
+            .Where(n => n.User_Id == userId);
 
-        var unreadCount = notifications.Count(n => !n.Is_Read);
+        var totalCount = await baseQuery.CountAsync();
+
+        var unreadCount = await baseQuery.CountAsync(n => !n.Is_Read);
+
+        var notifications = await baseQuery
+            .OrderByDescending(n => n.Created_At_Utc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
 
         var dtos = notifications.Select(MapToDto).ToList();
 
-        return new NotificationListResponse(dtos, unreadCount);
+        return new NotificationListResponse(
+            Data: dtos,
+            UnreadCount: unreadCount,
+            TotalCount: totalCount,
+            Page: page,
+            PageSize: pageSize
+        );
     }
 
     public async Task MarkAsReadAsync(Guid notificationId, Guid userId)

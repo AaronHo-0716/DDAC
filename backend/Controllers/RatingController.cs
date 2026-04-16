@@ -26,7 +26,7 @@ public class RatingController(IRatingService ratingService) : BaseController
 
     [HttpGet("my")]
     [Authorize(Roles = "admin,handyman")]
-    public async Task<ActionResult<UserRatingSummaryDto>> GetRatings([FromQuery] int page = 1, int pageSize = 10)
+    public async Task<ActionResult<UserRatingSummaryDto>> GetRatings([FromQuery] int page = 1, int pageSize = 1000)
     {
         try
         {
@@ -39,12 +39,12 @@ public class RatingController(IRatingService ratingService) : BaseController
         }
     }
 
-    [HttpGet("{userId}")]
-    public async Task<ActionResult<UserRatingSummaryDto>> GetRatingsByUserId([FromQuery] int page = 1, int pageSize = 10)
+    [HttpGet("{id}")]
+    public async Task<ActionResult<UserRatingSummaryDto>> GetRatingsByUserId(Guid id, [FromQuery] int page = 1, int pageSize = 1000)
     {
         try
         {
-            var result = await ratingService.GetUserRatingsAsync(userId, page, pageSize);
+            var result = await ratingService.GetUserRatingsAsync(id, page, pageSize);
             return Ok(result);
         }
         catch (HttpRequestException ex)
