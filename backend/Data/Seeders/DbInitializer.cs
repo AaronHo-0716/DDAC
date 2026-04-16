@@ -1,3 +1,4 @@
+using backend.Constants;
 using backend.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,15 +10,15 @@ public static class DbInitializer
     {
         await context.Database.MigrateAsync();
 
-        if (!await context.Users.AnyAsync(u => u.Role == "admin"))
+        if (!await context.Users.AnyAsync(u => u.Role == UserRole.Admin.ToDbString()))
         {
             var admin = new User
             {
                 Id = Guid.NewGuid(),
                 Name = "System Admin",
-                Email = "admin@neighborhelp.test",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
-                Role = "admin",
+                Email = "admin@nh.test",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("a"),
+                Role = UserRole.Admin.ToDbString(),
                 IsActive = true,
                 TokenVersion = 1
             };

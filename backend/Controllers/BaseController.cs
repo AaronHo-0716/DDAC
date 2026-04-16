@@ -22,6 +22,12 @@ public abstract class BaseController : ControllerBase
             .FirstOrDefaultAsync();
     }
 
+    protected string GetCurrentUserRole()
+    {
+        return User.FindFirstValue(ClaimTypes.Role) ?? 
+            throw new HttpRequestException("Unauthorized: invalid authentication token.", null, HttpStatusCode.Unauthorized);
+    }
+
     protected ObjectResult HandleError(HttpRequestException ex)
     {
         var statusCode = (int)(ex.StatusCode ?? HttpStatusCode.InternalServerError);

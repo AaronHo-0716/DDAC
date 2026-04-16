@@ -22,7 +22,7 @@ public class BidController(IBidService bidService) : BaseController
     [HttpPatch("{bidId}/accept")]
     public async Task<ActionResult<BidDto>> AcceptBid(Guid bidId)
     {
-        try { return Ok(await bidService.AcceptBidAsync(bidId, await GetCurrentUserIdAsync(), GetUserRole())); }
+        try { return Ok(await bidService.AcceptBidAsync(bidId, await GetCurrentUserIdAsync(), GetCurrentUserRole())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -30,7 +30,7 @@ public class BidController(IBidService bidService) : BaseController
     [HttpPatch("{bidId}/reject")]
     public async Task<ActionResult<BidDto>> RejectBid(Guid bidId)
     {
-        try { return Ok(await bidService.RejectBidAsync(bidId, await GetCurrentUserIdAsync(), GetUserRole())); }
+        try { return Ok(await bidService.RejectBidAsync(bidId, await GetCurrentUserIdAsync(), GetCurrentUserRole())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -45,6 +45,4 @@ public class BidController(IBidService bidService) : BaseController
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
-
-    private string GetUserRole() => User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "guest";
 }

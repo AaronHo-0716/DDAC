@@ -199,7 +199,7 @@ public class AdminService : BaseService, IAdminService
         verification.Notes = notes;
         verification.Updated_At_Utc = DateTime.UtcNow;
 
-        CreateNotification(verification.User_Id, 
+        await CreateNotification(verification.User_Id, 
                     NotificationType.VerificationResult, 
                     approve ? "Your handyman account has been approved!" : $"Your handyman verification was rejected. Reason: {notes}");
 
@@ -217,7 +217,7 @@ public class AdminService : BaseService, IAdminService
             .Where(j => j.Is_Emergency && j.Status == openStatus)
             .ToListAsync();
 
-        return jobs.Select(MapJobToDto);
+        return (IEnumerable<JobDto>)jobs.Select(MapJobToDto);
     }
 
     public async Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId)

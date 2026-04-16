@@ -4,9 +4,11 @@ using Amazon.S3.Model;
 using Amazon.S3.Util;
 using backend.Constants;
 using backend.Data;
+using backend.Hubs;
 using backend.Models.Config;
 using backend.Models.DTOs;
 using backend.Models.Entities;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -16,8 +18,10 @@ public class S3StorageService(
     NeighbourHelpDbContext context,
     ILogger<S3StorageService> logger,
     IAmazonS3 s3Client,
-    IOptions<StorageOptions> storageOptions) 
-    : BaseService(context, logger, s3Client, storageOptions), IStorageService
+    IOptions<StorageOptions> storageOptions,
+    IHubContext<NotificationHub> notificationHub,
+    IHubContext<ChatHub> chatHub) 
+    : BaseService(context, logger, s3Client, storageOptions, notificationHub, chatHub), IStorageService
 {
     public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct)
     {
@@ -94,7 +98,56 @@ public class S3StorageService(
 
         await Context.SaveChangesAsync(ct);
 
-        return MapJobToDto(job);
+        return await MapJobToDto(job);
+    }
+
+    public async Task<MessageDto> SendChatAttachmentAsync(Guid userId, UploadImageRequest request, CancellationToken ct)
+    {
+        if (!request.TargetId.HasValue)
+            throw new HttpRequestException("Target Conversation ID is required for chat attachments.", null, HttpStatusCode.BadRequest);
+    
+        var conversation = await Context.Conversations
+            .Include(c => c.Participants)
+            .FirstOrDefaultAsync(c => c.Id == request.TargetId, ct)
+            ?? throw new HttpRequestException("Conversation not found.", null, HttpStatusCode.NotFound);
+
+        if (conversation.Status == ConversationStatus.Locked.ToDbString())
+            throw new HttpRequestException("Conversation is locked.", null, HttpStatusCode.BadRequest);
+
+        if (!conversation.Participants.Any(p => p.User_Id == userId))
+            throw new HttpRequestException("Access denied: You are not a participant.", null, HttpStatusCode.Forbidden);
+
+        var prefix = $"{UploadTypes.ChatAttachmentImage.ToPrefixString()}/{request.TargetId}";
+        var upload = await UploadImageAsync(request.File, prefix, ct);
+
+        var message = new Message
+        {
+            Id = Guid.NewGuid(),
+            Conversation_Id = request.TargetId.Value,
+            Sender_User_Id = userId,
+            Message_Type = MessageType.Image.ToDbString(),
+            Body_Text = upload.ObjectKey, 
+            Created_At_Utc = DateTime.UtcNow
+        };
+
+        Context.Messages.Add(message);
+        
+        conversation.Last_Message_At_Utc = DateTime.UtcNow;
+
+        await Context.Conversation_Participants
+            .Where(p => p.Conversation_Id == request.TargetId && p.User_Id != userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Unread_Count, p => p.Unread_Count + 1), ct);
+
+        await Context.SaveChangesAsync(ct);
+
+        var dto = MapMessageToDto(message);
+
+        var targetIds = conversation.Participants.Select(p => p.User_Id.ToString()).ToList();
+        
+        await ChatHubContext.Clients.Groups(targetIds)
+            .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = request.TargetId, message = dto });
+
+        return dto;
     }
 
     private async Task<UploadImageResponse> UploadImageAsync(IFormFile file, string prefix, CancellationToken ct)

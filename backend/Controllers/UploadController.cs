@@ -29,6 +29,9 @@ public class UploadController(IStorageService storageService) : BaseController
 
                 UploadTypes.IdentityCardImage => 
                     await storageService.UpdateIdentityCardAsync(userId, request.File, ct),
+                
+                UploadTypes.ChatAttachmentImage => 
+                    await storageService.SendChatAttachmentAsync(userId, request, ct),
 
                 _ => throw new HttpRequestException("Invalid upload type provided.", null, System.Net.HttpStatusCode.BadRequest)
             };
@@ -39,5 +42,5 @@ public class UploadController(IStorageService storageService) : BaseController
         {
             return HandleError(ex);
         }
-    }
+    }    
 }

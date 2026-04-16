@@ -1,6 +1,6 @@
 namespace backend.Constants;
 
-public enum UploadTypes { JobImage, AvatarImage, IdentityCardImage }
+public enum UploadTypes { JobImage, AvatarImage, IdentityCardImage, ChatAttachmentImage }
 
 public static class UploadConstants
 {
@@ -9,6 +9,7 @@ public static class UploadConstants
         UploadTypes.JobImage => "job-images",
         UploadTypes.AvatarImage => "avatars",
         UploadTypes.IdentityCardImage => "identity-cards",
+        UploadTypes.ChatAttachmentImage => "chat-attachment",
         _ => t.ToString().ToLower()
     };
 }

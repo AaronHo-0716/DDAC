@@ -2,20 +2,29 @@ using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using backend.Constants;
+using backend.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
+using Amazon.S3;
+using Microsoft.Extensions.Options;
+using backend.Models.Config;
 
 namespace backend.Services;
 
-public class NotificationService( NeighbourHelpDbContext context, ILogger<NotificationService> logger) : INotificationService
+public class NotificationService(
+    NeighbourHelpDbContext context, 
+    ILogger<NotificationService> logger,
+    IAmazonS3 s3,
+    IOptions<StorageOptions> options,
+    IHubContext<NotificationHub> notificationHub)
+    : BaseService(context, logger, s3, options, notificationHub), INotificationService
 {
     public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {
-        var baseQuery = context.Notifications
-            .Where(n => n.User_Id == userId);
+        var baseQuery = Context.Notifications.Where(n => n.User_Id == userId);
 
         var totalCount = await baseQuery.CountAsync();
-
         var unreadCount = await baseQuery.CountAsync(n => !n.Is_Read);
 
         var notifications = await baseQuery
@@ -24,10 +33,8 @@ public class NotificationService( NeighbourHelpDbContext context, ILogger<Notifi
             .Take(pageSize)
             .ToListAsync();
 
-        var dtos = notifications.Select(MapToDto).ToList();
-
         return new NotificationListResponse(
-            Data: dtos,
+            Data: notifications.Select(MapNotificationToDto).ToList(),
             UnreadCount: unreadCount,
             TotalCount: totalCount,
             Page: page,
@@ -37,41 +44,25 @@ public class NotificationService( NeighbourHelpDbContext context, ILogger<Notifi
 
     public async Task MarkAsReadAsync(Guid notificationId, Guid userId)
     {
-        var notification = await context.Notifications
-            .FirstOrDefaultAsync(n => n.Id == notificationId && n.User_Id == userId);
-
-        if (notification == null)
-        {
-            logger.LogWarning("MarkAsRead failed: Notification {NotificationId} not found for User {UserId}", notificationId, userId);
-            throw new HttpRequestException("Notification not found.", null, HttpStatusCode.NotFound);
-        }
+        var notification = await Context.Notifications
+            .FirstOrDefaultAsync(n => n.Id == notificationId && n.User_Id == userId)
+            ?? throw new HttpRequestException("Notification not found.", null, HttpStatusCode.NotFound);
 
         if (notification.Is_Read) return;
 
         notification.Is_Read = true;
-        await context.SaveChangesAsync();
+        await Context.SaveChangesAsync();
         
-        logger.LogInformation("Notification {NotificationId} marked as read by User {UserId}", notificationId, userId);
+        await NotificationHubContext.Clients.Group($"{ClientGroupType.Notify_}{userId}").SendAsync(HubMethod.NotificationMarkedRead.ToString(), notificationId);
     }
 
     public async Task MarkAllAsReadAsync(Guid userId)
     {
-        await context.Notifications
+        await Context.Notifications
             .Where(n => n.User_Id == userId && !n.Is_Read)
             .ExecuteUpdateAsync(setters => setters.SetProperty(n => n.Is_Read, true));
 
-        logger.LogInformation("All notifications marked as read for User {UserId}", userId);
+        await NotificationHubContext.Clients.Group($"{ClientGroupType.Notify_}{userId}").SendAsync(HubMethod.AllNotificationsMarkedRead.ToString());
     }
 
-    private static NotificationDto MapToDto(Notification entity)
-    {
-        return new NotificationDto(
-            Id: entity.Id,
-            Type: NotificationConstants.ParseFromDb(entity.Type).ToDbString(),
-            Message: entity.Message,
-            RelatedJobId: entity.Related_Job_Id,
-            IsRead: entity.Is_Read,
-            CreatedAtUtc: entity.Created_At_Utc
-        );
-    }
 }

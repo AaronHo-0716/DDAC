@@ -89,5 +89,4 @@ public class JobController(IJobService jobService, IBidService bidService) : Bas
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
-
 }

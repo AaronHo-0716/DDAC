@@ -81,7 +81,7 @@ public class BidService : BaseService, IBidService
         var metadata = JsonSerializer.Serialize(new { price = request.Price, estimated_arrival = request.EstimatedArrival });
         AddBidTransaction(bid.Id, jobId, userId, job.Posted_By_User_Id, BidEventType.Created, userId, "Bid created by handyman", metadata);
 
-        CreateNotification(job.Posted_By_User_Id, NotificationType.BidReceived, $"{user.Name} has placed a bid of ${request.Price}", jobId);
+        await CreateNotification(job.Posted_By_User_Id, NotificationType.BidReceived, $"{user.Name} has placed a bid of ${request.Price}", jobId);
 
         await Context.SaveChangesAsync();
         Logger.LogInformation("Bid {BidId} created for Job {JobId} by Handyman {UserId}", bid.Id, jobId, userId);
@@ -126,14 +126,14 @@ public class BidService : BaseService, IBidService
 
                 var rejectedMetadata = JsonSerializer.Serialize(new { accepted_bid_id = bid.Id });
                 AddBidTransaction(otherBid.Id, bid.Job_Id, otherBid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Rejected due to another bid being accepted", rejectedMetadata);
-                CreateNotification(otherBid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was not accepted", bid.Job_Id);
+                await CreateNotification(otherBid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was not accepted", bid.Job_Id);
             }
 
             bid.Job.Status = JobStatus.InProgress.ToDbString();
             bid.Job.Updated_At_Utc = DateTime.UtcNow;
 
             AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Accepted, userId, "Bid accepted by job owner");
-            CreateNotification(bid.Handyman_User_Id, NotificationType.BidAccepted, $"Your bid for '{bid.Job.Title}' has been accepted!", bid.Job_Id);
+            await CreateNotification(bid.Handyman_User_Id, NotificationType.BidAccepted, $"Your bid for '{bid.Job.Title}' has been accepted!", bid.Job_Id);
 
             await Context.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -169,10 +169,10 @@ public class BidService : BaseService, IBidService
         bid.Updated_At_Utc = DateTime.UtcNow;
 
         AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Bid rejected by job owner");
-        CreateNotification(bid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was rejected", bid.Job_Id);
+        await CreateNotification(bid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was rejected", bid.Job_Id);
 
         await Context.SaveChangesAsync();
-        return MapBidToDto(bid);
+        return await MapBidToDto(bid);
     }
 
     public async Task DeleteBidAsync(Guid bidId, Guid userId)
@@ -202,7 +202,16 @@ public class BidService : BaseService, IBidService
             .Include(b => b.Job)
             .ToListAsync();
 
-        return new BidListResponse(bids.Select(MapBidToDto).ToList(), page, pageSize, totalCount);
+        var mappingTasks = bids.Select(MapBidToDto);
+
+        var mappedBids = await Task.WhenAll(mappingTasks);
+
+        return new BidListResponse(
+            Bids: mappedBids.ToList(),
+            Page: page,
+            PageSize: pageSize,
+            TotalCount: totalCount
+        );
     }
 
     private void AddBidTransaction(Guid bidId, Guid jobId, Guid handymanId, Guid homeownerId, BidEventType type, Guid actorId, string reason, string metadata = "{}")
@@ -228,7 +237,7 @@ public class BidService : BaseService, IBidService
             .Include(b => b.Handyman_User)
             .Include(b => b.Job)
             .FirstOrDefaultAsync(b => b.Id == bidId);
-        return MapBidToDto(bid!);
+        return await MapBidToDto(bid!);
     }
 
     private void ValidateHandymanRole(string role)

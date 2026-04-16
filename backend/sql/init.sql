@@ -220,87 +220,65 @@ CREATE INDEX IF NOT EXISTS ix_bid_tx_event_type_created ON bid_transactions(even
 CREATE INDEX IF NOT EXISTS ix_admin_actions_actor_created ON admin_actions(admin_user_id, created_at_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_admin_actions_target ON admin_actions(target_type, target_id, created_at_utc DESC);
 
+-- Main Chat Room
 CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  type VARCHAR(50) NOT NULL,
+  type VARCHAR(50) NOT NULL, -- 'job_chat', 'admin_support'
   related_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
   related_bid_id UUID REFERENCES bids(id) ON DELETE SET NULL,
   created_by_user_id UUID NOT NULL REFERENCES users(id),
   status VARCHAR(50) NOT NULL DEFAULT 'active',
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_message_at_utc TIMESTAMPTZ,
-  closed_at_utc TIMESTAMPTZ,
-  CONSTRAINT chk_conversations_job_chat_requires_job
-    CHECK (type <> 'job_chat' OR related_job_id IS NOT NULL)
+  last_message_at_utc TIMESTAMPTZ
 );
 
+-- Messages
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_user_id UUID NOT NULL REFERENCES users(id),
-  message_type VARCHAR(50) NOT NULL DEFAULT 'text',
-  body_text TEXT NOT NULL,
-  metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  is_edited BOOLEAN NOT NULL DEFAULT FALSE,
-  edited_at_utc TIMESTAMPTZ,
-  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-  deleted_at_utc TIMESTAMPTZ,
-  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  client_message_id VARCHAR(100)
+  message_type VARCHAR(50) NOT NULL DEFAULT 'text', -- 'text', 'image'
+  body_text TEXT NOT NULL, -- Stores text OR S3 ObjectKey
+  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_conversation_client_message
-  ON messages(conversation_id, client_message_id)
-  WHERE client_message_id IS NOT NULL;
-
+-- Mapping Users to Chats
 CREATE TABLE IF NOT EXISTS conversation_participants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id),
   participant_role VARCHAR(50) NOT NULL,
-  joined_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  left_at_utc TIMESTAMPTZ,
-  is_muted BOOLEAN NOT NULL DEFAULT FALSE,
-  muted_until_utc TIMESTAMPTZ,
   unread_count INT NOT NULL DEFAULT 0,
-  last_read_message_id UUID,
-  CONSTRAINT uq_conversation_participant UNIQUE (conversation_id, user_id),
-  CONSTRAINT chk_conversation_participants_unread_nonnegative CHECK (unread_count >= 0),
-  CONSTRAINT fk_conversation_participants_last_read_message FOREIGN KEY (last_read_message_id) REFERENCES messages(id) ON DELETE SET NULL
-
+  joined_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_conversation_participant UNIQUE (conversation_id, user_id)
 );
 
-CREATE TABLE IF NOT EXISTS message_moderation_actions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
-  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  admin_user_id UUID NOT NULL REFERENCES users(id),
-  action_type VARCHAR(50) NOT NULL,
-  reason TEXT,
-  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- 1. Create the Function to handle new message logic
+CREATE OR REPLACE FUNCTION handle_new_message_stats()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update the last_message_at_utc in the parent conversation
+    UPDATE conversations
+    SET last_message_at_utc = NEW.created_at_utc
+    WHERE id = NEW.conversation_id;
 
-CREATE INDEX IF NOT EXISTS ix_conversations_type_status_last_message
-  ON conversations(type, status, last_message_at_utc DESC NULLS LAST);
+    -- Increment unread_count for all participants EXCEPT the sender
+    UPDATE conversation_participants
+    SET unread_count = unread_count + 1
+    WHERE conversation_id = NEW.conversation_id
+      AND user_id <> NEW.sender_user_id;
 
-CREATE INDEX IF NOT EXISTS ix_conversation_participants_user_unread
-  ON conversation_participants(user_id, unread_count DESC);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE INDEX IF NOT EXISTS ix_conversation_participants_conversation
-  ON conversation_participants(conversation_id);
+-- 2. Create the Trigger
+DROP TRIGGER IF EXISTS tr_after_message_insert ON messages;
 
-CREATE INDEX IF NOT EXISTS ix_messages_conversation_created
-  ON messages(conversation_id, created_at_utc DESC);
-
-CREATE INDEX IF NOT EXISTS ix_messages_sender_created
-  ON messages(sender_user_id, created_at_utc DESC);
-
-CREATE INDEX IF NOT EXISTS ix_message_moderation_actions_conversation_created
-  ON message_moderation_actions(conversation_id, created_at_utc DESC);
-
-CREATE INDEX IF NOT EXISTS ix_message_moderation_actions_message_created
-  ON message_moderation_actions(message_id, created_at_utc DESC);
+CREATE TRIGGER tr_after_message_insert
+AFTER INSERT ON messages
+FOR EACH ROW
+EXECUTE FUNCTION handle_new_message_stats();
 
 CREATE TABLE IF NOT EXISTS user_ratings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

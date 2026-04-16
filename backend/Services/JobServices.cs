@@ -54,12 +54,9 @@ public class JobService : BaseService, IJobService
             .Take(filter.PageSize)
             .ToListAsync();
 
-        return new JobListResponse(
-            jobs.Select(MapJobToDto).ToList(),
-            filter.Page,
-            filter.PageSize,
-            totalCount
-        );
+        var mappedJobs = await Task.WhenAll(jobs.Select(MapJobToDto));
+
+        return new JobListResponse( mappedJobs.ToList(), filter.Page, filter.PageSize, totalCount );
     }
 
     public async Task<JobListResponse> AdminGetJobsAsync(JobFilterQuery filter, Guid? userId)
@@ -98,12 +95,9 @@ public class JobService : BaseService, IJobService
             .Take(filter.PageSize)
             .ToListAsync();
 
-        return new JobListResponse(
-            jobs.Select(MapJobToDto).ToList(),
-            filter.Page,
-            filter.PageSize,
-            totalCount
-        );
+        var mappedJobs = await Task.WhenAll(jobs.Select(MapJobToDto));
+
+        return new JobListResponse( mappedJobs.ToList(), filter.Page, filter.PageSize, totalCount );
     }
 
     public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 1000)
@@ -119,7 +113,9 @@ public class JobService : BaseService, IJobService
             .Take(pageSize)
             .ToListAsync();
 
-        return new JobListResponse(jobs.Select(MapJobToDto).ToList(), page, pageSize, totalCount);
+        var mappedJobs = await Task.WhenAll(jobs.Select(MapJobToDto));
+
+        return new JobListResponse( mappedJobs.ToList(), page, pageSize, totalCount );
     }
 
     public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId)
@@ -148,7 +144,7 @@ public class JobService : BaseService, IJobService
                 throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
         }
 
-        return MapJobToDto(job);
+        return await MapJobToDto(job);
     }
 
     public async Task<JobDto> CreateJobAsync(CreateJobRequest request, Guid userId)
@@ -224,7 +220,7 @@ public class JobService : BaseService, IJobService
             throw new HttpRequestException("You can only complete your own jobs", null, HttpStatusCode.Forbidden);
 
         if (job.Status == JobStatus.Completed.ToDbString())
-            return MapJobToDto(job);
+            return await MapJobToDto(job);
 
         if (job.Status != JobStatus.InProgress.ToDbString())
             throw new HttpRequestException("Only in-progress jobs can be completed", null, HttpStatusCode.BadRequest);
@@ -235,7 +231,7 @@ public class JobService : BaseService, IJobService
         await Context.SaveChangesAsync();
         Logger.LogInformation("Job {JobId} marked as completed by User {UserId}", jobId, userId);
 
-        return MapJobToDto(job);
+        return await MapJobToDto(job);
     }
 
     public async Task DeleteJobAsync(Guid jobId, Guid userId)
@@ -267,7 +263,7 @@ public class JobService : BaseService, IJobService
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
             .FirstAsync(j => j.Id == jobId);
-        return MapJobToDto(job);
+        return await MapJobToDto(job);
     }
 
 }

@@ -7,6 +7,8 @@ using Amazon.S3.Model;
 using backend.Models.Config;
 using Amazon.S3;
 using Microsoft.Extensions.Options;
+using backend.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace backend.Services;
 
@@ -16,13 +18,23 @@ public abstract class BaseService
     protected readonly ILogger Logger;
     protected readonly IAmazonS3? S3Client;
     protected readonly S3StorageOptions? StorageOptions;
+    protected readonly IHubContext<NotificationHub>? NotificationHubContext;
+    protected readonly IHubContext<ChatHub>? ChatHubContext;
 
-    protected BaseService(NeighbourHelpDbContext context, ILogger logger, IAmazonS3? s3Client = null, IOptions<StorageOptions>? storageOptions = null)
+    protected BaseService(
+        NeighbourHelpDbContext context, 
+        ILogger logger, 
+        IAmazonS3? s3Client = null, 
+        IOptions<StorageOptions>? storageOptions = null,
+        IHubContext<NotificationHub>? notificationHub = null,
+        IHubContext<ChatHub>? chatHub = null)
     {
         Context = context;
         Logger = logger;
+        NotificationHubContext = notificationHub; 
         S3Client = s3Client;
         StorageOptions = storageOptions?.Value?.S3;
+        ChatHubContext = chatHub;
     }
 
     protected static bool IsValidEmail(string email)
@@ -45,39 +57,26 @@ public abstract class BaseService
             Expires = DateTime.UtcNow.AddMinutes(expiryMinutes)
         };
 
-        // 1. Generate the raw URL (will point to http://localstack:4566)
         string url = S3Client.GetPreSignedURL(request);
 
-        // 2. Real-World Logic: If a PublicBaseUrl is defined, swap the hosts
         if (!string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl))
         {
             var internalUri = new Uri(url);
             var publicUri = new Uri(StorageOptions.PublicBaseUrl);
-
-            // Replace the protocol, host, and port with the public-facing ones
             var builder = new UriBuilder(internalUri)
             {
-                Scheme = publicUri.Scheme,
-                Host = publicUri.Host,
-                Port = publicUri.Port
+                Scheme = publicUri.Scheme, Host = publicUri.Host, Port = publicUri.Port
             };
-
             url = builder.ToString();
         }
-
         return url;
     }
+
     protected async Task<UserDto> MapUserToDto(User user, string? statusOverride = null)
     {
-        if (!Enum.TryParse<UserRole>(user.Role, true, out var roleEnum))
-        {
-            roleEnum = UserRole.Homeowner;
-        }
+        Enum.TryParse<UserRole>(user.Role, true, out var roleEnum);
 
-        // Use the override if provided, otherwise fetch from DB
         string? verificationStatus = statusOverride;
-
-        // ONLY query the database if we don't have an override and the user is a handyman
         if (verificationStatus == null && roleEnum == UserRole.Handyman)
         {
             verificationStatus = await Context.Handyman_Verifications
@@ -103,10 +102,9 @@ public abstract class BaseService
         );
     }
 
-    // Standard: One notification for one user
-    protected void CreateNotification(Guid targetId, NotificationType type, string message, Guid? relatedJobId = null)
+    protected async Task CreateNotification(Guid targetId, NotificationType type, string message, Guid? relatedJobId = null)
     {
-        Context.Notifications.Add(new Notification
+        var n = new Notification
         {
             Id = Guid.NewGuid(),
             User_Id = targetId,
@@ -115,10 +113,11 @@ public abstract class BaseService
             Related_Job_Id = relatedJobId,
             Is_Read = false,
             Created_At_Utc = DateTime.UtcNow
-        });
+        };
+        Context.Notifications.Add(n);
+        await NotificationHubContext.Clients.Group($"{ClientGroupType.Notify_}{targetId}").SendAsync(HubMethod.ReceiveNotification.ToString(), MapNotificationToDto(n));
     }
 
-    // Optimized: Same notification for many users (Admins, etc.)
     protected async Task CreateNotifications(NotificationType type, string message, UserRole targetRole = UserRole.Admin, Guid? relatedJobId = null)
     {
         var userIds = await Context.Users
@@ -135,18 +134,51 @@ public abstract class BaseService
             Related_Job_Id = relatedJobId,
             Is_Read = false,
             Created_At_Utc = DateTime.UtcNow
-        });
+        }).ToList();
 
         Context.Notifications.AddRange(notifications);
+
+        var broadcastDto = new NotificationDto(
+            Id: Guid.Empty, 
+            Type: type.ToDbString(),
+            Message: message,
+            RelatedJobId: relatedJobId,
+            IsRead: false,
+            CreatedAtUtc: DateTime.UtcNow
+        );
+
+        await NotificationHubContext.Clients
+            .Group($"{ClientGroupType.Notify_}{targetRole}") 
+            .SendAsync(HubMethod.ReceiveNotification.ToString(), broadcastDto);
+                
     }
 
-    protected JobDto MapJobToDto(Job job)
+    protected MessageDto MapMessageToDto(Message m) => new(
+        m.Id, 
+        m.Sender_User_Id, 
+        Enum.Parse<MessageType>(m.Message_Type, true),
+        m.Message_Type == MessageType.Image.ToDbString() ? GetPresignedUrl(m.Body_Text) : m.Body_Text,
+        m.Created_At_Utc
+    );
+
+    protected NotificationDto MapNotificationToDto(Notification entity)
     {
-        var bidCount = Context.Bids.Count(b => b.Job_Id == job.Id);
+        return new NotificationDto(
+            entity.Id,
+            NotificationConstants.ParseFromDb(entity.Type).ToDbString(),
+            entity.Message,
+            entity.Related_Job_Id,
+            entity.Is_Read,
+            entity.Created_At_Utc
+        );
+    }
+    
+    protected async Task<JobDto> MapJobToDto(Job job)
+    {
+        var bidCount = await Context.Bids.CountAsync(b => b.Job_Id == job.Id);
 
         if (!Enum.TryParse<UserRole>(job.Posted_By_User.Role, true, out var roleEnum))
             roleEnum = UserRole.Homeowner;
-        // Fallback to Homeowner if the role in DB is invalid or empty
 
         return new JobDto(
             Id: job.Id,
@@ -159,17 +191,7 @@ public abstract class BaseService
             Budget: job.Budget,
             Status: JobConstants.ParseFromDb(job.Status).ToDbString(),
             IsEmergency: job.Is_Emergency,
-            PostedBy: new UserDto(
-                Id: job.Posted_By_User.Id,
-                Name: job.Posted_By_User.Name,
-                Email: job.Posted_By_User.Email,
-                Role: roleEnum.ToDbString(),
-                AvatarUrl: GetPresignedUrl(job.Posted_By_User.AvatarUrl),
-                Rating: job.Posted_By_User.Rating,
-                CreatedAt: job.Posted_By_User.CreatedAtUtc,
-                IsActive: true,
-                Verification: VerificationStatus.Approved.ToDbString()
-            ),
+            PostedBy: await MapUserToDto(job.Posted_By_User), 
             CreatedAt: job.Created_At_Utc,
             UpdatedAt: job.Updated_At_Utc,
             BidCount: bidCount,
@@ -177,25 +199,13 @@ public abstract class BaseService
         );
     }
 
-    protected BidDto MapBidToDto(Bid bid)
+    protected async Task<BidDto> MapBidToDto(Bid bid)
     {
-        Enum.TryParse<UserRole>(bid.Handyman_User.Role, true, out var roleEnum);
-
         return new BidDto(
             Id: bid.Id,
             JobId: bid.Job_Id,
             JobName: bid.Job.Title,
-            Handyman: new UserDto(
-                Id: bid.Handyman_User.Id,
-                Name: bid.Handyman_User.Name,
-                Email: bid.Handyman_User.Email,
-                Role: roleEnum.ToDbString(),
-                AvatarUrl: GetPresignedUrl(bid.Handyman_User.AvatarUrl),
-                Rating: bid.Handyman_User.Rating,
-                CreatedAt: bid.Handyman_User.CreatedAtUtc,
-                IsActive: bid.Handyman_User.IsActive,
-                Verification: VerificationStatus.Approved.ToDbString()
-            ),
+            Handyman: await MapUserToDto(bid.Handyman_User), 
             Price: bid.Price,
             EstimatedArrival: bid.Estimated_Arrival_Utc,
             Message: bid.Message,
@@ -213,8 +223,8 @@ public abstract class BaseService
                 handyman.User_Id,
                 handyman.User.Name,
                 handyman.Status,
-                handyman.IdentityCardURL,
-                handyman.SelfieImageURL,
+                GetPresignedUrl(handyman.IdentityCardURL),
+                GetPresignedUrl(handyman.SelfieImageURL),
                 handyman.Created_At_Utc,
                 handyman.Updated_At_Utc
         );

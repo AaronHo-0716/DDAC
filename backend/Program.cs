@@ -7,6 +7,7 @@ using backend.Data.Seeders;
 using backend.Middleware;
 using backend.Models.Config;
 using backend.Services;
+using backend.Hubs; 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +15,12 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Threading.RateLimiting;
+using StackExchange.Redis; 
+using System.IdentityModel.Tokens.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Serilog Setup (Structured Logging)
+// 1. LOGGING (Serilog)
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
@@ -26,13 +29,15 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// 2. AWS SSM (Production only)
+// 2. CONFIGURATION & CORE SERVICES
 if (!builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddSystemsManager("/app/", optional: true);
 }
 
-// 3. Service Registration
+// Keep JWT claim names clean (e.g. "role" instead of schemas.xmlsoap...)
+JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -40,57 +45,24 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
-// Health Checks
-builder.Services.AddHealthChecks()
-    .AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!);
-
-// Rate Limiting (Brute Force Protection)
-builder.Services.AddRateLimiter(options =>
-{
-    options.AddFixedWindowLimiter("auth_policy", opt =>
-    {
-        opt.PermitLimit = 10; // 5 requests
-        opt.Window = TimeSpan.FromSeconds(30); // per 30 seconds
-        opt.QueueLimit = 0;
-        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-    });
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-});
-
-// Metrics
+// Health Checks & Metrics
+builder.Services.AddHealthChecks().AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!);
 builder.Services.AddMetrics();
 builder.Services.AddSingleton<MetricsService>();
-
 builder.Services.AddEndpointsApiExplorer();
 
-// Swagger Configuration with JWT Support
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "NeighborHelp API", Version = "v1" });
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Enter your JWT token only (No 'Bearer' prefix needed here)"
-    });
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement {
-        {
-            new OpenApiSecurityScheme {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
-
-// Database: PostgreSQL
+// 3. DATABASE & REAL-TIME (SignalR + Redis)
 builder.Services.AddDbContext<NeighbourHelpDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Authentication: JWT Setup
+// SignalR Configuration with Redis Backplane
+var redisUrl = builder.Configuration["Redis:ConnectionString"] ?? "redis:6379";
+builder.Services.AddSignalR()
+    .AddStackExchangeRedis(redisUrl, options => {
+        options.Configuration.ChannelPrefix = RedisChannel.Literal("NeighborHelpChat");
+    });
+
+// 4. AUTHENTICATION & AUTHORIZATION
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -102,15 +74,53 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
             ClockSkew = TimeSpan.Zero
+        };
+
+        // Handle JWT in QueryString for SignalR WebSocket Handshakes
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/api/chat-hub"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 
 builder.Services.AddAuthorization();
 
-// Storage (S3 / LocalStack)
+// 5. INFRASTRUCTURE (CORS, Rate Limiting, Storage)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("NextJsPolicy", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials(); 
+    });
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth_policy", opt =>
+    {
+        opt.PermitLimit = 10;
+        opt.Window = TimeSpan.FromSeconds(30);
+        opt.QueueLimit = 0;
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
+// S3 Storage Setup
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.AddSingleton<IAmazonS3>(serviceProvider =>
 {
@@ -144,19 +154,7 @@ builder.Services.AddSingleton<IAmazonS3>(serviceProvider =>
     return new AmazonS3Client(s3Config);
 });
 
-// CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("NextJsPolicy", policy =>
-    {
-        policy.WithOrigins("http://localhost:3000")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
-});
-
-// DI
+// 6. DEPENDENCY INJECTION
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IJobService, JobService>();
@@ -167,43 +165,40 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<IStorageService, S3StorageService>();
 
+// Swagger
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "NeighborHelp API", Version = "v1" });
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization", Type = SecuritySchemeType.Http, Scheme = "Bearer", In = ParameterLocation.Header
+    });
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement {
+        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }, Array.Empty<string>() }
+    });
+});
+
 var app = builder.Build();
 
-// 4. Database Seeding
+// 7. DATABASE SEEDING (With Retry Logic)
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<NeighbourHelpDbContext>();
-    var logger = services.GetRequiredService<ILogger<Program>>();
-
-    // Production-ready retry logic to wait for the DB container to initialize
+    var context = scope.ServiceProvider.GetRequiredService<NeighbourHelpDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     int maxRetries = 10;
-    int delayMilliseconds = 5000; // 5 seconds between retries
-
     for (int i = 1; i <= maxRetries; i++)
     {
-        try
-        {
-            logger.LogInformation("Attempting to connect to database (Attempt {Attempt}/{MaxRetries})...", i, maxRetries);
+        try {
             await DbInitializer.SeedAsync(context);
-            logger.LogInformation("Database connection and seeding successful.");
-            break; // Exit loop on success
-        }
-        catch (Exception ex)
-        {
-            if (i == maxRetries)
-            {
-                logger.LogCritical(ex, "Database connection failed after {MaxRetries} attempts. API shutting down.", maxRetries);
-                throw;
-            }
-
-            logger.LogWarning("Database is not ready yet. Retrying in {Delay}s...", delayMilliseconds / 1000);
-            await Task.Delay(delayMilliseconds);
+            break;
+        } catch {
+            if (i == maxRetries) throw;
+            await Task.Delay(5000);
         }
     }
 }
 
-// 5. Middleware Pipeline
+// 8. MIDDLEWARE PIPELINE
 app.UseMiddleware<GlobalExceptionMiddleware>(); 
 app.UseMiddleware<SecurityHeadersMiddleware>(); 
 
@@ -214,14 +209,18 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging(); 
-app.UseRateLimiter(); 
-
-app.UseCors("NextJsPolicy");
+app.UseCors("NextJsPolicy"); 
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseMiddleware<TokenValidationMiddleware>(); 
 app.UseAuthorization();
+
+app.UseRateLimiter();
+
+// Hub & Controller Mapping
+app.MapHub<ChatHub>("/api/chat-hub"); 
+app.MapHub<NotificationHub>("/api/notification-hub");
 
 // Health Check Endpoints
 app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions { Predicate = _ => false });
