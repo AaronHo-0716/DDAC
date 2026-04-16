@@ -6,9 +6,9 @@ using Amazon.S3;
 using backend.Models.Config;
 using Microsoft.Extensions.Options;
 using backend.Models.Entities;
+using backend.Constants;
 
 namespace backend.Services;
-
 
 public class RatingService(
     NeighbourHelpDbContext context, 
@@ -79,6 +79,72 @@ public class RatingService(
             totalCount,
             dtos
         );
+    }
+
+    public async Task<HandymanRatingListResponse> GetVerifiedHandymenReportAsync(int page = 1, int pageSize = 10)
+    {
+        // 1. Get all approved handyman verification records
+        var query = Context.Handyman_Verifications
+            .Include(v => v.User) // Join with Users table
+            .Where(v => v.Status == VerificationStatus.Approved.ToDbString())
+            .OrderByDescending(v => v.Reviewed_At_Utc);
+
+        var totalCount = await query.CountAsync();
+        
+        var verifications = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var reportData = new List<HandymanRatingReportDto>();
+
+        foreach (var ver in verifications)
+        {
+            // 2. Fetch recent ratings for this specific handyman
+            var recentRatings = await Context.User_Ratings
+                .Include(r => r.RaterUser)
+                .Where(r => r.TargetUserId == ver.User_Id)
+                .OrderByDescending(r => r.CreatedAtUtc)
+                .ToListAsync();
+
+            var ratingDtos = recentRatings.Select(r => new RatingDto(
+                r.Id,
+                r.RaterUserId,
+                r.RaterUser.Name,
+                GetPresignedUrl(r.RaterUser.AvatarUrl),
+                r.Score,
+                r.Comment,
+                r.CreatedAtUtc,
+                r.UpdatedAtUtc
+            )).ToList();
+
+            // 3. Count total ratings for this specific handyman
+            var totalRatingsCount = await Context.User_Ratings
+                .CountAsync(r => r.TargetUserId == ver.User_Id);
+
+            // 4. Construct the HandymanVerificationDto
+            var verDto = new HandymanVerificationDto(
+                ver.Id,
+                ver.User_Id,
+                ver.User.Name,
+                ver.Status,
+                GetPresignedUrl(ver.IdentityCardURL),
+                GetPresignedUrl(ver.SelfieImageURL),
+                ver.Created_At_Utc,
+                ver.Updated_At_Utc
+            );
+
+            // 5. Construct the Rating Summary
+            var summaryDto = new UserRatingSummaryDto(
+                AverageRating: ver.User.Rating ?? 0,
+                TotalRatings: totalRatingsCount,
+                RecentRatings: ratingDtos
+            );
+
+            reportData.Add(new HandymanRatingReportDto(verDto, summaryDto));
+        }
+
+        return new HandymanRatingListResponse(reportData, totalCount, page, pageSize);
     }
 
     private async Task RecalculateUserAverageAsync(Guid userId)

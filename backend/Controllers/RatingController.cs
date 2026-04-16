@@ -10,6 +10,7 @@ namespace backend.Controllers;
 public class RatingController(IRatingService ratingService) : BaseController
 {
     [HttpPost]
+    [Authorize(Roles = "admin,homeowner")]
     public async Task<IActionResult> RateUser([FromBody] SubmitRatingRequest request)
     {
         try
@@ -23,12 +24,26 @@ public class RatingController(IRatingService ratingService) : BaseController
         }
     }
 
-    [HttpGet]
+    [HttpGet("my")]
     public async Task<ActionResult<UserRatingSummaryDto>> GetRatings([FromQuery] int page = 1, int pageSize = 10)
     {
         try
         {
             var result = await ratingService.GetUserRatingsAsync(await GetCurrentUserIdAsync(), page, pageSize);
+            return Ok(result);
+        }
+        catch (HttpRequestException ex)
+        {
+            return HandleError(ex);
+        }
+    }
+
+    [HttpGet("{userId}")]
+    public async Task<ActionResult<UserRatingSummaryDto>> GetRatingsByUserId(Guid targetId, [FromQuery] int page = 1, int pageSize = 10)
+    {
+        try
+        {
+            var result = await ratingService.GetUserRatingsAsync(targetId, page, pageSize);
             return Ok(result);
         }
         catch (HttpRequestException ex)

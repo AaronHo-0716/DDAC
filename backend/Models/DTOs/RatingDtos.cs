@@ -22,3 +22,15 @@ public record UserRatingSummaryDto(
     int TotalRatings,
     List<RatingDto> RecentRatings
 );
+
+public record HandymanRatingReportDto(
+    HandymanVerificationDto Verification,
+    UserRatingSummaryDto Rating
+);
+
+public record HandymanRatingListResponse(
+    List<HandymanRatingReportDto> Data,
+    int TotalCount,
+    int Page,
+    int PageSize
+);
