@@ -355,8 +355,9 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
 
             // Unlocking follows job lifecycle rules:
             // - open job: keep existing bid status
-            // - in-progress/completed job: reject the bid
-            if (bid.Job.Status == JobStatus.InProgress.ToDbString() || bid.Job.Status == JobStatus.Completed.ToDbString())
+            // - in-progress/completed job: keep accepted bids, reject others
+            if ((bid.Job.Status == JobStatus.InProgress.ToDbString() || bid.Job.Status == JobStatus.Completed.ToDbString())
+                && bid.Status != BidStatus.Accepted.ToDbString())
                 bid.Status = BidStatus.Rejected.ToDbString();
         }
 
