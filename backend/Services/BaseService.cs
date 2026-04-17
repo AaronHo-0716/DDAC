@@ -126,7 +126,14 @@ public abstract class BaseService
             Created_At_Utc = DateTime.UtcNow
         };
         Context.Notifications.Add(n);
-        await NotificationHubContext.Clients.Group($"{ClientGroupType.Notify_}{targetId}").SendAsync(HubMethod.ReceiveNotification.ToString(), MapNotificationToDto(n));
+
+        // Some services persist notifications without injecting SignalR hub context.
+        if (NotificationHubContext != null)
+        {
+            await NotificationHubContext.Clients
+                .Group($"{ClientGroupType.Notify_}{targetId}")
+                .SendAsync(HubMethod.ReceiveNotification.ToString(), MapNotificationToDto(n));
+        }
     }
 
     protected async Task CreateNotifications(NotificationType type, string message, UserRole targetRole = UserRole.Admin, Guid? relatedJobId = null)
@@ -158,9 +165,12 @@ public abstract class BaseService
             CreatedAtUtc: DateTime.UtcNow
         );
 
-        await NotificationHubContext.Clients
-            .Group($"{ClientGroupType.Notify_}{targetRole}") 
-            .SendAsync(HubMethod.ReceiveNotification.ToString(), broadcastDto);
+        if (NotificationHubContext != null)
+        {
+            await NotificationHubContext.Clients
+                .Group($"{ClientGroupType.Notify_}{targetRole}")
+                .SendAsync(HubMethod.ReceiveNotification.ToString(), broadcastDto);
+        }
                 
     }
 
@@ -186,7 +196,7 @@ public abstract class BaseService
     
     protected async Task<JobDto> MapJobToDto(Job job)
     {
-        var bidCount = await Context.Bids.CountAsync(b => b.Job_Id == job.Id);
+        var bidCount = await Context.Bids.CountAsync(b => b.Job_Id == job.Id && !b.Locked);
 
         if (!Enum.TryParse<UserRole>(job.Posted_By_User.Role, true, out var roleEnum))
             roleEnum = UserRole.Homeowner;

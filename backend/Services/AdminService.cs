@@ -214,10 +214,17 @@ public class AdminService : BaseService, IAdminService
         
         var jobs = await Context.Jobs
             .Include(j => j.Posted_By_User)
+            .Include(j => j.Job_Images)
             .Where(j => j.Is_Emergency && j.Status == openStatus)
             .ToListAsync();
 
-        return (IEnumerable<JobDto>)jobs.Select(MapJobToDto);
+        var result = new List<JobDto>(jobs.Count);
+        foreach (var job in jobs)
+        {
+            result.Add(await MapJobToDto(job));
+        }
+
+        return result;
     }
 
     public async Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId)
@@ -230,33 +237,53 @@ public class AdminService : BaseService, IAdminService
         Logger.LogInformation($"Job {jobId} force-assigned by Admin {adminId}", jobId, adminId);
     }
 
-    public async Task<IEnumerable<BidTransactionDto>> GetBidTransactionsAsync(string? eventType = null)
+    public async Task<IEnumerable<BidDto>> GetBidTransactionsAsync(string? eventType = null)
     {
-        var query = Context.Bid_Transactions.AsQueryable();
-        if (!string.IsNullOrEmpty(eventType)) 
-            query = query.Where(t => t.Event_Type == eventType.ToLower());
+        var normalizedEventType = eventType?.Trim().ToLowerInvariant();
+        var query = Context.Bids
+            .AsNoTracking()
+            .Include(b => b.Job)
+            .Include(b => b.Handyman_User)
+            .AsQueryable();
 
-        return await query.OrderByDescending(t => t.Created_At_Utc)
-            .Select(t => new BidTransactionDto(t.Id, t.Bid_Id, t.Job_Id, t.Event_Type, t.Event_Reason, t.Created_At_Utc))
+        if (!string.IsNullOrEmpty(normalizedEventType))
+        {
+            query = normalizedEventType switch
+            {
+                var e when e == BidEventType.LockAdded.ToDbString() => query.Where(b => b.Locked),
+                var e when e == BidEventType.LockRemoved.ToDbString() => query.Where(b => !b.Locked),
+                var e when e == BidEventType.FlagAdded.ToDbString() => query.Where(b => b.Flagged),
+                var e when e == BidEventType.FlagRemoved.ToDbString() => query.Where(b => !b.Flagged),
+                var e when e == BidEventType.ForceRejected.ToDbString() => query.Where(b => b.Status == BidStatus.Rejected.ToDbString()),
+                _ => query.Where(b => b.Status == normalizedEventType)
+            };
+        }
+
+        var bids = await query
+            .OrderByDescending(b => b.Updated_At_Utc)
             .ToListAsync();
+
+        var result = new List<BidDto>(bids.Count);
+        foreach (var bid in bids)
+        {
+            result.Add(await MapBidToDto(bid));
+        }
+
+        return result;
     }
 
     public async Task<BidTransactionDto> GetBidTransactionByIdAsync(Guid id)
     {
-        var transaction = await Context.Bid_Transactions.FindAsync(id);
-
-        if (transaction == null)
-        {
-            throw new HttpRequestException("Bid transaction record not found.", null, HttpStatusCode.NotFound);
-        }
+        var bid = await Context.Bids.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id)
+            ?? throw new HttpRequestException("Bid record not found.", null, HttpStatusCode.NotFound);
 
         return new BidTransactionDto(
-            transaction.Id, 
-            transaction.Bid_Id, 
-            transaction.Job_Id, 
-            transaction.Event_Type, 
-            transaction.Event_Reason, 
-            transaction.Created_At_Utc
+            bid.Id,
+            bid.Id,
+            bid.Job_Id,
+            DeriveBidEventTypeFromState(bid),
+            null,
+            bid.Updated_At_Utc
         );
     }
 
@@ -271,40 +298,27 @@ public class AdminService : BaseService, IAdminService
 
         var eventTypeToStore = ResolveBidEventType(normalizedActionType, normalizedReason);
 
-        if (eventTypeToStore == BidEventType.ForceRejected.ToDbString())
+        if (eventTypeToStore == BidEventType.ForceRejected.ToDbString()){
             bid.Status = BidStatus.Rejected.ToDbString();
+            bid.Job.Status = JobStatus.Open.ToDbString();
+            bid.Job.Updated_At_Utc = now;
+        }
 
         if (eventTypeToStore == BidEventType.LockAdded.ToDbString())
         {
             bid.Locked = true;
 
-            var existingLock = await Context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
-            if (existingLock == null)
-            {
-                Context.Bid_Locks.Add(new Bid_Lock
-                {
-                    Bid_Id = bidId,
-                    Locked_By_User_Id = adminId,
-                    Locked_Reason = reason,
-                    Locked_At_Utc = DateTime.UtcNow
-                });
-            }
-            else
-            {
-                existingLock.Locked_By_User_Id = adminId;
-                existingLock.Locked_Reason = reason;
-                existingLock.Locked_At_Utc = DateTime.UtcNow;
-            }
+            var lockReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
+            await CreateNotification(
+                bid.Handyman_User_Id,
+                NotificationType.SystemMessage,
+                $"Your bid for '{bid.Job.Title}' was locked by admin. Reason: {lockReason}. You can submit a new bid.",
+                bid.Job_Id
+            );
         }
 
         if (eventTypeToStore == BidEventType.LockRemoved.ToDbString())
-        {
             bid.Locked = false;
-
-            var existingLock = await Context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
-            if (existingLock != null)
-                Context.Bid_Locks.Remove(existingLock);
-        }
 
         if (eventTypeToStore == BidEventType.FlagAdded.ToDbString())
             bid.Flagged = true;
@@ -312,20 +326,23 @@ public class AdminService : BaseService, IAdminService
         if (eventTypeToStore == BidEventType.FlagRemoved.ToDbString())
             bid.Flagged = false;
 
-        Context.Bid_Transactions.Add(new Bid_Transaction {
-            Id = Guid.NewGuid(), 
-            Bid_Id = bidId, 
-            Job_Id = bid.Job_Id, 
-            Handyman_User_Id = bid.Handyman_User_Id,
-            Homeowner_User_Id = bid.Job.Posted_By_User_Id, 
-            Event_Type = eventTypeToStore, 
-            Event_By_User_Id = adminId,
-            Event_Reason = reason, 
-            Event_Metadata = "{}", 
-            Created_At_Utc = now
-        });
+        bid.Updated_At_Utc = now;
 
         await Context.SaveChangesAsync();
+    }
+
+    private static string DeriveBidEventTypeFromState(Bid bid)
+    {
+        if (bid.Locked)
+            return BidEventType.LockAdded.ToDbString();
+
+        if (bid.Flagged)
+            return BidEventType.FlagAdded.ToDbString();
+
+        if (bid.Status == BidStatus.Rejected.ToDbString())
+            return BidEventType.ForceRejected.ToDbString();
+
+        return bid.Status;
     }
 
     private static string ResolveBidEventType(string normalizedActionType, string normalizedReason)

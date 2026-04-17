@@ -54,9 +54,13 @@ public class JobService : BaseService, IJobService
             .Take(filter.PageSize)
             .ToListAsync();
 
-        var mappedJobs = await Task.WhenAll(jobs.Select(MapJobToDto));
+        var mappedJobs = new List<JobDto>(jobs.Count);
+        foreach (var job in jobs)
+        {
+            mappedJobs.Add(await MapJobToDto(job));
+        }
 
-        return new JobListResponse( mappedJobs.ToList(), filter.Page, filter.PageSize, totalCount );
+        return new JobListResponse( mappedJobs, filter.Page, filter.PageSize, totalCount );
     }
 
     public async Task<JobListResponse> AdminGetJobsAsync(JobFilterQuery filter, Guid? userId)
@@ -95,9 +99,13 @@ public class JobService : BaseService, IJobService
             .Take(filter.PageSize)
             .ToListAsync();
 
-        var mappedJobs = await Task.WhenAll(jobs.Select(MapJobToDto));
+        var mappedJobs = new List<JobDto>(jobs.Count);
+        foreach (var job in jobs)
+        {
+            mappedJobs.Add(await MapJobToDto(job));
+        }
 
-        return new JobListResponse( mappedJobs.ToList(), filter.Page, filter.PageSize, totalCount );
+        return new JobListResponse( mappedJobs, filter.Page, filter.PageSize, totalCount );
     }
 
     public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 1000)
@@ -113,9 +121,13 @@ public class JobService : BaseService, IJobService
             .Take(pageSize)
             .ToListAsync();
 
-        var mappedJobs = await Task.WhenAll(jobs.Select(MapJobToDto));
+        var mappedJobs = new List<JobDto>(jobs.Count);
+        foreach (var job in jobs)
+        {
+            mappedJobs.Add(await MapJobToDto(job));
+        }
 
-        return new JobListResponse( mappedJobs.ToList(), page, pageSize, totalCount );
+        return new JobListResponse( mappedJobs, page, pageSize, totalCount );
     }
 
     public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId)

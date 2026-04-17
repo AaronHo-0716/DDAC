@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS bids (
 
 -- Optional business rule guard at DB layer: one active bid per handyman per job
 -- Rejected/retracted bids can be re-submitted by the same handyman on the same job.
+ALTER TABLE bids DROP CONSTRAINT IF EXISTS uq_bids_job_handyman;
 DROP INDEX IF EXISTS uq_bids_job_handyman;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_job_handyman
   ON bids(job_id, handyman_user_id)

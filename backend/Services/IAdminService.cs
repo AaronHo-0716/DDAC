@@ -13,7 +13,7 @@ public interface IAdminService
     Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId);
     Task<IEnumerable<JobDto>> GetEmergencyJobsAsync();
     Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId);
-    Task<IEnumerable<BidTransactionDto>> GetBidTransactionsAsync(string? eventType = null);
+    Task<IEnumerable<BidDto>> GetBidTransactionsAsync(string? eventType = null);
     Task<BidTransactionDto> GetBidTransactionByIdAsync(Guid id);
     Task HandleBidActionAsync(Guid bidId, string actionType, string reason, Guid adminId);
     Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync();

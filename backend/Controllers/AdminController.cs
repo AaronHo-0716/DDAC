@@ -131,7 +131,7 @@ public class AdminController(IAdminService adminService, IJobService jobService)
 
     [HttpGet("bid-transactions")]
     [Obsolete("Use specific moderation logs where available.")]
-    public async Task<ActionResult<IEnumerable<BidTransactionDto>>> GetTransactions([FromQuery] string? type)
+    public async Task<ActionResult<IEnumerable<BidDto>>> GetTransactions([FromQuery] string? type)
     {
         try { return Ok(await adminService.GetBidTransactionsAsync(type)); }
         catch (HttpRequestException ex) { return HandleError(ex); }

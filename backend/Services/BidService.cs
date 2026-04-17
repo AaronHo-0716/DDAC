@@ -23,7 +23,7 @@ public class BidService : BaseService, IBidService
             throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
         var query = Context.Bids
-            .Where(b => b.Job_Id == jobId)
+            .Where(b => b.Job_Id == jobId && b.Locked == false)
             .OrderByDescending(b => b.Created_At_Utc);
 
         return await GetPagedBidsResponse(query, page, pageSize);
@@ -65,6 +65,7 @@ public class BidService : BaseService, IBidService
             (b.Status == BidStatus.Pending.ToDbString() || b.Status == BidStatus.Accepted.ToDbString())))
             throw new HttpRequestException("You already have an active bid on this job", null, HttpStatusCode.BadRequest);
 
+        var now = DateTime.UtcNow;
         var bid = new Bid
         {
             Id = Guid.NewGuid(),
@@ -77,8 +78,8 @@ public class BidService : BaseService, IBidService
             Is_Recommended = false,
             Locked = false,
             Flagged = false,
-            Created_At_Utc = DateTime.UtcNow,
-            Updated_At_Utc = DateTime.UtcNow
+            Created_At_Utc = now,
+            Updated_At_Utc = now
         };
 
         Context.Bids.Add(bid);
@@ -111,6 +112,9 @@ public class BidService : BaseService, IBidService
         if (bid.Status != BidStatus.Pending.ToDbString())
             throw new HttpRequestException($"Cannot accept a bid with status '{bid.Status}'.", null, HttpStatusCode.BadRequest);
 
+        if (bid.Locked)
+            throw new HttpRequestException("Cannot accept a locked bid.", null, HttpStatusCode.BadRequest);
+
         if (bid.Job.Status != JobStatus.Open.ToDbString())
             throw new HttpRequestException("Cannot accept a bid for a job that is not open", null, HttpStatusCode.BadRequest);
 
@@ -121,7 +125,7 @@ public class BidService : BaseService, IBidService
             bid.Updated_At_Utc = DateTime.UtcNow;
 
             var otherPendingBids = await Context.Bids
-                .Where(b => b.Job_Id == bid.Job_Id && b.Id != bid.Id && b.Status == BidStatus.Pending.ToDbString())
+                .Where(b => b.Job_Id == bid.Job_Id && b.Id != bid.Id && b.Status == BidStatus.Pending.ToDbString() && !b.Locked)
                 .ToListAsync();
 
             foreach (var otherBid in otherPendingBids)
@@ -207,12 +211,14 @@ public class BidService : BaseService, IBidService
             .Include(b => b.Job)
             .ToListAsync();
 
-        var mappingTasks = bids.Select(MapBidToDto);
-
-        var mappedBids = await Task.WhenAll(mappingTasks);
+        var mappedBids = new List<BidDto>(bids.Count);
+        foreach (var bid in bids)
+        {
+            mappedBids.Add(await MapBidToDto(bid));
+        }
 
         return new BidListResponse(
-            Bids: mappedBids.ToList(),
+            Bids: mappedBids,
             Page: page,
             PageSize: pageSize,
             TotalCount: totalCount
