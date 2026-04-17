@@ -135,22 +135,9 @@ public abstract class BaseService
         };
         Context.Notifications.Add(n);
 
-        // Some services persist notifications without injecting SignalR hub context.
-        if (NotificationHubContext != null)
-        {
-            try
-            {
-                await NotificationHubContext.Clients
-                    .Group($"{ClientGroupType.Notify_}{targetId}")
-                    .SendAsync(HubMethod.ReceiveNotification.ToString(), MapNotificationToDto(n));
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex,
-                    "Notification broadcast failed for user {UserId}. Persisted notification will remain available via API.",
-                    targetId);
-            }
-        }
+        await NotificationHubContext.Clients
+            .Group($"{ClientGroupType.Notify_}{targetId}")
+            .SendAsync(HubMethod.ReceiveNotification.ToString(), MapNotificationToDto(n));
     }
 
     protected async Task CreateNotifications(NotificationType type, string message, UserRole targetRole = UserRole.Admin, Guid? relatedJobId = null)
@@ -182,22 +169,9 @@ public abstract class BaseService
             CreatedAtUtc: DateTime.UtcNow
         );
 
-        if (NotificationHubContext != null)
-        {
-            try
-            {
-                await NotificationHubContext.Clients
-                    .Group($"{ClientGroupType.Notify_}{targetRole}")
-                    .SendAsync(HubMethod.ReceiveNotification.ToString(), broadcastDto);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex,
-                    "Role notification broadcast failed for role {Role}. Persisted notifications will remain available via API.",
-                    targetRole);
-            }
-        }
-                
+        await NotificationHubContext.Clients
+            .Group($"{ClientGroupType.Notify_}{targetRole}")
+            .SendAsync(HubMethod.ReceiveNotification.ToString(), broadcastDto);
     }
 
     protected MessageDto MapMessageToDto(Message m) => new(
