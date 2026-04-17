@@ -299,6 +299,9 @@ public class AdminService : BaseService, IAdminService
         var eventTypeToStore = ResolveBidEventType(normalizedActionType, normalizedReason);
 
         if (eventTypeToStore == BidEventType.ForceRejected.ToDbString()){
+            if (bid.Locked)
+                throw new HttpRequestException("Cannot force reject a locked bid.", null, HttpStatusCode.BadRequest);
+
             bid.Status = BidStatus.Rejected.ToDbString();
             bid.Job.Status = JobStatus.Open.ToDbString();
             bid.Job.Updated_At_Utc = now;

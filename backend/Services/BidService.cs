@@ -85,7 +85,7 @@ public class BidService : BaseService, IBidService
         Context.Bids.Add(bid);
 
         var metadata = JsonSerializer.Serialize(new { price = request.Price, estimated_arrival = request.EstimatedArrival });
-        AddBidTransaction(bid.Id, jobId, userId, job.Posted_By_User_Id, BidEventType.Created, userId, "Bid created by handyman", metadata);
+        //AddBidTransaction(bid.Id, jobId, userId, job.Posted_By_User_Id, BidEventType.Created, userId, "Bid created by handyman", metadata);
 
         await CreateNotification(job.Posted_By_User_Id, NotificationType.BidReceived, $"{user.Name} has placed a bid of ${request.Price}", jobId);
 
@@ -134,14 +134,14 @@ public class BidService : BaseService, IBidService
                 otherBid.Updated_At_Utc = DateTime.UtcNow;
 
                 var rejectedMetadata = JsonSerializer.Serialize(new { accepted_bid_id = bid.Id });
-                AddBidTransaction(otherBid.Id, bid.Job_Id, otherBid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Rejected due to another bid being accepted", rejectedMetadata);
+                //AddBidTransaction(otherBid.Id, bid.Job_Id, otherBid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Rejected due to another bid being accepted", rejectedMetadata);
                 await CreateNotification(otherBid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was not accepted", bid.Job_Id);
             }
 
             bid.Job.Status = JobStatus.InProgress.ToDbString();
             bid.Job.Updated_At_Utc = DateTime.UtcNow;
 
-            AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Accepted, userId, "Bid accepted by job owner");
+            //AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Accepted, userId, "Bid accepted by job owner");
             await CreateNotification(bid.Handyman_User_Id, NotificationType.BidAccepted, $"Your bid for '{bid.Job.Title}' has been accepted!", bid.Job_Id);
 
             await Context.SaveChangesAsync();
@@ -174,10 +174,13 @@ public class BidService : BaseService, IBidService
         if (bid.Status != BidStatus.Pending.ToDbString())
             throw new HttpRequestException($"Cannot reject a bid with status '{bid.Status}'.", null, HttpStatusCode.BadRequest);
 
+        if (bid.Locked)
+            throw new HttpRequestException("Cannot reject a locked bid.", null, HttpStatusCode.BadRequest);
+
         bid.Status = BidStatus.Rejected.ToDbString();
         bid.Updated_At_Utc = DateTime.UtcNow;
 
-        AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Bid rejected by job owner");
+        //AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Rejected, userId, "Bid rejected by job owner");
         await CreateNotification(bid.Handyman_User_Id, NotificationType.BidRejected, $"Your bid for '{bid.Job.Title}' was rejected", bid.Job_Id);
 
         await Context.SaveChangesAsync();
@@ -195,7 +198,7 @@ public class BidService : BaseService, IBidService
         if (bid.Status != BidStatus.Pending.ToDbString())
             throw new HttpRequestException($"Cannot delete a bid with status '{bid.Status}'.", null, HttpStatusCode.BadRequest);
 
-        AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Retracted, userId, "Bid deleted/retracted by handyman");
+        //AddBidTransaction(bid.Id, bid.Job_Id, bid.Handyman_User_Id, bid.Job.Posted_By_User_Id, BidEventType.Retracted, userId, "Bid deleted/retracted by handyman");
 
         Context.Bids.Remove(bid);
         await Context.SaveChangesAsync();
