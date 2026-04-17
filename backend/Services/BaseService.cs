@@ -45,31 +45,42 @@ public abstract class BaseService
 
     protected string GetPresignedUrl(string? objectKey, int expiryMinutes = 60)
     {
-        if (string.IsNullOrEmpty(objectKey) || S3Client == null || StorageOptions == null)
+        if (string.IsNullOrWhiteSpace(objectKey))
             return null!;
 
         if (objectKey.StartsWith("http")) return objectKey;
 
-        var request = new GetPreSignedUrlRequest
-        {
-            BucketName = StorageOptions.BucketName,
-            Key = objectKey,
-            Expires = DateTime.UtcNow.AddMinutes(expiryMinutes)
-        };
+        if (S3Client == null || StorageOptions == null || string.IsNullOrWhiteSpace(StorageOptions.BucketName))
+            return null!;
 
-        string url = S3Client.GetPreSignedURL(request);
-
-        if (!string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl))
+        try
         {
-            var internalUri = new Uri(url);
-            var publicUri = new Uri(StorageOptions.PublicBaseUrl);
-            var builder = new UriBuilder(internalUri)
+            var request = new GetPreSignedUrlRequest
             {
-                Scheme = publicUri.Scheme, Host = publicUri.Host, Port = publicUri.Port
+                BucketName = StorageOptions.BucketName,
+                Key = objectKey,
+                Expires = DateTime.UtcNow.AddMinutes(expiryMinutes)
             };
-            url = builder.ToString();
+
+            string url = S3Client.GetPreSignedURL(request);
+
+            if (!string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl))
+            {
+                var internalUri = new Uri(url);
+                var publicUri = new Uri(StorageOptions.PublicBaseUrl);
+                var builder = new UriBuilder(internalUri)
+                {
+                    Scheme = publicUri.Scheme, Host = publicUri.Host, Port = publicUri.Port
+                };
+                url = builder.ToString();
+            }
+            return url;
         }
-        return url;
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Unable to generate presigned URL for object key {ObjectKey}", objectKey);
+            return null!;
+        }
     }
 
     protected async Task<UserDto> MapUserToDto(User user, string? statusOverride = null)
@@ -89,8 +100,8 @@ public abstract class BaseService
 
         return new UserDto(
             user.Id,
-            user.Name.Trim(),
-            user.Email.Trim(),
+            (user.Name ?? string.Empty).Trim(),
+            (user.Email ?? string.Empty).Trim(),
             roleEnum.ToDbString(),
             GetPresignedUrl(user.AvatarUrl),
             user.Rating,
