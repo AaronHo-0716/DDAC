@@ -1,22 +1,14 @@
-using backend.Data;
 using backend.Models.Entities;
 using backend.Models.DTOs;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Net;
-using Amazon.S3;
-using backend.Models.Config;
-using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
-public class BidService : BaseService, IBidService
+public class BidService(ServiceDependencies deps) : BaseService(deps), IBidService
 {
-    public BidService( NeighbourHelpDbContext context, ILogger<BidService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
-        : base(context, logger, s3Client, storageOptions)
-    { }
-
     public async Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 1000)
     {
         if (!await Context.Jobs.AnyAsync(j => j.Id == jobId))

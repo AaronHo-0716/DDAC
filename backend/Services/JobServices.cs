@@ -1,21 +1,13 @@
-using backend.Data;
 using backend.Models.Entities;
 using backend.Models.DTOs;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
-using Amazon.S3;
-using backend.Models.Config;
-using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
-public class JobService : BaseService, IJobService
+public class JobService(ServiceDependencies deps) : BaseService(deps), IJobService
 {
-    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
-        : base(context, logger, s3Client, storageOptions)
-    { }
-
     public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId)
     {
         var query = Context.Jobs.AsQueryable();

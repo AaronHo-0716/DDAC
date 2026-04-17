@@ -1,21 +1,13 @@
-using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
-using Amazon.S3;
-using backend.Models.Config;
-using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
-public class AdminService : BaseService, IAdminService
+public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminService
 {
-    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
-        : base(context, logger, s3Client, storageOptions)
-    { }
-
     public async Task<AdminOverviewResponse> GetOverviewAsync()
     {
         var today = DateTime.UtcNow.Date;

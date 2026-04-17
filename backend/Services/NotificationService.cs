@@ -1,24 +1,12 @@
-using backend.Data;
 using backend.Models.DTOs;
-using backend.Models.Entities;
 using backend.Constants;
-using backend.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
-using Amazon.S3;
-using Microsoft.Extensions.Options;
-using backend.Models.Config;
 
 namespace backend.Services;
 
-public class NotificationService(
-    NeighbourHelpDbContext context, 
-    ILogger<NotificationService> logger,
-    IAmazonS3 s3,
-    IOptions<StorageOptions> options,
-    IHubContext<NotificationHub> notificationHub)
-    : BaseService(context, logger, s3, options, notificationHub), INotificationService
+public class NotificationService(ServiceDependencies deps) : BaseService(deps), INotificationService
 {
     public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {

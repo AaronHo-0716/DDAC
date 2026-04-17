@@ -1,23 +1,13 @@
-using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using backend.Constants;
-using backend.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
-using Amazon.S3;
-using Microsoft.Extensions.Options;
-using backend.Models.Config;
 
 namespace backend.Services;
 
-public class MessageService(
-    NeighbourHelpDbContext context,
-    ILogger<MessageService> logger,
-    IAmazonS3 s3,
-    IOptions<StorageOptions> options,
-    IHubContext<ChatHub> hubContext) : BaseService(context, logger, s3, options), IMessageService
+public class MessageService(ServiceDependencies deps) : BaseService(deps), IMessageService
 {
     public async Task<ConversationDto> GetOrCreateJobConversationAsync(CreateJobChatRequest request, Guid userId)
     {
@@ -111,9 +101,9 @@ public class MessageService(
 
         var targetIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();
         if (conv.Type == ConversationType.AdminSupport.ToDbString()) {
-            await hubContext.Clients.Group(UserRole.Admin.ToDbString()).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+            await ChatHubContext.Clients.Group(UserRole.Admin.ToDbString()).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
         }
-        await hubContext.Clients.Groups(targetIds).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+        await ChatHubContext.Clients.Groups(targetIds).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
 
         return dto;
     }

@@ -1,20 +1,12 @@
-using backend.Data;
 using backend.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
-using Amazon.S3;
-using backend.Models.Config;
-using Microsoft.Extensions.Options;
 using backend.Models.Entities;
 using backend.Constants;
 
 namespace backend.Services;
 
-public class RatingService(
-    NeighbourHelpDbContext context, 
-    ILogger<RatingService> logger,
-    IAmazonS3 s3,
-    IOptions<StorageOptions> options) : BaseService(context, logger, s3, options), IRatingService
+public class RatingService(ServiceDependencies deps) : BaseService(deps), IRatingService
 {
     public async Task SubmitRatingAsync(Guid raterId, SubmitRatingRequest request)
     {

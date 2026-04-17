@@ -156,6 +156,7 @@ builder.Services.AddSingleton<IAmazonS3>(serviceProvider =>
 });
 
 // 6. DEPENDENCY INJECTION
+builder.Services.AddScoped<ServiceDependencies>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IJobService, JobService>();

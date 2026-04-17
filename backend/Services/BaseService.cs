@@ -10,38 +10,41 @@ using Microsoft.Extensions.Options;
 using backend.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Http;
+using System.Net;
 
 namespace backend.Services;
+
+public record ServiceDependencies(
+    NeighbourHelpDbContext Context,
+    ILoggerFactory LoggerFactory,
+    IHttpContextAccessor HttpContextAccessor,
+    IAmazonS3 S3Client,
+    IOptions<StorageOptions> StorageOptions,
+    IHubContext<NotificationHub> NotificationHub,
+    IHubContext<ChatHub> ChatHub
+);
 
 public abstract class BaseService
 {
     protected readonly NeighbourHelpDbContext Context;
     protected readonly ILogger Logger;
-    protected readonly IAmazonS3? S3Client;
-    protected readonly S3StorageOptions? StorageOptions;
-    protected readonly IHubContext<NotificationHub>? NotificationHubContext;
-    protected readonly IHubContext<ChatHub>? ChatHubContext;
+    protected readonly IAmazonS3 S3Client;
+    protected readonly S3StorageOptions StorageOptions;
+    protected readonly IHubContext<NotificationHub> NotificationHubContext;
+    protected readonly IHubContext<ChatHub> ChatHubContext;
     protected readonly IHttpContextAccessor HttpContextAccessor;
 
-    protected BaseService(
-        NeighbourHelpDbContext context, 
-        ILogger logger, 
-        IAmazonS3? s3Client = null, 
-        IOptions<StorageOptions>? storageOptions = null,
-        IHubContext<NotificationHub>? notificationHub = null,
-        IHubContext<ChatHub>? chatHub = null,
-        IHttpContextAccessor? httpContextAccessor = null)
+    protected BaseService(ServiceDependencies deps)
     {
-        Context = context;
-        Logger = logger;
-        NotificationHubContext = notificationHub; 
-        S3Client = s3Client;
-        StorageOptions = storageOptions?.Value?.S3;
-        ChatHubContext = chatHub;
-        HttpContextAccessor = httpContextAccessor ?? new HttpContextAccessor();
+        Context = deps.Context;
+        Logger = deps.LoggerFactory.CreateLogger(GetType()); 
+        HttpContextAccessor = deps.HttpContextAccessor;
+        S3Client = deps.S3Client;
+        StorageOptions = deps.StorageOptions.Value.S3;
+        NotificationHubContext = deps.NotificationHub;
+        ChatHubContext = deps.ChatHub;
     }
-
+    
     protected static bool IsValidEmail(string email)
     {
         try { return new System.Net.Mail.MailAddress(email).Address == email; }
@@ -201,18 +204,24 @@ public abstract class BaseService
 
     protected string? GetCurrentUserRole()
     {
-        var user = HttpContextAccessor.HttpContext?.User;
-        return user?.FindFirst("role")?.Value ?? user?.FindFirst(ClaimTypes.Role)?.Value;
+        var user = HttpContextAccessor?.HttpContext?.User;
+        return user?.FindFirstValue(ClaimTypes.Role) ?? 
+            throw new HttpRequestException("Unauthorized: invalid authentication token.", null, HttpStatusCode.Unauthorized);
     }
 
-    protected Guid? GetCurrentUserId()
+    protected async Task<Guid> GetCurrentUserIdAsync()
     {
-        var user = HttpContextAccessor.HttpContext?.User;
-        var userIdClaim = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? user?.FindFirst("sub")?.Value
-            ?? user?.FindFirst("userId")?.Value;
+        // 1. Access the User from the current HttpContext
+        var user = HttpContextAccessor?.HttpContext?.User;
+        var email = user?.FindFirstValue(ClaimTypes.Email) ?? 
+            throw new HttpRequestException("Unauthorized: No valid email claim found in token.", null, HttpStatusCode.Unauthorized);
 
-        return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
+        // 2. Use the Context already provided to the class
+        return await Context.Users
+            .AsNoTracking()
+            .Where(u => u.Email == email.ToLower().Trim())
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync();
     }
     
     protected async Task<JobDto> MapJobToDto(Job job)

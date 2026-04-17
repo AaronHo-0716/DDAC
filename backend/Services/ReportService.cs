@@ -1,4 +1,3 @@
-using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using backend.Constants;
@@ -7,14 +6,10 @@ using System.Net;
 
 namespace backend.Services;
 
-public class ReportService : BaseService, IReportService
+public class ReportService(ServiceDependencies deps) : BaseService(deps), IReportService
 {
-    public ReportService( NeighbourHelpDbContext context, ILogger<ReportService> logger) : base(context, logger)
-    { }
-
     public async Task CreateReportAsync(CreateReportRequest request, Guid reporterId)
     {
-
         if (request.TargetUserId == reporterId) 
         throw new HttpRequestException("Self-reporting is not allowed.", null, HttpStatusCode.BadRequest);
         
