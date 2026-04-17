@@ -180,6 +180,12 @@ export default function AdminPage() {
               Reports
             </Link>
             <Link
+              href="/admin/ratings"
+              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
+            >
+              Ratings
+            </Link>
+            <Link
               href="/admin/transactions/bids"
               className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
             >

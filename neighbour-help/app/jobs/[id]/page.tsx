@@ -3,10 +3,11 @@
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Star, Trash2, X } from "lucide-react";
 import type { Bid, Job, JobCategory } from "@/app/types";
 import { jobsService } from "@/app/lib/api/jobs";
 import { bidsService } from "@/app/lib/api/bids";
+import { ratingsService } from "@/app/lib/api/ratings";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import StatusBadge from "@/app/components/ui/StatusBadge";
@@ -45,7 +46,7 @@ function toEditForm(job: Job): EditForm {
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { openForBidChat } = useChatWidget();
 
   const [job, setJob] = useState<Job | null>(null);
@@ -65,6 +66,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [showBidModal, setShowBidModal] = useState(false);
   const [completingJob, setCompletingJob] = useState(false);
   const [showPayImage, setShowPayImage] = useState(false);
+  const [showRatingForm, setShowRatingForm] = useState(false);
+  const [ratingScore, setRatingScore] = useState(5);
+  const [ratingComment, setRatingComment] = useState("");
+  const [submittingRating, setSubmittingRating] = useState(false);
+  const [ratingError, setRatingError] = useState<string | null>(null);
+  const [existingRating, setExistingRating] = useState<{ score: number; comment: string } | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -177,6 +184,50 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   const canCompleteJob = !!job && isOwner && job.status === "in-progress" && !!acceptedBid;
   const canPayForCompletedJob = !!job && isOwner && job.status === "completed";
+  const canRateHandyman = !!job && isOwner && job.status === "completed" && !!acceptedBid;
+
+  useEffect(() => {
+    if (!canRateHandyman || !acceptedBid || !user) {
+      setExistingRating(null);
+      setRatingScore(5);
+      setRatingComment("");
+      setShowRatingForm(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadExistingRating = async () => {
+      try {
+        const summary = await ratingsService.getRatingsByUserId(acceptedBid.handyman.id, 1, 1000);
+        if (cancelled) return;
+
+        const mine = summary.ratings.find((entry) => entry.raterId === user.id);
+        if (mine) {
+          setExistingRating({
+            score: mine.score,
+            comment: mine.comment ?? "",
+          });
+          setRatingScore(mine.score);
+          setRatingComment(mine.comment ?? "");
+        } else {
+          setExistingRating(null);
+          setRatingScore(5);
+          setRatingComment("");
+        }
+      } catch {
+        if (!cancelled) {
+          setExistingRating(null);
+        }
+      }
+    };
+
+    void loadExistingRating();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [acceptedBid, canRateHandyman, user]);
 
   const handleSave = async () => {
     if (!job || !form || !hasChanges) return;
@@ -261,6 +312,53 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       setError(err instanceof Error ? err.message : "Unable to complete job.");
     } finally {
       setCompletingJob(false);
+    }
+  };
+
+  const handleSubmitRating = async () => {
+    if (!acceptedBid || !canRateHandyman || !user) return;
+    if (ratingScore < 1 || ratingScore > 5) {
+      setRatingError("Rating must be between 1 and 5.");
+      return;
+    }
+
+    setSubmittingRating(true);
+    setRatingError(null);
+
+    try {
+      const comment = ratingComment.trim();
+      await ratingsService.submitRating({
+        targetUserId: acceptedBid.handyman.id,
+        score: ratingScore,
+        comment: comment || undefined,
+      });
+
+      const summary = await ratingsService.getRatingsByUserId(acceptedBid.handyman.id, 1, 1000);
+      setExistingRating({
+        score: ratingScore,
+        comment,
+      });
+
+      setBids((prev) =>
+        prev.map((bid) =>
+          bid.handyman.id === acceptedBid.handyman.id
+            ? {
+                ...bid,
+                handyman: {
+                  ...bid.handyman,
+                  rating: summary.averageRating,
+                },
+              }
+            : bid
+        )
+      );
+
+      setShowRatingForm(false);
+      await refreshUser();
+    } catch (err) {
+      setRatingError(err instanceof Error ? err.message : "Unable to submit rating.");
+    } finally {
+      setSubmittingRating(false);
     }
   };
 
@@ -450,7 +548,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 </div>
               )}
 
-              {isOwner && (canCompleteJob || canPayForCompletedJob) && (
+              {isOwner && (canCompleteJob || canPayForCompletedJob || canRateHandyman) && (
                 <div className="mt-6 flex justify-end gap-2">
                   {canCompleteJob && (
                     <PrimaryButton size="sm" onClick={handleCompleteJob} disabled={completingJob}>
@@ -466,6 +564,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       Pay
                     </PrimaryButton>
                   )}
+                  {canRateHandyman && (
+                    <PrimaryButton
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setShowRatingForm((prev) => !prev);
+                        setRatingError(null);
+                      }}
+                    >
+                      {existingRating ? "Update Rating" : "Rate Handyman"}
+                    </PrimaryButton>
+                  )}
                 </div>
               )}
 
@@ -477,6 +587,75 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     alt="Payment preview"
                     className="h-52 w-full max-w-sm rounded-lg border border-[#E5E7EB] bg-white object-contain"
                   />
+                </div>
+              )}
+
+              {isOwner && canRateHandyman && showRatingForm && acceptedBid && (
+                <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#111827]">
+                      Rate {acceptedBid.handyman.name}
+                    </p>
+                    {existingRating && (
+                      <span className="text-xs text-[#6B7280]">
+                        Existing: {existingRating.score}/5
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mb-3 flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((score) => (
+                      <button
+                        key={score}
+                        type="button"
+                        onClick={() => setRatingScore(score)}
+                        className="rounded-md p-1 hover:bg-amber-50"
+                        aria-label={`Rate ${score} star${score > 1 ? "s" : ""}`}
+                      >
+                        <Star
+                          className={`h-5 w-5 ${
+                            score <= ratingScore
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-gray-300"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    <span className="ml-1 text-sm font-medium text-[#374151]">{ratingScore}/5</span>
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    value={ratingComment}
+                    onChange={(event) => setRatingComment(event.target.value)}
+                    placeholder="Share your feedback (optional)"
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#0B74FF] resize-none"
+                  />
+
+                  {ratingError && (
+                    <p className="mt-2 text-sm text-red-700">{ratingError}</p>
+                  )}
+
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <PrimaryButton
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowRatingForm(false);
+                        setRatingError(null);
+                      }}
+                      disabled={submittingRating}
+                    >
+                      Cancel
+                    </PrimaryButton>
+                    <PrimaryButton
+                      size="sm"
+                      onClick={handleSubmitRating}
+                      disabled={submittingRating}
+                    >
+                      {submittingRating ? "Saving..." : existingRating ? "Update Rating" : "Submit Rating"}
+                    </PrimaryButton>
+                  </div>
                 </div>
               )}
             </>

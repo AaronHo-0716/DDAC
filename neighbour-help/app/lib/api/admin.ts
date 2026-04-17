@@ -59,6 +59,26 @@ export interface AdminOverview {
   blockedAccountCount: number;
 }
 
+export interface AdminRatingReview {
+  id: string;
+  raterId: string;
+  raterName: string;
+  raterAvatarUrl?: string;
+  score: number;
+  comment?: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface AdminHandymanRatingItem {
+  verificationId: string;
+  userId: string;
+  userName: string;
+  averageRating: number;
+  totalRatings: number;
+  reviews: AdminRatingReview[];
+}
+
 interface RawUserDto {
   id?: string | null;
   name?: string | null;
@@ -114,6 +134,36 @@ interface RawAdminOverviewResponse {
   bidsCreatedToday?: number | null;
   openEmergencies?: number | null;
   blockedAccountCount?: number | null;
+}
+
+interface RawRatingDto {
+  id?: string | null;
+  raterId?: string | null;
+  raterName?: string | null;
+  raterAvatarUrl?: string | null;
+  score?: number | null;
+  comment?: string | null;
+  createdAtUtc?: string | null;
+  updateAtUtc?: string | null;
+  updatedAtUtc?: string | null;
+}
+
+interface RawUserRatingSummaryDto {
+  averageRating?: number | null;
+  totalRatings?: number | null;
+  ratings?: RawRatingDto[] | null;
+}
+
+interface RawHandymanRatingReportDto {
+  verification?: RawHandymanVerificationDto | null;
+  rating?: RawUserRatingSummaryDto | null;
+}
+
+interface RawHandymanRatingListResponse {
+  data?: RawHandymanRatingReportDto[] | null;
+  totalCount?: number | null;
+  page?: number | null;
+  pageSize?: number | null;
 }
 
 interface RawJobDto {
@@ -358,6 +408,36 @@ function toAdminOverview(row?: RawAdminOverviewResponse | null): AdminOverview {
   };
 }
 
+function toAdminRatingReview(row: RawRatingDto): AdminRatingReview {
+  return {
+    id: row.id ?? "",
+    raterId: row.raterId ?? "",
+    raterName: row.raterName ?? "Unknown user",
+    raterAvatarUrl: resolveStoredImageUrl(row.raterAvatarUrl),
+    score: typeof row.score === "number" ? row.score : 0,
+    comment: row.comment ?? undefined,
+    createdAtUtc: row.createdAtUtc ?? new Date(0).toISOString(),
+    updatedAtUtc: row.updatedAtUtc ?? row.updateAtUtc ?? row.createdAtUtc ?? new Date(0).toISOString(),
+  };
+}
+
+function toAdminHandymanRatingItem(row: RawHandymanRatingReportDto): AdminHandymanRatingItem {
+  const verification = row.verification ? toAdminHandymanVerification(row.verification) : null;
+  const rating = row.rating;
+  const reviews = Array.isArray(rating?.ratings)
+    ? rating!.ratings!.map((entry) => toAdminRatingReview(entry))
+    : [];
+
+  return {
+    verificationId: verification?.id ?? "",
+    userId: verification?.userId ?? "",
+    userName: verification?.userName ?? "Unknown handyman",
+    averageRating: typeof rating?.averageRating === "number" ? rating.averageRating : 0,
+    totalRatings: typeof rating?.totalRatings === "number" ? rating.totalRatings : reviews.length,
+    reviews,
+  };
+}
+
 function toAdminBidStatus(value?: string | null): AdminBidStatus {
   const normalized = (value ?? "pending").toLowerCase().replace("_", "-");
   if (normalized === "accepted") return "accepted";
@@ -540,6 +620,14 @@ export const adminService = {
   async getOverview(): Promise<AdminOverview> {
     const response = await apiClient.get<RawAdminOverviewResponse>("/admin/overview");
     return toAdminOverview(response);
+  },
+
+  async getHandymanRatings(page = 1, pageSize = 1000): Promise<AdminHandymanRatingItem[]> {
+    const response = await apiClient.get<RawHandymanRatingListResponse>(
+      `/admin/ratings?page=${page}&pageSize=${pageSize}`
+    );
+    const rows = Array.isArray(response?.data) ? response.data : [];
+    return rows.map((row) => toAdminHandymanRatingItem(row));
   },
 
   async getJobs(params: JobsQueryParams = {}): Promise<Job[]> {
