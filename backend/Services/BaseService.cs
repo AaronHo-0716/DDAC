@@ -138,9 +138,18 @@ public abstract class BaseService
         // Some services persist notifications without injecting SignalR hub context.
         if (NotificationHubContext != null)
         {
-            await NotificationHubContext.Clients
-                .Group($"{ClientGroupType.Notify_}{targetId}")
-                .SendAsync(HubMethod.ReceiveNotification.ToString(), MapNotificationToDto(n));
+            try
+            {
+                await NotificationHubContext.Clients
+                    .Group($"{ClientGroupType.Notify_}{targetId}")
+                    .SendAsync(HubMethod.ReceiveNotification.ToString(), MapNotificationToDto(n));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex,
+                    "Notification broadcast failed for user {UserId}. Persisted notification will remain available via API.",
+                    targetId);
+            }
         }
     }
 
@@ -175,9 +184,18 @@ public abstract class BaseService
 
         if (NotificationHubContext != null)
         {
-            await NotificationHubContext.Clients
-                .Group($"{ClientGroupType.Notify_}{targetRole}")
-                .SendAsync(HubMethod.ReceiveNotification.ToString(), broadcastDto);
+            try
+            {
+                await NotificationHubContext.Clients
+                    .Group($"{ClientGroupType.Notify_}{targetRole}")
+                    .SendAsync(HubMethod.ReceiveNotification.ToString(), broadcastDto);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex,
+                    "Role notification broadcast failed for role {Role}. Persisted notifications will remain available via API.",
+                    targetRole);
+            }
         }
                 
     }
