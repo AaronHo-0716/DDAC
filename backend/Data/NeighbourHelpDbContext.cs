@@ -275,7 +275,20 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
             entity.Property(e => e.Last_Message_At_Utc).HasColumnName("last_message_at_utc");
 
-            entity.HasOne(d => d.Created_By_User).WithMany().HasForeignKey(d => d.Created_By_User_Id);
+            entity.HasOne(d => d.Related_Job)
+                .WithMany()
+                .HasForeignKey(d => d.Related_Job_Id) 
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.Related_Bid)
+                .WithMany()
+                .HasForeignKey(d => d.Related_Bid_Id) 
+                .OnDelete(DeleteBehavior.SetNull);
+                
+            entity.HasOne(d => d.Created_By_User)
+                .WithMany()
+                .HasForeignKey(d => d.Created_By_User_Id)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // --- MESSAGES ---

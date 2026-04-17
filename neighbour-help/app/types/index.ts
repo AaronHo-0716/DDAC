@@ -252,68 +252,51 @@ export interface NotificationListResponse {
 
 // ─── Messaging ───────────────────────────────────────────────────────────────
 
-export type ConversationType = "job_chat" | "admin_support";
-export type ConversationStatus = "active" | "locked" | "closed";
-export type MessageType = "text" | "system" | "admin_note";
+export enum ConversationType {
+  JobChat = "JobChat",
+  AdminSupport = "AdminSupport"
+}
+export type MessageType = "text" | "image" | "system";
+export type ConversationStatus = "active" | "locked";
 
-export interface ConversationParticipant {
+export interface ChatParticipant {
   userId: string;
   name: string;
   role: UserRole;
   avatarUrl?: string;
-}
-
-export interface ConversationSummary {
-  id: string;
-  type: ConversationType;
-  status: ConversationStatus;
-  relatedJobId?: string;
-  relatedBidId?: string;
-  lastMessagePreview?: string;
-  lastMessageAt?: string;
-  unreadCount: number;
-  participants: ConversationParticipant[];
+  averageRating?: number;
 }
 
 export interface ChatMessage {
   id: string;
-  conversationId: string;
-  senderUserId: string;
-  senderName?: string;
-  messageType: MessageType;
-  bodyText: string;
-  createdAt: string;
-  isDeleted?: boolean;
+  senderId: string;
+  type: MessageType;
+  content: string; 
+  createdAtUtc: string;
 }
 
-export interface ConversationListResponse {
-  conversations: ConversationSummary[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
+export interface Conversation {
+  id: string;
+  type: ConversationType;
+  createdAtUtc: string;
+  lastMessageAtUtc?: string;
+  unreadCount: number;
+  lastMessage?: ChatMessage;
+  participants: ChatParticipant[];
 }
 
-export interface MessageListResponse {
-  messages: ChatMessage[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-}
-
-export interface CreateOrOpenJobConversationRequest {
+export interface CreateJobChatRequest {
   jobId: string;
   bidId: string;
-  otherUserId: string;
 }
 
 export interface SendMessageRequest {
-  bodyText: string;
-  messageType?: MessageType;
-  clientMessageId?: string;
+  content: string;
+  messageType: MessageType;
 }
 
 export interface UnreadCountResponse {
-  unreadCount: number;
+  totalUnread: number;
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────────────

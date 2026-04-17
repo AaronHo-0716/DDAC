@@ -160,7 +160,7 @@ export default function SupportPage() {
     setSupportChatLoading(true);
     setSupportChatError(null);
     try {
-      const conversation = await messagesService.createOrOpenSupportConversation();
+      const conversation = await messagesService.createSupportConversation();
       setActiveConversationId(conversation.id);
       open();
     } catch (err) {

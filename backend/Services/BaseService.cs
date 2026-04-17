@@ -186,7 +186,7 @@ public abstract class BaseService
     {
         return new NotificationDto(
             entity.Id,
-            NotificationConstants.ParseFromDb(entity.Type).ToDbString(),
+            entity.Type,
             entity.Message,
             entity.Related_Job_Id,
             entity.Is_Read,
@@ -194,7 +194,7 @@ public abstract class BaseService
         );
     }
 
-    protected string? GetCurrentUserRole()
+    protected string GetCurrentUserRole()
     {
         var user = HttpContextAccessor?.HttpContext?.User;
         return user?.FindFirstValue(ClaimTypes.Role) ?? 

@@ -29,12 +29,4 @@ public static class NotificationConstants
         NotificationType.UpdateRating => "rating_update",
         _ => type.ToString().ToLower()
     };
-
-    public static NotificationType ParseFromDb(string type)
-    {
-        var cleanType = type.Replace("_", "");
-        return Enum.TryParse<NotificationType>(cleanType, true, out var result) 
-            ? result 
-            : NotificationType.SystemMessage;
-    }
 }

@@ -47,8 +47,6 @@ builder.Services.AddControllers()
 
 // Health Checks & Metrics
 builder.Services.AddHealthChecks().AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!);
-builder.Services.AddMetrics();
-builder.Services.AddSingleton<MetricsService>();
 builder.Services.AddEndpointsApiExplorer();
 
 // 3. DATABASE & REAL-TIME (SignalR + Redis)
