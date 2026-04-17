@@ -8,13 +8,14 @@ using System.Net;
 using Amazon.S3;
 using backend.Models.Config;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
 public class BidService : BaseService, IBidService
 {
-    public BidService( NeighbourHelpDbContext context, ILogger<BidService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
-        : base(context, logger, s3Client, storageOptions)
+    public BidService( NeighbourHelpDbContext context, ILogger<BidService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions, IHttpContextAccessor httpContextAccessor) 
+        : base(context, logger, s3Client, storageOptions, httpContextAccessor: httpContextAccessor)
     { }
 
     public async Task<BidListResponse> GetBidsByJobIdAsync(Guid jobId, int page = 1, int pageSize = 1000)

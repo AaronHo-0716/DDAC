@@ -9,6 +9,7 @@ using System.Net;
 using Amazon.S3;
 using Microsoft.Extensions.Options;
 using backend.Models.Config;
+using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
@@ -17,7 +18,8 @@ public class MessageService(
     ILogger<MessageService> logger,
     IAmazonS3 s3,
     IOptions<StorageOptions> options,
-    IHubContext<ChatHub> hubContext) : BaseService(context, logger, s3, options), IMessageService
+    IHubContext<ChatHub> hubContext,
+    IHttpContextAccessor httpContextAccessor) : BaseService(context, logger, s3, options, httpContextAccessor: httpContextAccessor), IMessageService
 {
     public async Task<ConversationDto> GetOrCreateJobConversationAsync(CreateJobChatRequest request, Guid userId)
     {

@@ -11,6 +11,7 @@ using backend.Models.Entities;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
@@ -20,8 +21,9 @@ public class S3StorageService(
     IAmazonS3 s3Client,
     IOptions<StorageOptions> storageOptions,
     IHubContext<NotificationHub> notificationHub,
-    IHubContext<ChatHub> chatHub) 
-    : BaseService(context, logger, s3Client, storageOptions, notificationHub, chatHub), IStorageService
+    IHubContext<ChatHub> chatHub,
+    IHttpContextAccessor httpContextAccessor) 
+    : BaseService(context, logger, s3Client, storageOptions, notificationHub, chatHub, httpContextAccessor), IStorageService
 {
     public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct)
     {

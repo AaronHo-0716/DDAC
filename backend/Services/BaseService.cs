@@ -9,6 +9,8 @@ using Amazon.S3;
 using Microsoft.Extensions.Options;
 using backend.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
@@ -20,6 +22,7 @@ public abstract class BaseService
     protected readonly S3StorageOptions? StorageOptions;
     protected readonly IHubContext<NotificationHub>? NotificationHubContext;
     protected readonly IHubContext<ChatHub>? ChatHubContext;
+    protected readonly IHttpContextAccessor HttpContextAccessor;
 
     protected BaseService(
         NeighbourHelpDbContext context, 
@@ -27,7 +30,8 @@ public abstract class BaseService
         IAmazonS3? s3Client = null, 
         IOptions<StorageOptions>? storageOptions = null,
         IHubContext<NotificationHub>? notificationHub = null,
-        IHubContext<ChatHub>? chatHub = null)
+        IHubContext<ChatHub>? chatHub = null,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
         Context = context;
         Logger = logger;
@@ -35,6 +39,7 @@ public abstract class BaseService
         S3Client = s3Client;
         StorageOptions = storageOptions?.Value?.S3;
         ChatHubContext = chatHub;
+        HttpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
     }
 
     protected static bool IsValidEmail(string email)
@@ -193,12 +198,32 @@ public abstract class BaseService
             entity.Created_At_Utc
         );
     }
+
+    protected string? GetCurrentUserRole()
+    {
+        var user = HttpContextAccessor.HttpContext?.User;
+        return user?.FindFirst("role")?.Value ?? user?.FindFirst(ClaimTypes.Role)?.Value;
+    }
+
+    protected Guid? GetCurrentUserId()
+    {
+        var user = HttpContextAccessor.HttpContext?.User;
+        var userIdClaim = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? user?.FindFirst("sub")?.Value
+            ?? user?.FindFirst("userId")?.Value;
+
+        return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
+    }
     
     protected async Task<JobDto> MapJobToDto(Job job)
     {
-        var bidCount = await Context.Bids.CountAsync(b => b.Job_Id == job.Id && !b.Locked);
+        var currentUserRole = GetCurrentUserRole();
+        var isAdmin = string.Equals(currentUserRole, UserRole.Admin.ToDbString(), StringComparison.OrdinalIgnoreCase);
+        var bidCount = isAdmin
+            ? await Context.Bids.CountAsync(b => b.Job_Id == job.Id)
+            : await Context.Bids.CountAsync(b => b.Job_Id == job.Id && !b.Locked);
 
-        if (!Enum.TryParse<UserRole>(job.Posted_By_User.Role, true, out var roleEnum))
+        if (!Enum.TryParse<UserRole>(job.Posted_By_User?.Role, true, out var roleEnum))
             roleEnum = UserRole.Homeowner;
 
         return new JobDto(

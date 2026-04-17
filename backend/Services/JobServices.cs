@@ -7,13 +7,14 @@ using System.Net;
 using Amazon.S3;
 using backend.Models.Config;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
 public class JobService : BaseService, IJobService
 {
-    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
-        : base(context, logger, s3Client, storageOptions)
+    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions, IHttpContextAccessor httpContextAccessor) 
+        : base(context, logger, s3Client, storageOptions, httpContextAccessor: httpContextAccessor)
     { }
 
     public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId)
@@ -142,19 +143,19 @@ public class JobService : BaseService, IJobService
 
         string openStatus = JobStatus.Open.ToDbString();
 
-        if (job.Status != openStatus && job.Posted_By_User_Id != userId)
-        {
-            if (!userId.HasValue) 
-                throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
+        // if (job.Status != openStatus && job.Posted_By_User_Id != userId)
+        // {
+        //     if (!userId.HasValue) 
+        //         throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
 
-            var hasAcceptedBid = await Context.Bids.AnyAsync(b =>
-                b.Job_Id == jobId &&
-                b.Handyman_User_Id == userId.Value &&
-                b.Status == BidStatus.Accepted.ToDbString());
+        //     var hasAcceptedBid = await Context.Bids.AnyAsync(b =>
+        //         b.Job_Id == jobId &&
+        //         b.Handyman_User_Id == userId.Value &&
+        //         b.Status == BidStatus.Accepted.ToDbString());
 
-            if (!hasAcceptedBid)
-                throw new HttpRequestException($"Job with id {jobId} has not been accepted by you", null, HttpStatusCode.NotFound);
-        }
+        //     if (!hasAcceptedBid)
+        //         throw new HttpRequestException($"Job with id {jobId} has not been accepted by you", null, HttpStatusCode.NotFound);
+        // }
 
         return await MapJobToDto(job);
     }
@@ -236,6 +237,14 @@ public class JobService : BaseService, IJobService
 
         if (job.Status != JobStatus.InProgress.ToDbString())
             throw new HttpRequestException("Only in-progress jobs can be completed", null, HttpStatusCode.BadRequest);
+
+        var hasLockedAcceptedBid = await Context.Bids.AnyAsync(b =>
+            b.Job_Id == jobId &&
+            b.Status == BidStatus.Accepted.ToDbString() &&
+            b.Locked);
+
+        if (hasLockedAcceptedBid)
+            throw new HttpRequestException("Cannot complete this job while the accepted bid is locked. Please contact admin.", null, HttpStatusCode.BadRequest);
 
         job.Status = JobStatus.Completed.ToDbString();
         job.Updated_At_Utc = DateTime.UtcNow;

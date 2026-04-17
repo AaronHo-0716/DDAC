@@ -95,6 +95,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
 
 // 5. INFRASTRUCTURE (CORS, Rate Limiting, Storage)
 builder.Services.AddCors(options =>

@@ -12,6 +12,7 @@ using System.Security.Cryptography;
 using Amazon.S3;
 using backend.Models.Config;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
@@ -19,8 +20,8 @@ public class AuthService : BaseService, IAuthService
 {
     private readonly IConfiguration _config;
 
-    public AuthService(NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
-        : base(context, logger, s3Client, storageOptions)
+    public AuthService(NeighbourHelpDbContext context, IConfiguration config, ILogger<AuthService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions, IHttpContextAccessor httpContextAccessor) 
+        : base(context, logger, s3Client, storageOptions, httpContextAccessor: httpContextAccessor)
     {
         _config = config;
     }

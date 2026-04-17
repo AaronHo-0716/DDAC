@@ -7,13 +7,14 @@ using System.Net;
 using Amazon.S3;
 using backend.Models.Config;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
 public class AdminService : BaseService, IAdminService
 {
-    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
-        : base(context, logger, s3Client, storageOptions)
+    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions, IHttpContextAccessor httpContextAccessor) 
+        : base(context, logger, s3Client, storageOptions, httpContextAccessor: httpContextAccessor)
     { }
 
     public async Task<AdminOverviewResponse> GetOverviewAsync()
@@ -300,7 +301,13 @@ public class AdminService : BaseService, IAdminService
 
         if (eventTypeToStore == BidEventType.ForceRejected.ToDbString()){
             if (bid.Locked)
-                throw new HttpRequestException("Cannot force reject a locked bid.", null, HttpStatusCode.BadRequest);
+                throw new HttpRequestException("The bid is locked, try to unlock it first.", null, HttpStatusCode.BadRequest);
+
+            if (bid.Job.Status != JobStatus.Open.ToDbString() && bid.Job.Status != JobStatus.InProgress.ToDbString())
+                throw new HttpRequestException("This job has already been completed, cannot force reject a completed job's bid.", null, HttpStatusCode.BadRequest);
+
+            if (bid.Status == BidStatus.Rejected.ToDbString())
+                throw new HttpRequestException("This bid has already been rejected.", null, HttpStatusCode.BadRequest);
 
             bid.Status = BidStatus.Rejected.ToDbString();
             bid.Job.Status = JobStatus.Open.ToDbString();
@@ -312,16 +319,47 @@ public class AdminService : BaseService, IAdminService
             bid.Locked = true;
 
             var lockReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
+            var existingBidLock = await Context.Bid_Locks.FirstOrDefaultAsync(bl => bl.Bid_Id == bid.Id);
+
+            if (existingBidLock is null)
+            {
+                Context.Bid_Locks.Add(new Bid_Lock
+                {
+                    Bid_Id = bid.Id,
+                    Locked_By_User_Id = adminId,
+                    Locked_Reason = lockReason,
+                    Locked_At_Utc = now
+                });
+            }
+            else
+            {
+                existingBidLock.Locked_By_User_Id = adminId;
+                existingBidLock.Locked_Reason = lockReason;
+                existingBidLock.Locked_At_Utc = now;
+            }
+
             await CreateNotification(
                 bid.Handyman_User_Id,
                 NotificationType.SystemMessage,
-                $"Your bid for '{bid.Job.Title}' was locked by admin. Reason: {lockReason}. You can submit a new bid.",
+                $"Your bid for '{bid.Job.Title}' was locked by admin. Reason: {lockReason}.",
                 bid.Job_Id
             );
         }
 
         if (eventTypeToStore == BidEventType.LockRemoved.ToDbString())
+        {
             bid.Locked = false;
+
+            var existingBidLock = await Context.Bid_Locks.FirstOrDefaultAsync(bl => bl.Bid_Id == bid.Id);
+            if (existingBidLock is not null)
+                Context.Bid_Locks.Remove(existingBidLock);
+
+            // Unlocking follows job lifecycle rules:
+            // - open job: keep existing bid status
+            // - in-progress/completed job: reject the bid
+            if (bid.Job.Status == JobStatus.InProgress.ToDbString() || bid.Job.Status == JobStatus.Completed.ToDbString())
+                bid.Status = BidStatus.Rejected.ToDbString();
+        }
 
         if (eventTypeToStore == BidEventType.FlagAdded.ToDbString())
             bid.Flagged = true;
