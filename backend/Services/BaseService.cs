@@ -39,7 +39,7 @@ public abstract class BaseService
         S3Client = s3Client;
         StorageOptions = storageOptions?.Value?.S3;
         ChatHubContext = chatHub;
-        HttpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+        HttpContextAccessor = httpContextAccessor ?? new HttpContextAccessor();
     }
 
     protected static bool IsValidEmail(string email)

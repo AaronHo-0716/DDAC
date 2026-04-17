@@ -9,7 +9,6 @@ using System.Net;
 using Amazon.S3;
 using Microsoft.Extensions.Options;
 using backend.Models.Config;
-using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
@@ -18,9 +17,8 @@ public class NotificationService(
     ILogger<NotificationService> logger,
     IAmazonS3 s3,
     IOptions<StorageOptions> options,
-    IHubContext<NotificationHub> notificationHub,
-    IHttpContextAccessor httpContextAccessor)
-    : BaseService(context, logger, s3, options, notificationHub, httpContextAccessor: httpContextAccessor), INotificationService
+    IHubContext<NotificationHub> notificationHub)
+    : BaseService(context, logger, s3, options, notificationHub), INotificationService
 {
     public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId, int page = 1, int pageSize = 1000)
     {

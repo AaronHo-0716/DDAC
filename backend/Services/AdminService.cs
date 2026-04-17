@@ -7,14 +7,13 @@ using System.Net;
 using Amazon.S3;
 using backend.Models.Config;
 using Microsoft.Extensions.Options;
-using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
 public class AdminService : BaseService, IAdminService
 {
-    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions, IHttpContextAccessor httpContextAccessor) 
-        : base(context, logger, s3Client, storageOptions, httpContextAccessor: httpContextAccessor)
+    public AdminService(NeighbourHelpDbContext context, ILogger<AdminService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
+        : base(context, logger, s3Client, storageOptions)
     { }
 
     public async Task<AdminOverviewResponse> GetOverviewAsync()

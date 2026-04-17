@@ -4,13 +4,12 @@ using backend.Models.Entities;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
-using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
 public class ReportService : BaseService, IReportService
 {
-    public ReportService( NeighbourHelpDbContext context, ILogger<ReportService> logger, IHttpContextAccessor httpContextAccessor) : base(context, logger, httpContextAccessor: httpContextAccessor)
+    public ReportService( NeighbourHelpDbContext context, ILogger<ReportService> logger) : base(context, logger)
     { }
 
     public async Task CreateReportAsync(CreateReportRequest request, Guid reporterId)

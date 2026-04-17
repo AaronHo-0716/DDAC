@@ -21,9 +21,8 @@ public class S3StorageService(
     IAmazonS3 s3Client,
     IOptions<StorageOptions> storageOptions,
     IHubContext<NotificationHub> notificationHub,
-    IHubContext<ChatHub> chatHub,
-    IHttpContextAccessor httpContextAccessor) 
-    : BaseService(context, logger, s3Client, storageOptions, notificationHub, chatHub, httpContextAccessor), IStorageService
+    IHubContext<ChatHub> chatHub) 
+    : BaseService(context, logger, s3Client, storageOptions, notificationHub, chatHub), IStorageService
 {
     public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct)
     {

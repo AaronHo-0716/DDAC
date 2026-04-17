@@ -7,14 +7,13 @@ using System.Net;
 using Amazon.S3;
 using backend.Models.Config;
 using Microsoft.Extensions.Options;
-using Microsoft.AspNetCore.Http;
 
 namespace backend.Services;
 
 public class JobService : BaseService, IJobService
 {
-    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions, IHttpContextAccessor httpContextAccessor) 
-        : base(context, logger, s3Client, storageOptions, httpContextAccessor: httpContextAccessor)
+    public JobService( NeighbourHelpDbContext context, ILogger<JobService> logger, IAmazonS3 s3Client, IOptions<StorageOptions> storageOptions) 
+        : base(context, logger, s3Client, storageOptions)
     { }
 
     public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId)
