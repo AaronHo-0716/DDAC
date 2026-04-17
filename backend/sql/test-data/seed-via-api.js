@@ -176,15 +176,15 @@ async function main() {
             });
 
             // 3. Create Rating
-            await apiRequest(`/ratings`, {
-                method: "POST",
-                token: job.owner.accessToken,
-                body: {
-                    targetUserId: handyman.id,
-                    score: 5,
-                    comment: "Excellent work! Highly recommended."
-                }
-            });
+            // await apiRequest(`/ratings`, {
+            //     method: "POST",
+            //     token: job.owner.accessToken,
+            //     body: {
+            //         targetUserId: handyman.id,
+            //         score: 5,
+            //         comment: "Excellent work! Highly recommended."
+            //     }
+            // });
             console.log(`Successfully processed cycle for: ${handyman.name}`);
         } catch (err) {
             console.error(`Error during bidding for ${handyman.name}: ${err.message}`);
