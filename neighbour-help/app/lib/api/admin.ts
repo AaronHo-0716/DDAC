@@ -151,6 +151,7 @@ interface RawAdminBidTransactionDto {
   id?: string | null;
   bidId?: string | null;
   jobId?: string | null;
+  jobName?: string | null;
   eventType?: string | null;
   eventReason?: string | null;
   createdAtUtc?: string | null;
@@ -164,6 +165,9 @@ interface RawAdminBidTransactionDto {
   isEmergency?: boolean | null;
   flagged?: boolean | null;
   locked?: boolean | null;
+  isFlagged?: boolean | null;
+  isLocked?: boolean | null;
+  handyman?: RawUserDto | null;
 }
 
 interface BidLedgerEvent {
@@ -455,15 +459,16 @@ function toBidTransactionFromRichRow(row: RawAdminBidTransactionDto): BidTransac
 
   return {
     id,
-    jobTitle: row.jobTitle ?? (row.jobId ? `Job ${row.jobId.slice(0, 8)}` : "Unknown job"),
+    jobTitle:
+      row.jobTitle ?? row.jobName ?? (row.jobId ? `Job ${row.jobId.slice(0, 8)}` : "Unknown job"),
     homeownerName: row.homeownerName ?? "Unknown homeowner",
-    handymanName: row.handymanName ?? "Unknown handyman",
+    handymanName: row.handymanName ?? row.handyman?.name ?? "Unknown handyman",
     price: typeof row.price === "number" ? row.price : 0,
     status: toAdminBidStatus(row.status ?? row.eventType),
     emergency: typeof row.emergency === "boolean" ? row.emergency : !!row.isEmergency,
     createdAt,
-    flagged: !!row.flagged,
-    locked: !!row.locked,
+    flagged: typeof row.flagged === "boolean" ? row.flagged : !!row.isFlagged,
+    locked: typeof row.locked === "boolean" ? row.locked : !!row.isLocked,
   };
 }
 
@@ -639,10 +644,37 @@ export const adminService = {
     }
 
     if (rawRows.some((row) => isRichBidTransactionRow(row))) {
-      const mapped = rawRows
-        .map((row) => toBidTransactionFromRichRow(row))
-        .filter((row): row is BidTransactionItem => row !== null);
-      return dedupeBidTransactions(mapped);
+      const mappedEntries = rawRows
+        .map((row) => ({
+          raw: row,
+          item: toBidTransactionFromRichRow(row),
+        }))
+        .filter((entry): entry is { raw: RawAdminBidTransactionDto; item: BidTransactionItem } =>
+          entry.item !== null
+        );
+
+      const jobsById = new Map<string, Job>();
+      try {
+        const jobs = await fetchPublicJobs({ page: 1, pageSize: 1000 });
+        jobs.forEach((job) => jobsById.set(job.id, job));
+      } catch {
+        // Keep rendering bid rows even if job enrichment fails.
+      }
+
+      const enriched = mappedEntries.map(({ raw, item }) => {
+        const job = raw.jobId ? jobsById.get(raw.jobId) : undefined;
+        const isFallbackJobLabel = item.jobTitle.startsWith("Job ");
+
+        return {
+          ...item,
+          jobTitle: job && (isFallbackJobLabel || item.jobTitle === "Unknown job") ? job.title : item.jobTitle,
+          homeownerName:
+            job && item.homeownerName === "Unknown homeowner" ? job.postedBy.name : item.homeownerName,
+          emergency: item.emergency || Boolean(job?.isEmergency),
+        };
+      });
+
+      return dedupeBidTransactions(enriched);
     }
 
     const events = rawRows

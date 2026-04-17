@@ -27,12 +27,15 @@ interface RawUserDto {
 interface RawBidDto {
   id?: string | null;
   jobId?: string | null;
+  jobName?: string | null;
   handyman?: RawUserDto | null;
   price?: number | null;
   estimatedArrival?: string | null;
   message?: string | null;
   status?: string | null;
   isRecommended?: boolean | null;
+  isLocked?: boolean | null;
+  isFlagged?: boolean | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -76,12 +79,15 @@ function normalizeBid(bid: RawBidDto): Bid {
   return {
     id: bid.id ?? "",
     jobId: bid.jobId ?? "",
+    jobName: bid.jobName ?? undefined,
     handyman: normalizeUser(bid.handyman),
     price: typeof bid.price === "number" ? bid.price : 0,
     estimatedArrival: bid.estimatedArrival ?? createdAt,
     message: bid.message ?? "",
     status: toBidStatus(bid.status),
     isRecommended: !!bid.isRecommended,
+    isLocked: typeof bid.isLocked === "boolean" ? bid.isLocked : undefined,
+    isFlagged: typeof bid.isFlagged === "boolean" ? bid.isFlagged : undefined,
     createdAt,
     updatedAt: bid.updatedAt ?? createdAt,
   };

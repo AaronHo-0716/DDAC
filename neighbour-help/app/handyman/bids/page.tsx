@@ -152,7 +152,9 @@ export default function HandymanBidsPage() {
             <div key={bid.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
               <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
                 <div>
-                  <p className="text-lg font-semibold text-[#111827]">Job #{bid.jobId}</p>
+                  <p className="text-lg font-semibold text-[#111827]">
+                    {bid.jobName || `Job #${bid.jobId}`}
+                  </p>
                   <p className="text-sm text-[#6B7280]">Bid tracking</p>
                 </div>
                 <StatusBadge status={bid.status} />

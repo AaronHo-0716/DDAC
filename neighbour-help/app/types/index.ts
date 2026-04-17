@@ -177,12 +177,15 @@ export type BidStatus = "pending" | "accepted" | "rejected";
 export interface Bid {
   id: string;
   jobId: string;
+  jobName?: string;
   handyman: User;
   price: number;
   estimatedArrival: string; // ISO date string
   message: string;
   status: BidStatus;
   isRecommended: boolean;
+  isLocked?: boolean;
+  isFlagged?: boolean;
   createdAt: string;
   updatedAt: string;
 }
