@@ -12,7 +12,7 @@ public static class DbInitializer
 
         if (!await context.Users.AnyAsync(u => u.Role == UserRole.Admin.ToDbString()))
         {
-            var admin = new User
+            context.Users.Add(new User
             {
                 Id = Guid.NewGuid(),
                 Name = "System Admin",
@@ -21,8 +21,18 @@ public static class DbInitializer
                 Role = UserRole.Admin.ToDbString(),
                 IsActive = true,
                 TokenVersion = 1
-            };
-            context.Users.Add(admin);
+            });
+
+            context.Users.Add(new User
+            {
+                Id = Guid.NewGuid(),
+                Name = "System Admin",
+                Email = "admin@neighborhelp.test",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
+                Role = UserRole.Admin.ToDbString(),
+                IsActive = true,
+                TokenVersion = 1
+            });
             await context.SaveChangesAsync();
         }
     }

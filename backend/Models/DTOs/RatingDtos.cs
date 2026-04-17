@@ -34,3 +34,12 @@ public record HandymanRatingListResponse(
     int Page,
     int PageSize
 );
+
+public record HandymanRatingsFilter(
+    string? Name = null,
+    string? Email = null,
+    decimal? MinRating = null,
+    decimal? MaxRating = null,
+    int Page = 1,
+    int PageSize = 1000
+);

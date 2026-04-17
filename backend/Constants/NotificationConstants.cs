@@ -8,7 +8,9 @@ public enum NotificationType {
     BidAccepted,
     BidRejected,
     SystemMessage,
-    ResubmitVerification
+    ResubmitVerification,
+    NewRating,
+    UpdateRating
 }
 
 public static class NotificationConstants
@@ -23,6 +25,8 @@ public static class NotificationConstants
         NotificationType.BidRejected => "bid_rejected",
         NotificationType.SystemMessage => "system_message",
         NotificationType.ResubmitVerification => "resubmmit_verification",
+        NotificationType.NewRating => "new_rating",
+        NotificationType.UpdateRating => "rating_update",
         _ => type.ToString().ToLower()
     };
 

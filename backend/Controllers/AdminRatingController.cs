@@ -5,16 +5,16 @@ using Microsoft.AspNetCore.Mvc;
 namespace backend.Controllers;
 
 [ApiController]
-[Route("api/admin/ratings")]
+[Route("api/admin/handymen-ratings")]
 [Authorize(Roles = "admin")]
 public class AdminRatingController(IRatingService ratingService) : BaseController
 {
     [HttpGet]
-    public async Task<ActionResult<HandymanRatingListResponse>> GetHandymansRatings([FromQuery] int page = 1, int pageSize = 1000)
+    public async Task<ActionResult<HandymanRatingListResponse>> GetHandymansRatings([FromQuery] HandymanRatingsFilter filter)
     {
         try
         {
-            var result = await ratingService.GetVerifiedHandymenReportAsync(page, pageSize);
+            var result = await ratingService.GetVerifiedHandymenReportAsync(filter);
             return Ok(result);
         }
         catch (HttpRequestException ex)
