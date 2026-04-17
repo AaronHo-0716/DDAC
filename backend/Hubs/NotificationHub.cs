@@ -19,6 +19,12 @@ public class NotificationHub(NeighbourHelpDbContext dbContext, ILogger<ChatHub> 
         if (GetCurrentUserRole() == UserRole.Admin.ToDbString())
             await Groups.AddToGroupAsync(Context.ConnectionId, $"{ClientGroupType.Notify_}{UserRole.Admin}");
 
+        if (GetCurrentUserRole() == UserRole.Handyman.ToDbString())
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"{ClientGroupType.Notify_}{UserRole.Handyman}");
+
+        if (GetCurrentUserRole() == UserRole.Homeowner.ToDbString())
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"{ClientGroupType.Notify_}{UserRole.Homeowner}");
+
         logger.LogInformation("User {UserId} connected to NotificationHub.", userId);
 
         await base.OnConnectedAsync();
