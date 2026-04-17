@@ -276,6 +276,8 @@ public class AdminService : BaseService, IAdminService
 
         if (eventTypeToStore == BidEventType.LockAdded.ToDbString())
         {
+            bid.Locked = true;
+
             var existingLock = await Context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
             if (existingLock == null)
             {
@@ -297,10 +299,18 @@ public class AdminService : BaseService, IAdminService
 
         if (eventTypeToStore == BidEventType.LockRemoved.ToDbString())
         {
+            bid.Locked = false;
+
             var existingLock = await Context.Bid_Locks.FirstOrDefaultAsync(x => x.Bid_Id == bidId);
             if (existingLock != null)
                 Context.Bid_Locks.Remove(existingLock);
         }
+
+        if (eventTypeToStore == BidEventType.FlagAdded.ToDbString())
+            bid.Flagged = true;
+
+        if (eventTypeToStore == BidEventType.FlagRemoved.ToDbString())
+            bid.Flagged = false;
 
         Context.Bid_Transactions.Add(new Bid_Transaction {
             Id = Guid.NewGuid(), 

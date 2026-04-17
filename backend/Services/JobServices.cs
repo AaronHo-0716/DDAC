@@ -126,7 +126,7 @@ public class JobService : BaseService, IJobService
             .FirstOrDefaultAsync(j => j.Id == jobId);
 
         if (job == null) 
-            throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
+            throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
         string openStatus = JobStatus.Open.ToDbString();
 
@@ -141,7 +141,7 @@ public class JobService : BaseService, IJobService
                 b.Status == BidStatus.Accepted.ToDbString());
 
             if (!hasAcceptedBid)
-                throw new HttpRequestException($"Job with id {jobId} not found or access denied", null, HttpStatusCode.NotFound);
+                throw new HttpRequestException($"Job with id {jobId} has not been accepted by you", null, HttpStatusCode.NotFound);
         }
 
         return await MapJobToDto(job);

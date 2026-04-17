@@ -211,6 +211,8 @@ public abstract class BaseService
             Message: bid.Message,
             Status: BidConstants.ParseFromDb(bid.Status).ToDbString(),
             IsRecommended: bid.Is_Recommended,
+            IsLocked: bid.Locked,
+            IsFlagged: bid.Flagged,
             CreatedAt: bid.Created_At_Utc,
             UpdatedAt: bid.Updated_At_Utc
         );

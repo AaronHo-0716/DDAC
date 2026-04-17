@@ -91,7 +91,11 @@ CREATE TABLE IF NOT EXISTS bids (
 );
 
 -- Optional business rule guard at DB layer: one active bid per handyman per job
-CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_job_handyman ON bids(job_id, handyman_user_id);
+-- Rejected/retracted bids can be re-submitted by the same handyman on the same job.
+DROP INDEX IF EXISTS uq_bids_job_handyman;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_job_handyman
+  ON bids(job_id, handyman_user_id)
+  WHERE status IN ('pending', 'accepted');
 
 -- One accepted bid per job invariant
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_one_accepted_per_job

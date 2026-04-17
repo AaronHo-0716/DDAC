@@ -98,6 +98,8 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.Property(e => e.Message).HasColumnName("message");
             entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.Is_Recommended).HasColumnName("is_recommended");
+            entity.Property(e => e.Locked).HasColumnName("locked");
+            entity.Property(e => e.Flagged).HasColumnName("flagged");
             entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
             entity.Property(e => e.Updated_At_Utc).HasColumnName("updated_at_utc");
             entity.HasOne(d => d.Job).WithMany(p => p.Bids).HasForeignKey(d => d.Job_Id);

@@ -12,6 +12,8 @@ public record BidDto(
     string Message,
     string Status,
     bool IsRecommended,
+    bool IsLocked,
+    bool IsFlagged,
     DateTime CreatedAt,
     DateTime UpdatedAt
 );

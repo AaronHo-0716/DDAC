@@ -59,8 +59,11 @@ public class BidService : BaseService, IBidService
         if (!isVerified)
             throw new HttpRequestException("Your handyman account is not verified yet.", null, HttpStatusCode.BadRequest);
 
-        if (await Context.Bids.AnyAsync(b => b.Job_Id == jobId && b.Handyman_User_Id == userId && b.Status == BidStatus.Pending.ToDbString()))
-            throw new HttpRequestException("You have already placed a bid on this job", null, HttpStatusCode.BadRequest);
+        if (await Context.Bids.AnyAsync(b =>
+            b.Job_Id == jobId &&
+            b.Handyman_User_Id == userId &&
+            (b.Status == BidStatus.Pending.ToDbString() || b.Status == BidStatus.Accepted.ToDbString())))
+            throw new HttpRequestException("You already have an active bid on this job", null, HttpStatusCode.BadRequest);
 
         var bid = new Bid
         {
@@ -72,6 +75,8 @@ public class BidService : BaseService, IBidService
             Message = request.Message,
             Status = BidStatus.Pending.ToDbString(),
             Is_Recommended = false,
+            Locked = false,
+            Flagged = false,
             Created_At_Utc = DateTime.UtcNow,
             Updated_At_Utc = DateTime.UtcNow
         };

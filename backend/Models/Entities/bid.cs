@@ -21,6 +21,10 @@ public partial class Bid
 
     public bool Is_Recommended { get; set; }
 
+    public bool Locked { get; set; }
+
+    public bool Flagged { get; set; }
+
     public DateTime Created_At_Utc { get; set; }
 
     public DateTime Updated_At_Utc { get; set; }
