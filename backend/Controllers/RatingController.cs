@@ -15,7 +15,7 @@ public class RatingController(IRatingService ratingService) : BaseController
     {
         try
         {
-            await ratingService.SubmitRatingAsync(await GetCurrentUserIdAsync(), request);
+            await ratingService.SubmitRatingAsync(request);
             return Ok(new { message = "Rating submitted successfully." });
         }
         catch (HttpRequestException ex)
@@ -30,7 +30,7 @@ public class RatingController(IRatingService ratingService) : BaseController
     {
         try
         {
-            var result = await ratingService.GetUserRatingsAsync(await GetCurrentUserIdAsync(), page, pageSize);
+            var result = await ratingService.GetUserRatingsAsync(page, pageSize);
             return Ok(result);
         }
         catch (HttpRequestException ex)
@@ -44,7 +44,7 @@ public class RatingController(IRatingService ratingService) : BaseController
     {
         try
         {
-            var result = await ratingService.GetUserRatingsAsync(id, page, pageSize);
+            var result = await ratingService.GetUserRatingsAsync(page, pageSize, id);
             return Ok(result);
         }
         catch (HttpRequestException ex)

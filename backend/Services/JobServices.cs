@@ -8,8 +8,10 @@ namespace backend.Services;
 
 public class JobService(ServiceDependencies deps) : BaseService(deps), IJobService
 {
-    public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter, Guid? userId)
+    public async Task<JobListResponse> GetJobsAsync(JobFilterQuery filter)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var query = Context.Jobs.AsQueryable();
 
         query = query.Where(j => j.Status == JobStatus.Open.ToDbString() || j.Posted_By_User_Id == userId);
@@ -31,7 +33,7 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         if (filter.IsEmergency.HasValue)
             query = query.Where(j => j.Is_Emergency == filter.IsEmergency.Value);
 
-        if (filter.MaxDistanceKm.HasValue && userId.HasValue)
+        if (filter.MaxDistanceKm.HasValue)
         {
             query = query.Where(j => j.Latitude != null && j.Longitude != null);
         }
@@ -55,7 +57,7 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         return new JobListResponse( mappedJobs, filter.Page, filter.PageSize, totalCount );
     }
 
-    public async Task<JobListResponse> AdminGetJobsAsync(JobFilterQuery filter, Guid? userId)
+    public async Task<JobListResponse> AdminGetJobsAsync(JobFilterQuery filter)
     {
         var query = Context.Jobs.AsQueryable();
 
@@ -76,7 +78,7 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         if (filter.IsEmergency.HasValue)
             query = query.Where(j => j.Is_Emergency == filter.IsEmergency.Value);
 
-        if (filter.MaxDistanceKm.HasValue && userId.HasValue)
+        if (filter.MaxDistanceKm.HasValue)
         {
             query = query.Where(j => j.Latitude != null && j.Longitude != null);
         }
@@ -100,8 +102,10 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         return new JobListResponse( mappedJobs, filter.Page, filter.PageSize, totalCount );
     }
 
-    public async Task<JobListResponse> GetMyJobsAsync(Guid userId, int page = 1, int pageSize = 1000)
+    public async Task<JobListResponse> GetMyJobsAsync(int page = 1, int pageSize = 1000)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var query = Context.Jobs.Where(j => j.Posted_By_User_Id == userId);
         var totalCount = await query.CountAsync();
 
@@ -122,8 +126,10 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         return new JobListResponse( mappedJobs, page, pageSize, totalCount );
     }
 
-    public async Task<JobDto?> GetJobByIdAsync(Guid jobId, Guid? userId)
+    public async Task<JobDto?> GetJobByIdAsync(Guid jobId)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var job = await Context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
@@ -151,8 +157,10 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         return await MapJobToDto(job);
     }
 
-    public async Task<JobDto> CreateJobAsync(CreateJobRequest request, Guid userId)
+    public async Task<JobDto> CreateJobAsync(CreateJobRequest request)
     {
+        var userId = await GetCurrentUserIdAsync();
+    
         ValidateJobData(request.Title, request.Description, request.Budget);
 
         var newJob = new Job
@@ -180,8 +188,10 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         return await RefreshAndMap(newJob.Id);
     }
 
-    public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request, Guid userId)
+    public async Task<JobDto> UpdateJobAsync(Guid jobId, UpdateJobRequest request)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var job = await Context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
@@ -212,8 +222,10 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         return await RefreshAndMap(jobId);
     }
 
-    public async Task<JobDto> CompleteJobAsync(Guid jobId, Guid userId)
+    public async Task<JobDto> CompleteJobAsync(Guid jobId)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var job = await Context.Jobs
             .Include(j => j.Posted_By_User)
             .Include(j => j.Job_Images)
@@ -246,8 +258,10 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         return await MapJobToDto(job);
     }
 
-    public async Task DeleteJobAsync(Guid jobId, Guid userId)
+    public async Task DeleteJobAsync(Guid jobId)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var job = await Context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId)
             ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 

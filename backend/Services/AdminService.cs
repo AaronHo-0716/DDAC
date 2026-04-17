@@ -117,8 +117,10 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         }
     }
 
-    public async Task<UserDto> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminId)
+    public async Task<UserDto> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason)
     {
+        var adminId = await GetCurrentUserIdAsync();
+
         if (block && targetId == adminId)
             throw new HttpRequestException("Security Error: You cannot block your own account.", null, HttpStatusCode.BadRequest);
 
@@ -173,8 +175,10 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         return new HandymanVerificationListResponse(data, totalCount, page, pageSize);
     }
 
-    public async Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId)
+    public async Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes)
     {
+        var adminId = await GetCurrentUserIdAsync();
+
         var verification = await Context.Handyman_Verifications
             .Include(v => v.User)
             .FirstOrDefaultAsync(v => v.Id == id) 
@@ -219,8 +223,10 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         return result;
     }
 
-    public async Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId)
+    public async Task AssignJobAsync(Guid jobId, Guid handymanUserId)
     {
+        var adminId = await GetCurrentUserIdAsync();
+
         var job = await Context.Jobs.FindAsync(jobId) 
             ?? throw new HttpRequestException("Job not found.", null, HttpStatusCode.NotFound);
         
@@ -279,8 +285,10 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         );
     }
 
-    public async Task HandleBidActionAsync(Guid bidId, string actionType, string reason, Guid adminId)
+    public async Task HandleBidActionAsync(Guid bidId, string actionType, string reason)
     {
+        var adminId = await GetCurrentUserIdAsync();
+
         var bid = await Context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
             ?? throw new HttpRequestException("Bid not found.", null, HttpStatusCode.NotFound);
 

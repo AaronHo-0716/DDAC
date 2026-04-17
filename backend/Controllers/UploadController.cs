@@ -15,9 +15,7 @@ public class UploadController(IStorageService storageService) : BaseController
 {
     [HttpPost]
     public async Task<IActionResult> UploadImage([FromForm] UploadImageRequest request, CancellationToken ct)
-    {
-        var userId = await GetCurrentUserIdAsync();
-        
+    {      
         try
         {
             object result = request.UploadType switch
@@ -25,13 +23,13 @@ public class UploadController(IStorageService storageService) : BaseController
                 UploadTypes.JobImage => await storageService.UpdateJobImageAsync(request, ct),
                 
                 UploadTypes.AvatarImage => 
-                    await storageService.UpdateProfilePictureAsync(userId, request.File, ct),
+                    await storageService.UpdateProfilePictureAsync(request.File, ct),
 
                 UploadTypes.IdentityCardImage => 
-                    await storageService.UpdateIdentityCardAsync(userId, request.File, ct),
+                    await storageService.UpdateIdentityCardAsync(request.File, ct),
                 
                 UploadTypes.ChatAttachmentImage => 
-                    await storageService.SendChatAttachmentAsync(userId, request, ct),
+                    await storageService.SendChatAttachmentAsync(request, ct),
 
                 _ => throw new HttpRequestException("Invalid upload type provided.", null, System.Net.HttpStatusCode.BadRequest)
             };

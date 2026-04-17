@@ -8,10 +8,12 @@ namespace backend.Services;
 
 public class ReportService(ServiceDependencies deps) : BaseService(deps), IReportService
 {
-    public async Task CreateReportAsync(CreateReportRequest request, Guid reporterId)
+    public async Task CreateReportAsync(CreateReportRequest request )
     {
-        if (request.TargetUserId == reporterId) 
-        throw new HttpRequestException("Self-reporting is not allowed.", null, HttpStatusCode.BadRequest);
+        var userId = await GetCurrentUserIdAsync();
+        
+        if (request.TargetUserId == userId) 
+            throw new HttpRequestException("Self-reporting is not allowed.", null, HttpStatusCode.BadRequest);
         
         var targetExists = await Context.Users.AnyAsync(u => u.Id == request.TargetUserId);
         if (!targetExists) throw new HttpRequestException("The user you are trying to report no longer exists.", null, HttpStatusCode.NotFound);
@@ -19,7 +21,7 @@ public class ReportService(ServiceDependencies deps) : BaseService(deps), IRepor
         var report = new User_Report
         {
             Id = Guid.NewGuid(),
-            Reporter_Id = reporterId,
+            Reporter_Id = userId,
             Target_User_Id = request.TargetUserId,
             Reason = request.Reason,
             Description = request.Description,
@@ -33,11 +35,13 @@ public class ReportService(ServiceDependencies deps) : BaseService(deps), IRepor
 
         await Context.SaveChangesAsync();
         
-        Logger.LogInformation("User {ReporterId} filed a report against {TargetId}", reporterId, request.TargetUserId);
+        Logger.LogInformation("User {ReporterId} filed a report against {TargetId}", userId, request.TargetUserId);
     }
 
-    public async Task<ReportListResponse> GetMyReportsAsync(Guid userId, int page = 1, int pageSize = 1000)
+    public async Task<ReportListResponse> GetMyReportsAsync(int page = 1, int pageSize = 1000)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var query = Context.User_Reports
             .Include(r => r.Reporter)
             .Include(r => r.Target_User)
@@ -90,8 +94,10 @@ public class ReportService(ServiceDependencies deps) : BaseService(deps), IRepor
         );
     }
 
-    public async Task ResolveReportAsync(Guid reportId, string adminNotes, Guid adminId)
+    public async Task ResolveReportAsync(Guid reportId, string adminNotes)
     {
+        var adminId = await GetCurrentUserIdAsync();
+
         var report = await Context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
             ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 
@@ -105,8 +111,10 @@ public class ReportService(ServiceDependencies deps) : BaseService(deps), IRepor
         Logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
     }
 
-    public async Task ReviewReportAsync(Guid reportId, string adminNotes, Guid adminId)
+    public async Task ReviewReportAsync(Guid reportId, string adminNotes)
     {
+        var adminId = await GetCurrentUserIdAsync();
+        
         var report = await Context.User_Reports.FirstOrDefaultAsync(r => r.Id == reportId)
             ?? throw new HttpRequestException("Report not found.", null, HttpStatusCode.NotFound);
 

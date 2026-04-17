@@ -3,7 +3,6 @@ using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Net;
 
 namespace backend.Controllers;
 
@@ -41,8 +40,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<ActionResult<UserDto>> GetMe()
     {
         try {
-            var userId = await GetCurrentUserIdAsync();
-            return Ok(await authService.GetUserById(userId));
+            return Ok(await authService.GetUserById());
         }
         catch (HttpRequestException ex) {
             return HandleError(ex);
@@ -64,7 +62,7 @@ public class AuthController(IAuthService authService) : BaseController
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
-        await authService.Logout(request, await GetCurrentUserIdAsync());
+        await authService.Logout(request);
         return Ok(new { message = "Logged out successfully." });
     }
 
@@ -73,8 +71,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<ActionResult<HandymanVerificationDto>> ResubmitVerification()
     {
         try {
-            var userId = await GetCurrentUserIdAsync();
-            return Ok(await authService.CreateHandymanVerification(userId));
+            return Ok(await authService.CreateHandymanVerification());
         }
         catch (HttpRequestException ex) {
             return HandleError(ex);

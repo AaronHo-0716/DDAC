@@ -12,7 +12,7 @@ namespace backend.Controllers;
 public class AdminReportController(IReportService reportService) : BaseController 
 {
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ReportListResponse>>> GetReports([FromQuery] ReportStatus? status)
+    public async Task<ActionResult<IEnumerable<ReportListResponse>>> GetReports([FromQuery] ReportStatus? status, int page = 1, int pageSize = 1000)
     {
         return Ok(await reportService.GetAllReportsAsync(status));
     }
@@ -22,7 +22,7 @@ public class AdminReportController(IReportService reportService) : BaseControlle
     {
         try
         {
-            await reportService.ResolveReportAsync(id, notes, await GetCurrentUserIdAsync());
+            await reportService.ResolveReportAsync(id, notes);
             return NoContent();
         }
         catch (HttpRequestException ex)
@@ -36,7 +36,7 @@ public class AdminReportController(IReportService reportService) : BaseControlle
     {
         try
         {
-            await reportService.ReviewReportAsync(id, notes, await GetCurrentUserIdAsync());
+            await reportService.ReviewReportAsync(id, notes);
             return NoContent();
         }
         catch (HttpRequestException ex)

@@ -12,10 +12,8 @@ public class NotificationController(INotificationService notificationService) : 
 {
     [HttpGet]
     public async Task<ActionResult<NotificationListResponse>> GetNotifications([FromQuery] int page = 1, [FromQuery] int pageSize = 1000)
-    {
-        var userId = await GetCurrentUserIdAsync();
-    
-        return Ok(await notificationService.GetUserNotificationsAsync(userId, page, pageSize));
+    {  
+        return Ok(await notificationService.GetUserNotificationsAsync(page, pageSize));
     }
 
     [HttpPatch("{id}/read")]
@@ -23,7 +21,7 @@ public class NotificationController(INotificationService notificationService) : 
     {
         try
         {
-            await notificationService.MarkAsReadAsync(id, await GetCurrentUserIdAsync());
+            await notificationService.MarkAsReadAsync(id);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -34,7 +32,7 @@ public class NotificationController(INotificationService notificationService) : 
     {
         try
         {
-            await notificationService.MarkAllAsReadAsync(await GetCurrentUserIdAsync());
+            await notificationService.MarkAllAsReadAsync();
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }

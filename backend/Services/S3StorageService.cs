@@ -12,8 +12,10 @@ namespace backend.Services;
 
 public class S3StorageService(ServiceDependencies deps) : BaseService(deps), IStorageService
 {
-    public async Task<UserDto> UpdateProfilePictureAsync(Guid userId, IFormFile file, CancellationToken ct)
+    public async Task<UserDto> UpdateProfilePictureAsync(IFormFile file, CancellationToken ct)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var user = await Context.Users
             .Include(u => u.Handyman_Verification_User) 
             .FirstOrDefaultAsync(u => u.Id == userId, ct)
@@ -35,8 +37,10 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         return await MapUserToDto(user);
     }
 
-    public async Task<HandymanVerificationDto> UpdateIdentityCardAsync(Guid userId, IFormFile file, CancellationToken ct)
+    public async Task<HandymanVerificationDto> UpdateIdentityCardAsync(IFormFile file, CancellationToken ct)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var handyman = await Context.Handyman_Verifications
             .Include(v => v.User)
             .Where(x => x.User_Id == userId)
@@ -90,8 +94,10 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         return await MapJobToDto(job);
     }
 
-    public async Task<MessageDto> SendChatAttachmentAsync(Guid userId, UploadImageRequest request, CancellationToken ct)
+    public async Task<MessageDto> SendChatAttachmentAsync(UploadImageRequest request, CancellationToken ct)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         if (!request.TargetId.HasValue)
             throw new HttpRequestException("Target Conversation ID is required for chat attachments.", null, HttpStatusCode.BadRequest);
     

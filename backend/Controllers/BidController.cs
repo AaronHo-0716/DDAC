@@ -14,7 +14,7 @@ public class BidController(IBidService bidService) : BaseController
     [Authorize(Roles = "admin,handyman")]
     public async Task<ActionResult<BidListResponse>> GetMyBids([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        try { return Ok(await bidService.GetMyBidsAsync(await GetCurrentUserIdAsync(), page, pageSize)); }
+        try { return Ok(await bidService.GetMyBidsAsync(page, pageSize)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -22,7 +22,7 @@ public class BidController(IBidService bidService) : BaseController
     [HttpPatch("{bidId}/accept")]
     public async Task<ActionResult<BidDto>> AcceptBid(Guid bidId)
     {
-        try { return Ok(await bidService.AcceptBidAsync(bidId, await GetCurrentUserIdAsync(), GetCurrentUserRole())); }
+        try { return Ok(await bidService.AcceptBidAsync(bidId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -30,7 +30,7 @@ public class BidController(IBidService bidService) : BaseController
     [HttpPatch("{bidId}/reject")]
     public async Task<ActionResult<BidDto>> RejectBid(Guid bidId)
     {
-        try { return Ok(await bidService.RejectBidAsync(bidId, await GetCurrentUserIdAsync(), GetCurrentUserRole())); }
+        try { return Ok(await bidService.RejectBidAsync(bidId)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -40,7 +40,7 @@ public class BidController(IBidService bidService) : BaseController
     {
         try
         {
-            await bidService.DeleteBidAsync(bidId, await GetCurrentUserIdAsync());
+            await bidService.DeleteBidAsync(bidId);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }

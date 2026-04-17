@@ -77,8 +77,10 @@ public class AuthService(ServiceDependencies deps, IConfiguration _config) : Bas
         return await GenerateAuthResponse(newUser);
     }
 
-    public async Task<HandymanVerificationDto> CreateHandymanVerification(Guid userId)
+    public async Task<HandymanVerificationDto> CreateHandymanVerification()
     {
+        var userId = await GetCurrentUserIdAsync(); 
+
         var user = await Context.Users
             .Include(u => u.Handyman_Verification_User) 
             .FirstOrDefaultAsync(u => u.Id == userId)
@@ -141,8 +143,10 @@ public class AuthService(ServiceDependencies deps, IConfiguration _config) : Bas
         return new AuthResponse(await MapUserToDto(existingToken.User), new TokenDto(accessToken, newRefreshTokenStr, expiresIn));
     }
 
-    public async Task Logout(LogoutRequest request, Guid userId)
+    public async Task Logout(LogoutRequest request)
     {
+        var userId = await GetCurrentUserIdAsync(); 
+
         var tokenEntry = await Context.Refresh_Tokens
             .FirstOrDefaultAsync(t => t.Token_Hash == request.RefreshToken && t.User_Id == userId);
 
@@ -157,8 +161,9 @@ public class AuthService(ServiceDependencies deps, IConfiguration _config) : Bas
         await Context.SaveChangesAsync();
     }
 
-    public async Task<UserDto> GetUserById(Guid userId)
+    public async Task<UserDto> GetUserById()
     {
+        var userId = await GetCurrentUserIdAsync(); 
         var user = await Context.Users.FindAsync(userId) 
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
         return await MapUserToDto(user);

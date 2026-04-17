@@ -8,13 +8,13 @@ public interface IAdminService
     Task<UserDto> CreateAdminAsync(RegisterRequest request);
     Task<UserListResponse> GetAllUsers(UserSearchRequest request);
     Task<object> GetUserByIdAsync(Guid id, bool searchByHandyman = false);
-    Task<UserDto> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason, Guid adminIdFromToken);
+    Task<UserDto> UpdateUserBlockStatusAsync(Guid targetId, bool block, string? reason);
     Task<HandymanVerificationListResponse> GetPendingVerificationsAsync(int page = 1, int pageSize = 1000);
-    Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes, Guid adminId);
+    Task<HandymanVerificationDto> VerifyHandymanAsync(Guid id, bool approve, string? notes);
     Task<IEnumerable<JobDto>> GetEmergencyJobsAsync();
-    Task AssignJobAsync(Guid jobId, Guid handymanUserId, Guid adminId);
+    Task AssignJobAsync(Guid jobId, Guid handymanUserId);
     Task<IEnumerable<BidDto>> GetBidTransactionsAsync(string? eventType = null);
     Task<BidTransactionDto> GetBidTransactionByIdAsync(Guid id);
-    Task HandleBidActionAsync(Guid bidId, string actionType, string reason, Guid adminId);
+    Task HandleBidActionAsync(Guid bidId, string actionType, string reason);
     Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync();
 }

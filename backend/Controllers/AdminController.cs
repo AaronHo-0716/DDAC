@@ -23,8 +23,6 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [EnableRateLimiting("auth_policy")]
     public async Task<ActionResult<UserDto>> AddNewAdmin([FromBody] RegisterRequest request)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
         try { return Ok(await adminService.CreateAdminAsync(request)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
@@ -47,11 +45,9 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [HttpPatch("users/{id}/block")]
     public async Task<ActionResult<UserDto>> BlockUser(Guid id, [FromBody] BlockUserRequest request)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
         try 
         {
-            var result = await adminService.UpdateUserBlockStatusAsync(id, true, request.Reason, adminId);
+            var result = await adminService.UpdateUserBlockStatusAsync(id, true, request.Reason);
             return Ok(result);
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -60,9 +56,7 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [HttpPatch("users/{id}/unblock")]
     public async Task<ActionResult<UserDto>> UnblockUser(Guid id)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
-        try { return Ok(await adminService.UpdateUserBlockStatusAsync(id, false, null, adminId)); }
+        try { return Ok(await adminService.UpdateUserBlockStatusAsync(id, false, null)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -83,18 +77,14 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [HttpPatch("handymen/{id}/approve")]
     public async Task<ActionResult<HandymanVerificationDto>> ApproveHandyman(Guid id, [FromBody] string notes)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
-        try { return Ok(await adminService.VerifyHandymanAsync(id, true, notes, adminId)); }
+        try { return Ok(await adminService.VerifyHandymanAsync(id, true, notes)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPatch("handymen/{id}/reject")]
     public async Task<ActionResult<HandymanVerificationDto>> RejectHandyman(Guid id, [FromBody] string notes)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
-        try { return Ok(await adminService.VerifyHandymanAsync(id, false, notes, adminId)); }
+        try { return Ok(await adminService.VerifyHandymanAsync(id, false, notes)); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -111,7 +101,7 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [Obsolete("Use specific moderation logs where available.")]
     public async Task<ActionResult<IEnumerable<JobDto>>> GetJobs()
     {
-        try { return Ok(await jobService.AdminGetJobsAsync(new JobFilterQuery(), null)); }
+        try { return Ok(await jobService.AdminGetJobsAsync(new JobFilterQuery())); }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
@@ -119,11 +109,9 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [Obsolete("Use specific moderation logs where available.")]
     public async Task<IActionResult> AssignJob(Guid id, [FromBody] AssignJobRequest request)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
         try
         {
-            await adminService.AssignJobAsync(id, request.HandymanUserId, adminId);
+            await adminService.AssignJobAsync(id, request.HandymanUserId);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -140,11 +128,9 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [HttpPatch("bid-transactions/{bidId}/force-reject")]
     public async Task<IActionResult> ForceRejectBid(Guid bidId, [FromBody] string reason)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
         try
         {
-            await adminService.HandleBidActionAsync(bidId, BidModerationAction.ForceReject.ToDbString(), reason, adminId);
+            await adminService.HandleBidActionAsync(bidId, BidModerationAction.ForceReject.ToDbString(), reason);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -153,11 +139,9 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [HttpPatch("bid-transactions/{bidId}/lock")]
     public async Task<IActionResult> LockBid(Guid bidId, [FromBody] string reason)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
         try
         {
-            await adminService.HandleBidActionAsync(bidId, BidModerationAction.Lock.ToDbString(), reason, adminId);
+            await adminService.HandleBidActionAsync(bidId, BidModerationAction.Lock.ToDbString(), reason);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
@@ -166,11 +150,9 @@ public class AdminController(IAdminService adminService, IJobService jobService)
     [HttpPatch("bid-transactions/{bidId}/flag")]
     public async Task<IActionResult> FlagBid(Guid bidId, [FromBody] string reason)
     {
-        var adminId = await GetCurrentUserIdAsync();
-
         try
         {
-            await adminService.HandleBidActionAsync(bidId, BidModerationAction.Flag.ToDbString(), reason, adminId);
+            await adminService.HandleBidActionAsync(bidId, BidModerationAction.Flag.ToDbString(), reason);
             return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }

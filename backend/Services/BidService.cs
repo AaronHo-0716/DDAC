@@ -21,8 +21,10 @@ public class BidService(ServiceDependencies deps) : BaseService(deps), IBidServi
         return await GetPagedBidsResponse(query, page, pageSize);
     }
 
-    public async Task<BidListResponse> GetMyBidsAsync(Guid userId, int page = 1, int pageSize = 1000)
+    public async Task<BidListResponse> GetMyBidsAsync(int page = 1, int pageSize = 1000)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var query = Context.Bids
             .Where(b => b.Handyman_User_Id == userId)
             .OrderByDescending(b => b.Created_At_Utc);
@@ -30,8 +32,10 @@ public class BidService(ServiceDependencies deps) : BaseService(deps), IBidServi
         return await GetPagedBidsResponse(query, page, pageSize);
     }
 
-    public async Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request, Guid userId)
+    public async Task<BidDto> CreateBidAsync(Guid jobId, CreateBidRequest request)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var job = await Context.Jobs.FirstOrDefaultAsync(j => j.Id == jobId) 
             ?? throw new HttpRequestException($"Job with id {jobId} not found", null, HttpStatusCode.NotFound);
 
@@ -87,8 +91,11 @@ public class BidService(ServiceDependencies deps) : BaseService(deps), IBidServi
         return await GetBidDtoWithUser(bid.Id);
     }
 
-    public async Task<BidDto> AcceptBidAsync(Guid bidId, Guid userId, string userRole)
+    public async Task<BidDto> AcceptBidAsync(Guid bidId)
     {
+        var userId = await GetCurrentUserIdAsync();
+        var userRole = GetCurrentUserRole();
+
         if (userRole != UserRole.Homeowner.ToDbString() && userRole != UserRole.Admin.ToDbString())
             throw new HttpRequestException("Unauthorized role for this action", null, HttpStatusCode.Forbidden);
 
@@ -149,8 +156,11 @@ public class BidService(ServiceDependencies deps) : BaseService(deps), IBidServi
         }
     }
 
-    public async Task<BidDto> RejectBidAsync(Guid bidId, Guid userId, string userRole)
+    public async Task<BidDto> RejectBidAsync(Guid bidId)
     {
+        var userId = await GetCurrentUserIdAsync();
+        var userRole = GetCurrentUserRole();
+
         if (userRole != UserRole.Homeowner.ToDbString() && userRole != UserRole.Admin.ToDbString())
             throw new HttpRequestException("Unauthorized role for this action", null, HttpStatusCode.Forbidden);
 
@@ -179,8 +189,10 @@ public class BidService(ServiceDependencies deps) : BaseService(deps), IBidServi
         return await MapBidToDto(bid);
     }
 
-    public async Task DeleteBidAsync(Guid bidId, Guid userId)
+    public async Task DeleteBidAsync(Guid bidId)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var bid = await Context.Bids.Include(b => b.Job).FirstOrDefaultAsync(b => b.Id == bidId) 
             ?? throw new HttpRequestException($"Bid with id {bidId} not found", null, HttpStatusCode.NotFound);
 

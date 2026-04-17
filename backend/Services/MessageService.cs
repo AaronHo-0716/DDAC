@@ -4,13 +4,17 @@ using backend.Constants;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
+using Amazon.SimpleSystemsManagement.Model;
+using System.Xml.Schema;
 
 namespace backend.Services;
 
 public class MessageService(ServiceDependencies deps) : BaseService(deps), IMessageService
 {
-    public async Task<ConversationDto> GetOrCreateJobConversationAsync(CreateJobChatRequest request, Guid userId)
+    public async Task<ConversationDto> GetOrCreateJobConversationAsync(CreateJobChatRequest request)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var bid = await Context.Bids.Include(b => b.Job)
             .FirstOrDefaultAsync(b => b.Id == request.BidId && b.Job_Id == request.JobId)
             ?? throw new HttpRequestException("Bid/Job relation not found.", null, HttpStatusCode.NotFound);
@@ -37,11 +41,13 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         });
 
         await Context.SaveChangesAsync();
-        return await GetConversationByIdAsync(conversation.Id, userId);
+        return await GetConversationByIdAsync(conversation.Id);
     }
 
-    public async Task<ConversationDto> GetOrCreateSupportConversationAsync(Guid userId)
+    public async Task<ConversationDto> GetOrCreateSupportConversationAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var existing = await Context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
             .FirstOrDefaultAsync(c => c.Type == ConversationType.AdminSupport.ToDbString() && c.Created_By_User_Id == userId);
@@ -59,11 +65,13 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         });
 
         await Context.SaveChangesAsync();
-        return await GetConversationByIdAsync(conversation.Id, userId);
+        return await GetConversationByIdAsync(conversation.Id);
     }
 
-    public async Task<MessageDto> SendMessageAsync(Guid conversationId, Guid userId, SendMessageRequest request)
+    public async Task<MessageDto> SendMessageAsync(Guid conversationId, SendMessageRequest request)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var conv = await Context.Conversations
             .Include(c => c.Participants)
             .FirstOrDefaultAsync(c => c.Id == conversationId) 
@@ -108,8 +116,11 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         return dto;
     }
     
-    public async Task<IEnumerable<ConversationDto>> GetUserConversationsAsync(Guid userId, string role)
+    public async Task<IEnumerable<ConversationDto>> GetUserConversationsAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
+        var role = GetCurrentUserRole();
+
         var query = Context.Conversations.Include(c => c.Participants).ThenInclude(p => p.User).AsQueryable();
 
         if (role == UserRole.Admin.ToDbString())
@@ -123,26 +134,38 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         return results;
     }
 
-    public async Task<IEnumerable<MessageDto>> GetConversationMessagesAsync(Guid conversationId, Guid userId)
+    public async Task<IEnumerable<MessageDto>> GetConversationMessagesAsync(Guid conversationId)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var messages = await Context.Messages
             .Where(m => m.Conversation_Id == conversationId)
             .OrderBy(m => m.Created_At_Utc).ToListAsync();
         return messages.Select(MapMessageToDto);
     }
 
-    public async Task MarkAsReadAsync(Guid conversationId, Guid userId)
+    public async Task MarkAsReadAsync(Guid conversationId)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         await Context.Conversation_Participants
             .Where(p => p.Conversation_Id == conversationId && p.User_Id == userId)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.Unread_Count, 0));
     }
 
-    public async Task<int> GetTotalUnreadCountAsync(Guid userId) =>
-        await Context.Conversation_Participants.Where(p => p.User_Id == userId).SumAsync(p => p.Unread_Count);
-
-    public async Task<ConversationDto> GetConversationByIdAsync(Guid id, Guid userId)
+    public async Task<int> GetTotalUnreadCountAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
+
+        return await Context.Conversation_Participants
+            .Where(p => p.User_Id == userId)
+            .SumAsync(p => p.Unread_Count);
+    }
+
+    public async Task<ConversationDto> GetConversationByIdAsync(Guid id)
+    {
+        var userId = await GetCurrentUserIdAsync();
+
         var c = await Context.Conversations.Include(c => c.Participants).ThenInclude(p => p.User)
             .FirstOrDefaultAsync(c => c.Id == id) ?? throw new HttpRequestException("Not found", null, HttpStatusCode.NotFound);
         return await MapToConversationDto(c, userId);

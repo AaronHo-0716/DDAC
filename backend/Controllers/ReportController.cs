@@ -13,11 +13,9 @@ public class ReportController(IReportService reportService) : BaseController
     [HttpPost]
     public async Task<IActionResult> Report([FromBody] CreateReportRequest request)
     {
-        var userId = await GetCurrentUserIdAsync();
-
         try
         {
-            await reportService.CreateReportAsync(request, userId);
+            await reportService.CreateReportAsync(request);
             return Ok(new { message = "Report submitted successfully. Administrators will review it shortly." });
         }
         catch (HttpRequestException ex)
@@ -28,9 +26,7 @@ public class ReportController(IReportService reportService) : BaseController
 
     [HttpGet("me")]
     public async Task<ActionResult<IEnumerable<ReportListResponse>>> GetMyReports()
-    {
-        var userId = await GetCurrentUserIdAsync();
-    
-        return Ok(await reportService.GetMyReportsAsync(userId));
+    {  
+        return Ok(await reportService.GetMyReportsAsync());
     }
 }

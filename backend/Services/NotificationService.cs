@@ -8,8 +8,10 @@ namespace backend.Services;
 
 public class NotificationService(ServiceDependencies deps) : BaseService(deps), INotificationService
 {
-    public async Task<NotificationListResponse> GetUserNotificationsAsync(Guid userId, int page = 1, int pageSize = 1000)
+    public async Task<NotificationListResponse> GetUserNotificationsAsync(int page = 1, int pageSize = 1000)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var baseQuery = Context.Notifications.Where(n => n.User_Id == userId);
 
         var totalCount = await baseQuery.CountAsync();
@@ -30,8 +32,10 @@ public class NotificationService(ServiceDependencies deps) : BaseService(deps), 
         );
     }
 
-    public async Task MarkAsReadAsync(Guid notificationId, Guid userId)
+    public async Task MarkAsReadAsync(Guid notificationId)
     {
+        var userId = await GetCurrentUserIdAsync();
+
         var notification = await Context.Notifications
             .FirstOrDefaultAsync(n => n.Id == notificationId && n.User_Id == userId)
             ?? throw new HttpRequestException("Notification not found.", null, HttpStatusCode.NotFound);
@@ -44,8 +48,10 @@ public class NotificationService(ServiceDependencies deps) : BaseService(deps), 
         await NotificationHubContext.Clients.Group($"{ClientGroupType.Notify_}{userId}").SendAsync(HubMethod.NotificationMarkedRead.ToString(), notificationId);
     }
 
-    public async Task MarkAllAsReadAsync(Guid userId)
+    public async Task MarkAllAsReadAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
+
         await Context.Notifications
             .Where(n => n.User_Id == userId && !n.Is_Read)
             .ExecuteUpdateAsync(setters => setters.SetProperty(n => n.Is_Read, true));

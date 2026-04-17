@@ -6,8 +6,8 @@ public interface IAuthService
 {
     Task<AuthResponse> Register(RegisterRequest request);
     Task<AuthResponse> Login(LoginRequest request);
-    Task<UserDto> GetUserById(Guid userId);
+    Task<UserDto> GetUserById();
     Task<AuthResponse> RefreshToken(string token);
-    Task Logout(LogoutRequest request, Guid userId);
-    Task<HandymanVerificationDto> CreateHandymanVerification(Guid userId);
+    Task Logout(LogoutRequest request);
+    Task<HandymanVerificationDto> CreateHandymanVerification();
 }

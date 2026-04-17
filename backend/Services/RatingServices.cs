@@ -8,8 +8,10 @@ namespace backend.Services;
 
 public class RatingService(ServiceDependencies deps) : BaseService(deps), IRatingService
 {
-    public async Task SubmitRatingAsync(Guid raterId, SubmitRatingRequest request)
+    public async Task SubmitRatingAsync(SubmitRatingRequest request)
     {
+        var raterId = await GetCurrentUserIdAsync();
+
         var isVerifiedHandyman = await Context.Handyman_Verifications.AnyAsync(v => 
             v.User_Id == request.TargetUserId && 
             v.Status == VerificationStatus.Approved.ToDbString());
@@ -66,7 +68,7 @@ public class RatingService(ServiceDependencies deps) : BaseService(deps), IRatin
         await RecalculateUserAverageAsync(request.TargetUserId);
     }
 
-    public async Task<UserRatingSummaryDto> GetUserRatingsAsync(Guid userId, int page = 1, int pageSize = 1000)
+    public async Task<UserRatingSummaryDto> GetUserRatingsAsync(int page = 1, int pageSize = 1000, Guid? userId = null)
     {
         var targetUser = await Context.Users.FindAsync(userId)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
