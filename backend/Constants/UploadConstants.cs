@@ -9,8 +9,8 @@ public static class UploadConstants
         UploadTypes.JobImage => "job-images",
         UploadTypes.AvatarImage => "avatars",
         UploadTypes.IdentityCardImage => "identity-cards",
-        UploadTypes.JobConversationAtt => "job-chat-attachment",
-        UploadTypes.SupportConversationAtt => "job-chat-attachment",
+        UploadTypes.JobConversationAtt => "chat-attachment",
+        UploadTypes.SupportConversationAtt => "chat-attachment",
         _ => t.ToString().ToLower()
     };
 }
