@@ -7,10 +7,27 @@ import type {
   UnreadCountResponse,
 } from "@/app/types";
 
+const normalizeMessageType = (value: unknown): ChatMessage["type"] => {
+  if (typeof value === "number") {
+    if (value === 1) return "image";
+    if (value === 2) return "system";
+    return "text";
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "1" || normalized === "image") return "image";
+    if (normalized === "2" || normalized === "system") return "system";
+    return "text";
+  }
+
+  return "text";
+};
+
 const normalizeMessage = (data: any): ChatMessage => ({
   id: data.id,
   senderId: data.senderId,
-  type: data.type,
+  type: normalizeMessageType(data.type),
   content: data.content,
   createdAtUtc: data.createdAtUtc,
 });

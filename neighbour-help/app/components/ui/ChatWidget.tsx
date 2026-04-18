@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, MessageCircle, Send, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, MessageCircle, Send, X } from "lucide-react";
 import { HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { ConversationType, type ChatMessage, type Conversation } from "@/app/types";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import { messagesService, supportService } from "@/app/lib/api/messages"; // Imported both services
 import { getAccessToken } from "@/app/lib/api/client";
+import { uploadsService } from "@/app/lib/api/uploads";
 import { useChatWidget } from "../../lib/context/ChatWidgetContext";
 
 interface ChatHubMessagePayload {
@@ -19,6 +20,37 @@ const CHAT_HUB_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
   "http://localhost:5073";
 const CHAT_HUB_URL = `${CHAT_HUB_BASE_URL.replace(/\/+$/, "")}/api/chat-hub`;
+const MAX_CHAT_IMAGE_SIZE_MB = 10;
+
+function normalizeMessageType(value: unknown): ChatMessage["type"] {
+  if (typeof value === "number") {
+    if (value === 1) return "image";
+    if (value === 2) return "system";
+    return "text";
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "1" || normalized === "image") return "image";
+    if (normalized === "2" || normalized === "system") return "system";
+    return "text";
+  }
+
+  return "text";
+}
+
+function validateImageFile(file: File): string | null {
+  if (!file.type || !file.type.startsWith("image/")) {
+    return "Only image files are allowed.";
+  }
+
+  const maxBytes = MAX_CHAT_IMAGE_SIZE_MB * 1024 * 1024;
+  if (file.size > maxBytes) {
+    return `Image must be ${MAX_CHAT_IMAGE_SIZE_MB}MB or smaller.`;
+  }
+
+  return null;
+}
 
 function formatTime(iso: string) {
   const date = new Date(iso);
@@ -56,11 +88,15 @@ export default function ChatWidget() {
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedImagePreviewUrl, setSelectedImagePreviewUrl] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const connectionRef = useRef<HubConnection | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeConversationId) ?? null,
@@ -74,6 +110,25 @@ export default function ChatWidget() {
 
   useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
   useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+
+  useEffect(() => {
+    return () => {
+      if (selectedImagePreviewUrl) {
+        URL.revokeObjectURL(selectedImagePreviewUrl);
+      }
+    };
+  }, [selectedImagePreviewUrl]);
+
+  const resetSelectedImage = useCallback(() => {
+    if (selectedImagePreviewUrl) {
+      URL.revokeObjectURL(selectedImagePreviewUrl);
+    }
+    setSelectedImage(null);
+    setSelectedImagePreviewUrl(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  }, [selectedImagePreviewUrl]);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -171,10 +226,15 @@ export default function ChatWidget() {
       const incoming = payload.message;
       if (!conversationId || !incoming) return;
 
+      const normalizedIncoming: ChatMessage = {
+        ...incoming,
+        type: normalizeMessageType((incoming as { type?: unknown }).type),
+      };
+
       if (activeConversationIdRef.current === conversationId) {
         setMessages((prev) => {
           const messageMap = new Map(prev.map((m) => [m.id, m]));
-          messageMap.set(incoming.id, incoming);
+          messageMap.set(normalizedIncoming.id, normalizedIncoming);
           
           return Array.from(messageMap.values()).sort(
             (a, b) => +new Date(a.createdAtUtc) - +new Date(b.createdAtUtc)
@@ -204,31 +264,75 @@ export default function ChatWidget() {
   useEffect(() => { if (isOpen && user) loadConversations(); }, [isOpen, user, loadConversations]);
   useEffect(() => { if (isOpen && activeConversationId && user) loadMessages(activeConversationId); }, [isOpen, activeConversationId, user, loadMessages]);
 
+  const appendMessage = useCallback((message: ChatMessage) => {
+    setMessages((prev) => {
+      const messageMap = new Map(prev.map((m) => [m.id, m]));
+      messageMap.set(message.id, message);
+      return Array.from(messageMap.values()).sort(
+        (a, b) => +new Date(a.createdAtUtc) - +new Date(b.createdAtUtc)
+      );
+    });
+  }, []);
+
+  const sendTextMessage = useCallback(async (conversationId: string, content: string, isSupport: boolean) => {
+    const sent = isSupport
+      ? await supportService.sendMessage(conversationId, { content, messageType: "text" })
+      : await messagesService.sendMessage(conversationId, { content, messageType: "text" });
+    appendMessage(sent);
+  }, [appendMessage]);
+
+  const handleImageSelection = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setMessagesError(validationError);
+      if (imageInputRef.current) {
+        imageInputRef.current.value = "";
+      }
+      return;
+    }
+
+    if (selectedImagePreviewUrl) {
+      URL.revokeObjectURL(selectedImagePreviewUrl);
+    }
+
+    setSelectedImage(file);
+    setSelectedImagePreviewUrl(URL.createObjectURL(file));
+    setMessagesError(null);
+  }, [selectedImagePreviewUrl]);
+
   const handleSend = async () => {
-    if (!activeConversationId || !user || sending || !draft.trim()) return;
+    if (!activeConversationId || !user || sending || uploadingImage) return;
+    const hasText = draft.trim().length > 0;
+    const hasImage = !!selectedImage;
+    if (!hasText && !hasImage) return;
+
     const value = draft.trim();
     const isSupport = activeConversation?.type === ConversationType.AdminSupport;
 
     setSending(true);
+    setMessagesError(null);
     try {
-      const sent = isSupport
-        ? await supportService.sendMessage(activeConversationId, { content: value, messageType: "text" })
-        : await messagesService.sendMessage(activeConversationId, { content: value, messageType: "text" });
+      if (hasImage && selectedImage) {
+        setUploadingImage(true);
+        const imageMessage = await uploadsService.uploadChatAttachmentImage(selectedImage, activeConversationId);
+        appendMessage(imageMessage);
+        resetSelectedImage();
+        setUploadingImage(false);
+      }
 
-      setMessages((prev) => {
-        const messageMap = new Map(prev.map((m) => [m.id, m]));
-        messageMap.set(sent.id, sent);
-        return Array.from(messageMap.values()).sort(
-          (a, b) => +new Date(a.createdAtUtc) - +new Date(b.createdAtUtc)
-        );
-      });
+      if (hasText) {
+        await sendTextMessage(activeConversationId, value, isSupport);
+        setDraft("");
+      }
 
-      setDraft("");
-      // Scroll immediately after sending for better UX
       scrollToBottom("smooth"); 
     } catch {
       setMessagesError("Unable to send message.");
     } finally {
+      setUploadingImage(false);
       setSending(false);
     }
   };
@@ -309,7 +413,11 @@ export default function ChatWidget() {
                               </p>
                             )}
                             <p className="text-xs text-[#6B7280] truncate mt-0.5">
-                              {conversation.lastMessage?.content ?? "No messages yet"}
+                              {conversation.lastMessage
+                                ? conversation.lastMessage.type === "image"
+                                  ? "[Image]"
+                                  : conversation.lastMessage.content
+                                : "No messages yet"}
                             </p>
                           </div>
                           <div className="flex flex-col items-end flex-shrink-0">
@@ -338,10 +446,20 @@ export default function ChatWidget() {
                   <div className="space-y-2">
                     {messages.map((message) => {
                       const mine = message.senderId === user.id;
+                      const isImageMessage = message.type === "image";
                       return (
                         <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                           <div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${mine ? "bg-[#0B74FF] text-white rounded-br-md" : "bg-white text-[#111827] rounded-bl-md"}`}>
-                            <p className="text-sm leading-snug">{message.content}</p>
+                            {isImageMessage ? (
+                              <img
+                                src={message.content}
+                                alt="Chat attachment"
+                                className="rounded-lg max-w-[220px] max-h-[220px] object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <p className="text-sm leading-snug">{message.content}</p>
+                            )}
                             <p className={`text-[10px] mt-1 ${mine ? "text-blue-100" : "text-[#9CA3AF]"}`}>
                               {formatTime(message.createdAtUtc)}
                             </p>
@@ -354,22 +472,60 @@ export default function ChatWidget() {
                 )}
               </div>
               <div className="border-t border-[#E5E7EB] p-3 bg-white">
+                {selectedImagePreviewUrl && (
+                  <div className="mb-2 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-2">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <p className="text-xs font-medium text-[#374151] truncate">{selectedImage?.name}</p>
+                      <button
+                        onClick={resetSelectedImage}
+                        disabled={uploadingImage}
+                        className="text-[#6B7280] hover:text-[#111827] disabled:opacity-50"
+                        type="button"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <img
+                      src={selectedImagePreviewUrl}
+                      alt="Selected image preview"
+                      className="rounded-md max-h-28 object-cover"
+                    />
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageSelection}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={sending || uploadingImage}
+                    className="w-9 h-9 rounded-lg border border-[#E5E7EB] text-[#4B5563] flex items-center justify-center hover:bg-[#F7F8FA] disabled:opacity-50"
+                  >
+                    <ImagePlus className="w-4 h-4" />
+                  </button>
                   <input
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    placeholder="Type a message"
+                    placeholder={selectedImage ? "Add a caption (optional)" : "Type a message"}
                     className="flex-1 border border-[#E5E7EB] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
-                    onKeyDown={(e) => e.key === "Enter" && !sending && handleSend()}
+                    onKeyDown={(e) => e.key === "Enter" && !sending && !uploadingImage && handleSend()}
                   />
                   <button
                     onClick={() => void handleSend()}
-                    disabled={sending || draft.trim() === ""}
+                    disabled={sending || uploadingImage || (draft.trim() === "" && !selectedImage)}
                     className="w-9 h-9 rounded-lg bg-[#0B74FF] text-white flex items-center justify-center hover:bg-[#065ed1] disabled:opacity-50"
                   >
                     <Send className="w-4 h-4" />
                   </button>
                 </div>
+                {messagesError && (
+                  <p className="mt-2 text-xs text-red-600">{messagesError}</p>
+                )}
               </div>
             </>
           )}
