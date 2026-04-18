@@ -315,11 +315,18 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
             bid.Job.Status = JobStatus.Open.ToDbString();
             bid.Job.Updated_At_Utc = now;
 
-            var rejectionReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
+            var forceRejectMessage = trimmedReason is null
+                ? $"Your bid for '{bid.Job.Title}' was force rejected by admin."
+                : $"Your bid for '{bid.Job.Title}' was force rejected by admin. Reason: {trimmedReason}.";
+
+            var ownerForceRejectMessage = trimmedReason is null
+                ? $"The accepted bid for your job '{bid.Job.Title}' was force rejected by admin."
+                : $"The accepted bid for your job '{bid.Job.Title}' was force rejected by admin. Reason: {trimmedReason}.";
+
             await CreateNotification(
                 bid.Handyman_User_Id,
                 NotificationType.BidRejected,
-                $"Your bid for '{bid.Job.Title}' was force rejected by admin. Reason: {rejectionReason}.",
+                forceRejectMessage,
                 bid.Job_Id
             );
 
@@ -328,7 +335,7 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
                 await CreateNotification(
                     bid.Job.Posted_By_User_Id,
                     NotificationType.BidRejected,
-                    $"The accepted bid for your job '{bid.Job.Title}' was force rejected by admin. Reason: {rejectionReason}.",
+                    ownerForceRejectMessage,
                     bid.Job_Id
                 );
             }
@@ -339,7 +346,6 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
             bid.Locked = true;
             var isAcceptedBid = bid.Status == BidStatus.Accepted.ToDbString();
 
-            var lockReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
             var existingBidLock = await Context.Bid_Locks.FirstOrDefaultAsync(bl => bl.Bid_Id == bid.Id);
 
             if (existingBidLock is null)
@@ -348,21 +354,29 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
                 {
                     Bid_Id = bid.Id,
                     Locked_By_User_Id = adminId,
-                    Locked_Reason = lockReason,
+                    Locked_Reason = trimmedReason,
                     Locked_At_Utc = now
                 });
             }
             else
             {
                 existingBidLock.Locked_By_User_Id = adminId;
-                existingBidLock.Locked_Reason = lockReason;
+                existingBidLock.Locked_Reason = trimmedReason;
                 existingBidLock.Locked_At_Utc = now;
             }
+
+            var lockMessage = trimmedReason is null
+                ? $"Your bid for '{bid.Job.Title}' was locked by admin."
+                : $"Your bid for '{bid.Job.Title}' was locked by admin. Reason: {trimmedReason}.";
+
+            var ownerLockMessage = trimmedReason is null
+                ? $"The accepted bid for your job '{bid.Job.Title}' was locked by admin."
+                : $"The accepted bid for your job '{bid.Job.Title}' was locked by admin. Reason: {trimmedReason}.";
 
             await CreateNotification(
                 bid.Handyman_User_Id,
                 NotificationType.SystemMessage,
-                $"Your bid for '{bid.Job.Title}' was locked by admin. Reason: {lockReason}.",
+                lockMessage,
                 bid.Job_Id
             );
 
@@ -371,7 +385,7 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
                 await CreateNotification(
                     bid.Job.Posted_By_User_Id,
                     NotificationType.SystemMessage,
-                    $"The accepted bid for your job '{bid.Job.Title}' was locked by admin. Reason: {lockReason}.",
+                    ownerLockMessage,
                     bid.Job_Id
                 );
             }
@@ -382,7 +396,6 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
             var wasAcceptedBid = bid.Status == BidStatus.Accepted.ToDbString();
             var wasRejectedByUnlockRule = false;
             bid.Locked = false;
-            var unlockReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
 
             var existingBidLock = await Context.Bid_Locks.FirstOrDefaultAsync(bl => bl.Bid_Id == bid.Id);
             if (existingBidLock is not null)
@@ -400,29 +413,41 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
 
             if (wasRejectedByUnlockRule)
             {
+                var unlockRejectMessage = trimmedReason is null
+                    ? $"Your bid for '{bid.Job.Title}' was unlocked by admin and then rejected because the job already has an accepted bid."
+                    : $"Your bid for '{bid.Job.Title}' was unlocked by admin and then rejected because the job already has an accepted bid. Reason: {trimmedReason}.";
+
                 await CreateNotification(
                     bid.Handyman_User_Id,
                     NotificationType.BidRejected,
-                    $"Your bid for '{bid.Job.Title}' was unlocked by admin and then rejected because the job already has an accepted bid. Reason: {unlockReason}.",
+                    unlockRejectMessage,
                     bid.Job_Id
                 );
             }
             else
             {
+                var unlockMessage = trimmedReason is null
+                    ? $"Your bid for '{bid.Job.Title}' was unlocked by admin."
+                    : $"Your bid for '{bid.Job.Title}' was unlocked by admin. Reason: {trimmedReason}.";
+
                 await CreateNotification(
                     bid.Handyman_User_Id,
                     NotificationType.SystemMessage,
-                    $"Your bid for '{bid.Job.Title}' was unlocked by admin. Reason: {unlockReason}.",
+                    unlockMessage,
                     bid.Job_Id
                 );
             }
 
             if (wasAcceptedBid && bid.Job.Posted_By_User_Id != bid.Handyman_User_Id)
             {
+                var ownerUnlockMessage = trimmedReason is null
+                    ? $"The accepted bid for your job '{bid.Job.Title}' was unlocked by admin."
+                    : $"The accepted bid for your job '{bid.Job.Title}' was unlocked by admin. Reason: {trimmedReason}.";
+
                 await CreateNotification(
                     bid.Job.Posted_By_User_Id,
                     NotificationType.SystemMessage,
-                    $"The accepted bid for your job '{bid.Job.Title}' was unlocked by admin. Reason: {unlockReason}.",
+                    ownerUnlockMessage,
                     bid.Job_Id
                 );
             }
@@ -432,10 +457,14 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         {
             bid.Flagged = true;
 
+            var flagAddedMessage = trimmedReason is null
+                ? $"Your bid for '{bid.Job.Title}' was flagged by admin for review."
+                : $"Your bid for '{bid.Job.Title}' was flagged by admin for review. Reason: {trimmedReason}.";
+
             await CreateNotification(
                 bid.Handyman_User_Id,
                 NotificationType.SystemMessage,
-                $"Your bid for '{bid.Job.Title}' was flagged by admin for review.",
+                flagAddedMessage,
                 bid.Job_Id
             );
         }
@@ -444,10 +473,14 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         {
             bid.Flagged = false;
 
+            var flagRemovedMessage = trimmedReason is null
+                ? $"The flag on your bid for '{bid.Job.Title}' was removed by admin."
+                : $"The flag on your bid for '{bid.Job.Title}' was removed by admin. Reason: {trimmedReason}.";
+
             await CreateNotification(
                 bid.Handyman_User_Id,
                 NotificationType.SystemMessage,
-                $"The flag on your bid for '{bid.Job.Title}' was removed by admin.",
+                flagRemovedMessage,
                 bid.Job_Id
             );
         }
