@@ -38,10 +38,20 @@ export const uploadsService = {
     await apiClient.postForm<unknown>("/uploads", formData);
   },
 
-  async uploadChatAttachmentImage(file: File, conversationId: string): Promise<ChatMessage> {
+  async uploadJobChatAttachmentImage(file: File, conversationId: string): Promise<ChatMessage> {
     const formData = new FormData();
     formData.append("File", file);
-    formData.append("UploadType", "ChatAttachmentImage");
+    formData.append("UploadType", "JobConversationAtt");
+    formData.append("TargetId", conversationId);
+
+    const response = await apiClient.postForm<any>("/uploads", formData);
+    return normalizeChatMessage(response);
+  },
+
+  async uploadSupportChatAttachmentImage(file: File, conversationId: string): Promise<ChatMessage> {
+    const formData = new FormData();
+    formData.append("File", file);
+    formData.append("UploadType", "SupportConversationAtt");
     formData.append("TargetId", conversationId);
 
     const response = await apiClient.postForm<any>("/uploads", formData);

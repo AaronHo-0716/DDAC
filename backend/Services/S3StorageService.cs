@@ -164,7 +164,7 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         // Broadcast Logic
         // 1. If user sent, notify Admins group
         if (currentUserRole != UserRole.Admin.ToDbString())
-            await ChatHubContext.Clients.Group("Admins").SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+            await ChatHubContext.Clients.Group(UserRole.Admin.ToString()).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
         
         // 2. Notify current participants
         var targetIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();

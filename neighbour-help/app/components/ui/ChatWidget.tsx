@@ -317,7 +317,13 @@ export default function ChatWidget() {
     try {
       if (hasImage && selectedImage) {
         setUploadingImage(true);
-        const imageMessage = await uploadsService.uploadChatAttachmentImage(selectedImage, activeConversationId);
+        let imageMessage = null;
+
+        if (isSupport) 
+          imageMessage = await uploadsService.uploadSupportChatAttachmentImage(selectedImage, activeConversationId);
+        else 
+          imageMessage = await uploadsService.uploadJobChatAttachmentImage(selectedImage, activeConversationId);
+
         appendMessage(imageMessage);
         resetSelectedImage();
         setUploadingImage(false);
