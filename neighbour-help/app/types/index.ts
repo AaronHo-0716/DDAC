@@ -278,6 +278,8 @@ export interface ChatMessage {
 export interface Conversation {
   id: string;
   type: ConversationType;
+  relatedJobId?: string;
+  relatedJobTitle?: string;
   createdAtUtc: string;
   lastMessageAtUtc?: string;
   unreadCount: number;

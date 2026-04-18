@@ -204,6 +204,15 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
             .OrderByDescending(m => m.Created_At_Utc)
             .FirstOrDefaultAsync();
 
+        string? relatedJobTitle = c.Related_Job?.Title;
+        if (relatedJobTitle is null && c.Related_Job_Id.HasValue)
+        {
+            relatedJobTitle = await Context.Jobs
+                .Where(j => j.Id == c.Related_Job_Id.Value)
+                .Select(j => j.Title)
+                .FirstOrDefaultAsync();
+        }
+
         var participants = new List<ChatParticipantDto>();
         foreach (var p in c.Participants)
         {
@@ -221,6 +230,8 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         return new ConversationDto(
             c.Id,
             typeEnum,
+            c.Related_Job_Id,
+            relatedJobTitle,
             c.Created_At_Utc,
             c.Last_Message_At_Utc,
             c.Participants.FirstOrDefault(p => p.User_Id == currentUserId)?.Unread_Count ?? 0,

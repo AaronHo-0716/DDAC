@@ -18,6 +18,8 @@ const normalizeMessage = (data: any): ChatMessage => ({
 const normalizeConversation = (data: any): Conversation => ({
   id: data.id,
   type: data.type,
+  relatedJobId: data.relatedJobId || undefined,
+  relatedJobTitle: data.relatedJobTitle || undefined,
   createdAtUtc: data.createdAtUtc,
   lastMessageAtUtc: data.lastMessageAtUtc || undefined,
   unreadCount: data.unreadCount || 0,

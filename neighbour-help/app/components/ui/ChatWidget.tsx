@@ -50,18 +50,28 @@ function formatLastSeen(iso?: string) {
   });
 }
 
-// Updated to match camelCase Enums
-function getConversationTitle(conversation: Conversation, currentUserId: string) {
+function getConversationDisplay(conversation: Conversation, currentUserId: string) {
   const others = conversation.participants.filter((p) => p.userId !== currentUserId);
-  if (others.length > 0) {
-    return others.map((p) => p.name).join(", ");
+  const otherUserName = others.length > 0 ? others.map((p) => p.name).join(", ") : "Unknown user";
+
+  if (conversation.type === ConversationType.JobChat) {
+    return {
+      title: otherUserName,
+      subtitle: conversation.relatedJobTitle ? `Job: ${conversation.relatedJobTitle}` : "Job Chat",
+    };
   }
 
-  if (conversation.type.toLowerCase() === ConversationType.AdminSupport) {
-    return "Admin Support";
+  if (conversation.type === ConversationType.AdminSupport) {
+    return {
+      title: "Admin Support",
+      subtitle: otherUserName,
+    };
   }
 
-  return "Job Chat";
+  return {
+    title: otherUserName,
+    subtitle: undefined,
+  };
 }
 
 export default function ChatWidget() {
@@ -97,6 +107,13 @@ export default function ChatWidget() {
     () => conversations.find((c) => c.id === activeConversationId) ?? null,
     [conversations, activeConversationId]
   );
+
+  const activeConversationDisplay = useMemo(() => {
+    if (!activeConversation) {
+      return { title: "Chats", subtitle: undefined as string | undefined };
+    }
+    return getConversationDisplay(activeConversation, user?.id ?? "");
+  }, [activeConversation, user?.id]);
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
@@ -468,8 +485,13 @@ export default function ChatWidget() {
               )}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[#111827] truncate">
-                  {activeConversation ? getConversationTitle(activeConversation, user.id) : "Chats"}
+                  {activeConversationDisplay.title}
                 </p>
+                {activeConversationDisplay.subtitle && (
+                  <p className="text-[11px] text-[#6B7280] truncate">
+                    {activeConversationDisplay.subtitle}
+                  </p>
+                )}
               </div>
             </div>
             <button onClick={close} className="w-8 h-8 rounded-lg hover:bg-[#F7F8FA] text-[#6B7280] flex items-center justify-center">
@@ -487,34 +509,43 @@ export default function ChatWidget() {
                 </div>
               ) : (
                 <div className="divide-y divide-[#F3F4F6]">
-                  {conversations.map((conversation) => (
-                    <button
-                      key={conversation.id}
-                      onClick={() => setActiveConversationId(conversation.id)}
-                      className="w-full text-left px-4 py-3 hover:bg-[#F7F8FA] transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[#111827] truncate">
-                            {getConversationTitle(conversation, user.id)}
-                          </p>
-                          <p className="text-xs text-[#6B7280] truncate mt-0.5">
-                            {conversation.lastMessage?.content ?? "No messages yet"}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end flex-shrink-0">
-                          <span className="text-[10px] text-[#9CA3AF]">
-                            {formatLastSeen(conversation.lastMessageAtUtc)}
-                          </span>
-                          {conversation.unreadCount > 0 && (
-                            <span className="mt-1 min-w-5 h-5 px-1 rounded-full bg-[#0B74FF] text-white text-[10px] font-bold flex items-center justify-center">
-                              {conversation.unreadCount}
+                  {conversations.map((conversation) => {
+                    const display = getConversationDisplay(conversation, user.id);
+
+                    return (
+                      <button
+                        key={conversation.id}
+                        onClick={() => setActiveConversationId(conversation.id)}
+                        className="w-full text-left px-4 py-3 hover:bg-[#F7F8FA] transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-[#111827] truncate">
+                              {display.title}
+                            </p>
+                            {display.subtitle && (
+                              <p className="text-[11px] text-[#4B5563] truncate mt-0.5 font-medium">
+                                {display.subtitle}
+                              </p>
+                            )}
+                            <p className="text-xs text-[#6B7280] truncate mt-0.5">
+                              {conversation.lastMessage?.content ?? "No messages yet"}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end flex-shrink-0">
+                            <span className="text-[10px] text-[#9CA3AF]">
+                              {formatLastSeen(conversation.lastMessageAtUtc)}
                             </span>
-                          )}
+                            {conversation.unreadCount > 0 && (
+                              <span className="mt-1 min-w-5 h-5 px-1 rounded-full bg-[#0B74FF] text-white text-[10px] font-bold flex items-center justify-center">
+                                {conversation.unreadCount}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

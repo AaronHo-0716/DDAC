@@ -29,6 +29,8 @@ public record ChatParticipantDto(
 public record ConversationDto(
     Guid Id,
     ConversationType Type,
+    Guid? RelatedJobId,
+    string? RelatedJobTitle,
     DateTime CreatedAtUtc,
     DateTime? LastMessageAtUtc,
     int UnreadCount,
