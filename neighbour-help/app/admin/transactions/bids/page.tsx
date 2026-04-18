@@ -2,13 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Lock, Shield, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Lock, Shield, ShieldCheck, X } from "lucide-react";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import {
   adminService,
   type AdminBidStatus,
   type BidTransactionItem,
 } from "@/app/lib/api/admin";
+
+type ReasonActionState =
+  | { type: "lock"; bidId: string }
+  | { type: "force-reject"; bidId: string };
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString("en-MY", {
@@ -42,6 +46,9 @@ export default function AdminBidTransactionsPage() {
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | AdminBidStatus>("all");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
+  const [reasonAction, setReasonAction] = useState<ReasonActionState | null>(null);
+  const [reasonInput, setReasonInput] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authorized) return;
@@ -82,16 +89,18 @@ export default function AdminBidTransactionsPage() {
     return null;
   }
 
-  const forceReject = async (id: string) => {
+  const forceReject = async (id: string, reason?: string): Promise<boolean> => {
     setPendingActionId(id);
     setError(null);
     try {
-      await adminService.forceRejectBid(id);
+      await adminService.forceRejectBid(id, reason);
       setRows((prev) =>
         prev.map((row) => (row.id === id ? { ...row, status: "rejected" } : row))
       );
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reject bid.");
+      return false;
     } finally {
       setPendingActionId(null);
     }
@@ -112,18 +121,60 @@ export default function AdminBidTransactionsPage() {
     }
   };
 
-  const toggleLock = async (id: string, nextLocked: boolean) => {
+  const toggleLock = async (id: string, nextLocked: boolean, reason?: string): Promise<boolean> => {
     setPendingActionId(id);
     setError(null);
     try {
-      await adminService.setBidLock(id, nextLocked);
+      await adminService.setBidLock(id, nextLocked, reason);
       setRows((prev) =>
         prev.map((row) => (row.id === id ? { ...row, locked: nextLocked } : row))
       );
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update lock.");
+      return false;
     } finally {
       setPendingActionId(null);
+    }
+  };
+
+  const openReasonDialog = (action: ReasonActionState) => {
+    setReasonAction(action);
+    setReasonInput("");
+    setReasonError(null);
+  };
+
+  const closeReasonDialog = () => {
+    if (pendingActionId) return;
+    setReasonAction(null);
+    setReasonInput("");
+    setReasonError(null);
+  };
+
+  const submitReasonAction = async () => {
+    if (!reasonAction) return;
+
+    const trimmedReason = reasonInput.trim();
+    if (!trimmedReason) {
+      setReasonError("Reason is required.");
+      return;
+    }
+
+    if (trimmedReason.length > 500) {
+      setReasonError("Reason must be 500 characters or fewer.");
+      return;
+    }
+
+    setReasonError(null);
+
+    const success =
+      reasonAction.type === "lock"
+        ? await toggleLock(reasonAction.bidId, true, trimmedReason)
+        : await forceReject(reasonAction.bidId, trimmedReason);
+
+    if (success) {
+      setReasonAction(null);
+      setReasonInput("");
     }
   };
 
@@ -226,14 +277,21 @@ export default function AdminBidTransactionsPage() {
                           {row.flagged ? "Unflag" : "Flag"}
                         </button>
                         <button
-                          onClick={() => void toggleLock(row.id, !row.locked)}
+                          onClick={() => {
+                            if (row.locked) {
+                              void toggleLock(row.id, false);
+                              return;
+                            }
+
+                            openReasonDialog({ type: "lock", bidId: row.id });
+                          }}
                           disabled={pendingActionId === row.id}
                           className="text-xs px-2.5 py-1.5 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50"
                         >
                           {row.locked ? "Unlock" : "Lock"}
                         </button>
                         <button
-                          onClick={() => void forceReject(row.id)}
+                          onClick={() => openReasonDialog({ type: "force-reject", bidId: row.id })}
                           disabled={pendingActionId === row.id}
                           className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50"
                         >
@@ -261,6 +319,65 @@ export default function AdminBidTransactionsPage() {
           Actions are applied via admin API endpoints.
         </p>
       </div>
+
+      {reasonAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-xl">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-[#111827]">
+                  {reasonAction.type === "lock" ? "Reason to Lock Bid" : "Reason to Force Reject Bid"}
+                </h2>
+                <p className="mt-1 text-xs text-[#6B7280]">
+                  This reason will be sent to the handyman in their notifications.
+                </p>
+              </div>
+              <button
+                onClick={closeReasonDialog}
+                disabled={pendingActionId === reasonAction.bidId}
+                className="rounded-lg border border-[#E5E7EB] p-1 text-[#6B7280] hover:bg-[#F9FAFB]"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mb-1 block text-xs font-semibold text-[#374151]">Reason</label>
+            <textarea
+              value={reasonInput}
+              onChange={(event) => setReasonInput(event.target.value)}
+              rows={4}
+              maxLength={500}
+              placeholder="Enter reason"
+              className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+            />
+            <div className="mt-1 text-right text-xs text-[#9CA3AF]">
+              {reasonInput.length}/500
+            </div>
+
+            {reasonError && (
+              <p className="mt-2 text-sm text-red-700">{reasonError}</p>
+            )}
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={closeReasonDialog}
+                disabled={pendingActionId === reasonAction.bidId}
+                className="rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void submitReasonAction()}
+                disabled={pendingActionId === reasonAction.bidId}
+                className="rounded-lg border border-[#0B74FF] bg-[#0B74FF] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#065ed1]"
+              >
+                {pendingActionId === reasonAction.bidId ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

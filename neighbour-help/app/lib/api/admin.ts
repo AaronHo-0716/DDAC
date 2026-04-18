@@ -878,17 +878,19 @@ export const adminService = {
     await apiClient.patch(`/admin/bid-transactions/${transactionId}/flag`, reason);
   },
 
-  async setBidLock(transactionId: string, locked: boolean): Promise<void> {
-    const reason = locked
+  async setBidLock(transactionId: string, locked: boolean, reason?: string): Promise<void> {
+    const fallbackReason = locked
       ? "Locked by admin from dashboard"
       : "Unlock requested by admin from dashboard";
-    await apiClient.patch(`/admin/bid-transactions/${transactionId}/lock`, reason);
+    const payload = reason?.trim() || fallbackReason;
+    await apiClient.patch(`/admin/bid-transactions/${transactionId}/lock`, payload);
   },
 
-  async forceRejectBid(transactionId: string): Promise<void> {
+  async forceRejectBid(transactionId: string, reason?: string): Promise<void> {
+    const payload = reason?.trim() || "Force rejected by admin";
     await apiClient.patch(
       `/admin/bid-transactions/${transactionId}/force-reject`,
-      "Force rejected by admin"
+      payload
     );
   },
 

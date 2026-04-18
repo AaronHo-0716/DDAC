@@ -294,6 +294,7 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
 
         var normalizedActionType = actionType.Trim().ToLowerInvariant();
         var normalizedReason = (reason ?? string.Empty).ToLowerInvariant();
+        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         var now = DateTime.UtcNow;
 
         var eventTypeToStore = ResolveBidEventType(normalizedActionType, normalizedReason);
@@ -311,6 +312,17 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
             bid.Status = BidStatus.Rejected.ToDbString();
             bid.Job.Status = JobStatus.Open.ToDbString();
             bid.Job.Updated_At_Utc = now;
+
+            var forceRejectMessage = trimmedReason is null
+                ? $"Your bid for '{bid.Job.Title}' was force rejected by admin."
+                : $"Your bid for '{bid.Job.Title}' was force rejected by admin. Reason: {trimmedReason}.";
+
+            await CreateNotification(
+                bid.Handyman_User_Id,
+                NotificationType.BidRejected,
+                forceRejectMessage,
+                bid.Job_Id
+            );
         }
 
         if (eventTypeToStore == BidEventType.LockAdded.ToDbString())
@@ -362,10 +374,28 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         }
 
         if (eventTypeToStore == BidEventType.FlagAdded.ToDbString())
+        {
             bid.Flagged = true;
 
+            await CreateNotification(
+                bid.Handyman_User_Id,
+                NotificationType.SystemMessage,
+                $"Your bid for '{bid.Job.Title}' was flagged by admin for review.",
+                bid.Job_Id
+            );
+        }
+
         if (eventTypeToStore == BidEventType.FlagRemoved.ToDbString())
+        {
             bid.Flagged = false;
+
+            await CreateNotification(
+                bid.Handyman_User_Id,
+                NotificationType.SystemMessage,
+                $"The flag on your bid for '{bid.Job.Title}' was removed by admin.",
+                bid.Job_Id
+            );
+        }
 
         bid.Updated_At_Utc = now;
 
