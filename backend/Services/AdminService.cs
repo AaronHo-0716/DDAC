@@ -371,6 +371,13 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
             if ((bid.Job.Status == JobStatus.InProgress.ToDbString() || bid.Job.Status == JobStatus.Completed.ToDbString())
                 && bid.Status != BidStatus.Accepted.ToDbString())
                 bid.Status = BidStatus.Rejected.ToDbString();
+
+            await CreateNotification(
+                bid.Handyman_User_Id,
+                NotificationType.SystemMessage,
+                $"Your bid for '{bid.Job.Title}' was unlocked by admin.",
+                bid.Job_Id
+            );
         }
 
         if (eventTypeToStore == BidEventType.FlagAdded.ToDbString())
