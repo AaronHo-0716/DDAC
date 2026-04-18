@@ -40,7 +40,7 @@ public class RatingService(ServiceDependencies deps) : BaseService(deps), IRatin
         var existingRating = await Context.User_Ratings
             .FirstOrDefaultAsync(r => r.RaterUserId == raterId && r.TargetUserId == request.TargetUserId);
 
-        var RaterName = await Context.Users.FindAsync(raterId)
+        var Rater = await Context.Users.FindAsync(raterId)
             ?? throw new HttpRequestException("User not found.", null, HttpStatusCode.NotFound);
 
         if (existingRating != null)
@@ -48,7 +48,7 @@ public class RatingService(ServiceDependencies deps) : BaseService(deps), IRatin
             existingRating.Score = request.Score;
             existingRating.Comment = request.Comment;
             existingRating.UpdatedAtUtc = DateTime.UtcNow;
-            await CreateNotification(request.TargetUserId, NotificationType.UpdateRating, $"{RaterName} updated their rating for you from {existingRating.Score} to {request.Score} stars.");
+            await CreateNotification(request.TargetUserId, NotificationType.UpdateRating, $"{Rater.Name} updated their rating for you from {existingRating.Score} to {request.Score} stars.");
         }
         else
         {;
@@ -60,7 +60,7 @@ public class RatingService(ServiceDependencies deps) : BaseService(deps), IRatin
                     Score = request.Score,
                     Comment = request.Comment
                 });
-            await CreateNotification(request.TargetUserId, NotificationType.NewRating, $"You received a new {request.Score}-star rating from {RaterName}!");
+            await CreateNotification(request.TargetUserId, NotificationType.NewRating, $"You received a new {request.Score}-star rating from {Rater.Name}!");
         }
 
         await Context.SaveChangesAsync();

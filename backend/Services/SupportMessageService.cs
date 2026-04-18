@@ -65,11 +65,8 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
                 Participant_Role = UserRole.Admin.ToDbString()
             });
             
-            if (ChatHubContext != null)
-            {
-                await ChatHubContext.Clients.Group(UserRole.Admin.ToDbString())
-                    .SendAsync("SupportChatTaken", new { conversationId, adminId = currentUserId });
-            }
+            await ChatHubContext.Clients.Group(UserRole.Admin.ToDbString())
+                .SendAsync("SupportChatTaken", new { conversationId, adminId = currentUserId });
         }
         else if (!isParticipant) throw new HttpRequestException("Forbidden.", null, HttpStatusCode.Forbidden); 
 
@@ -100,9 +97,7 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
             .Where(c => c.Type == ConversationType.AdminSupport.ToString());
 
         if (role != UserRole.Admin.ToDbString())
-        {
             query = query.Where(c => c.Created_By_User_Id == currentUserId);
-        }
 
         var list = await query.OrderByDescending(c => c.Last_Message_At_Utc).ToListAsync();
         
@@ -110,6 +105,8 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
         foreach (var c in list) results.Add(await MapToConversationDto(c, currentUserId));
         return results;
     }
+
+    public async Task MarkAsReadAsync(Guid conversationId) => await MarkAsReadAsync(conversationId, true);
 
     public async Task<IEnumerable<MessageDto>> GetConversationMessagesAsync(Guid conversationId)
     {
@@ -129,20 +126,13 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
         return messages.Select(MapMessageToDto);
     }
 
-    public async Task MarkAsReadAsync(Guid conversationId)
-    {
-        var currentUserId = await GetCurrentUserIdAsync();
-        await Context.Conversation_Participants
-            .Where(p => p.Conversation_Id == conversationId && p.User_Id == currentUserId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Unread_Count, 0));
-    }
-
     private async Task<ConversationDto> GetConversationByIdAsync(Guid id)
     {
         var currentUserId = await GetCurrentUserIdAsync();
         var c = await Context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
-            .FirstOrDefaultAsync(c => c.Id == id) ?? throw new KeyNotFoundException();
+            .FirstOrDefaultAsync(c => c.Id == id) 
+            ?? throw new HttpRequestException("Conversation not found.", null, HttpStatusCode.NotFound);
         return await MapToConversationDto(c, currentUserId);
     }
 
@@ -190,17 +180,16 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
 
         if (myParticipantRecord != null) displayUnread = myParticipantRecord.Unread_Count;
         
-        else if (currentUserRole == UserRole.Admin.ToDbString())
-        {
-            bool hasAnyAdminJoined = c.Participants.Any(p => p.Participant_Role == UserRole.Admin.ToDbString());
-            if (!hasAnyAdminJoined) displayUnread = 1; 
-        }
-
         var participants = new List<ChatParticipantDto>();
         foreach (var p in c.Participants)
         {
             var userDto = await MapUserToDto(p.User);
-            participants.Add(new ChatParticipantDto(userDto.Id, userDto.Name, userDto.Role, userDto.AvatarUrl, userDto.Rating));
+            participants.Add(new ChatParticipantDto(
+                userDto.Id, 
+                userDto.Name, 
+                userDto.Role, 
+                userDto.AvatarUrl, 
+                userDto.Rating));
         }
 
         Enum.TryParse<ConversationType>(c.Type.Replace("_", ""), true, out var typeEnum);

@@ -10,7 +10,9 @@ public enum NotificationType {
     SystemMessage,
     ResubmitVerification,
     NewRating,
-    UpdateRating
+    UpdateRating,
+    ReportResolved,
+    ReportReviewed
 }
 
 public static class NotificationConstants
@@ -27,6 +29,8 @@ public static class NotificationConstants
         NotificationType.ResubmitVerification => "resubmmit_verification",
         NotificationType.NewRating => "new_rating",
         NotificationType.UpdateRating => "rating_update",
+        NotificationType.ReportResolved => "report_resolved",
+        NotificationType.ReportReviewed => "report_reviewed",
         _ => type.ToString().ToLower()
     };
 }

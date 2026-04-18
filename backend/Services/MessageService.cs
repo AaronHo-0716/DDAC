@@ -13,18 +13,14 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
     {
         var currentUserId = await GetCurrentUserIdAsync();
 
-        // 1. Fetch the Job to identify the Homeowner
         var job = await Context.Jobs.FindAsync(request.JobId)
             ?? throw new HttpRequestException("Job not found.", null, HttpStatusCode.NotFound);
 
         Guid homeownerId = job.Posted_By_User_Id;
         Guid handymanId;
 
-        // 2. Validate Roles and Bidding Relationship
         if (currentUserId == homeownerId)
         {
-            // Current user is the Homeowner. 
-            // Logic: Check if the 'OtherUserId' (Handyman) has actually placed a bid on this job.
             handymanId = request.OtherUserId;
             var hasBid = await Context.Bids.AnyAsync(b => b.Job_Id == job.Id && b.Handyman_User_Id == handymanId);
             
@@ -33,8 +29,6 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         }
         else
         {
-            // Current user is the Handyman. 
-            // Logic: 1. Ensure they are talking to the Job Owner. 2. Ensure they actually bid on this job.
             handymanId = currentUserId;
             
             if (request.OtherUserId != homeownerId)
@@ -45,8 +39,6 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
                 throw new HttpRequestException("You must place a bid on this job before you can message the owner.", null, HttpStatusCode.Forbidden);
         }
 
-        // 3. Check for existing conversation for this Job + Handyman pair
-        // This prevents creating duplicate "rooms" for the same job.
         var existing = await Context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
             .FirstOrDefaultAsync(c => 
@@ -57,7 +49,6 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
 
         if (existing != null) return await MapToConversationDto(existing, currentUserId);
 
-        // 4. Create New 1-on-1 Job Conversation
         var conversation = new Conversation
         {
             Id = Guid.NewGuid(),
@@ -69,7 +60,6 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
 
         Context.Conversations.Add(conversation);
 
-        // 5. Add both participants (Handyman and Homeowner)
         var participants = new[] { homeownerId, handymanId };
         foreach (var pId in participants)
         {
@@ -79,7 +69,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
                 Id = Guid.NewGuid(),
                 Conversation_Id = conversation.Id,
                 User_Id = pId,
-                Participant_Role = user!.Role // "homeowner" or "handyman"
+                Participant_Role = user!.Role
             });
         }
 
@@ -114,8 +104,6 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
 
         Context.Messages.Add(message);
         
-        // Update unread counts and last message timestamp
-        // (If you have the DB trigger installed, you can skip the unread count update line)
         await Context.SaveChangesAsync();
 
         var dto = MapMessageToDto(message);
@@ -161,20 +149,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         return messages.Select(MapMessageToDto);
     }
 
-    public async Task MarkAsReadAsync(Guid conversationId)
-    {
-        var currentUserId = await GetCurrentUserIdAsync();
-
-        await Context.Conversation_Participants
-            .Where(p => p.Conversation_Id == conversationId && p.User_Id == currentUserId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Unread_Count, 0));
-            
-        if (ChatHubContext != null)
-        {
-            await ChatHubContext.Clients.Group(currentUserId.ToString())
-                .SendAsync(HubMethod.NotificationMarkedRead.ToString(), conversationId);
-        }
-    }
+    public async Task MarkAsReadAsync(Guid conversationId) => await MarkAsReadAsync(conversationId);
 
     public async Task<int> GetTotalUnreadCountAsync()
     {

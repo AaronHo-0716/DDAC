@@ -108,6 +108,7 @@ public class ReportService(ServiceDependencies deps) : BaseService(deps), IRepor
         UpdateModerationDetails(report, adminNotes, adminId);
 
         await Context.SaveChangesAsync();
+        await CreateNotification(report.Reporter_Id, NotificationType.ReportResolved, $"Your Report has been resolved by Admin. ");
         Logger.LogInformation("Report {ReportId} resolved by Admin {AdminId}", reportId, adminId);
     }
 
@@ -124,6 +125,7 @@ public class ReportService(ServiceDependencies deps) : BaseService(deps), IRepor
 
         report.Status = ReportStatus.Reviewed.ToDbString();
         UpdateModerationDetails(report, adminNotes, adminId);
+        await CreateNotification(report.Reporter_Id, NotificationType.ReportReviewed, $"Your Report has been reviewed by Admin. ");
 
         await Context.SaveChangesAsync();
         Logger.LogInformation("Report {ReportId} status updated to 'Reviewed' by Admin {AdminId}", reportId, adminId);

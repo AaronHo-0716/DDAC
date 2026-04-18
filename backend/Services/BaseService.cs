@@ -278,4 +278,16 @@ public abstract class BaseService
                 handyman.Updated_At_Utc
         );
     }
+
+    protected async Task MarkAsReadAsync(Guid conversationId, bool isAdminRead = false)
+    {
+        var currentUserId = await GetCurrentUserIdAsync();
+        await Context.Conversation_Participants
+            .Where(p => p.Conversation_Id == conversationId && p.User_Id == currentUserId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Unread_Count, 0));
+
+        if (isAdminRead)
+            await ChatHubContext.Clients.Group(currentUserId.ToString())
+            .SendAsync(HubMethod.NotificationMarkedRead.ToString(), conversationId);
+    }
 }
