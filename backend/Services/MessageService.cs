@@ -29,7 +29,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         if (existing != null) return await MapToConversationDto(existing, userId);
 
         var conversation = new Conversation {
-            Id = Guid.NewGuid(), Type = ConversationType.JobChat.ToDbString(),
+            Id = Guid.NewGuid(), Type = ConversationType.JobChat.ToString(),
             Related_Job_Id = request.JobId, Related_Bid_Id = request.BidId,
             Created_By_User_Id = userId, Status = ConversationStatus.Active.ToDbString()
         };
@@ -50,12 +50,12 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
 
         var existing = await Context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
-            .FirstOrDefaultAsync(c => c.Type == ConversationType.AdminSupport.ToDbString() && c.Created_By_User_Id == userId);
+            .FirstOrDefaultAsync(c => c.Type == ConversationType.AdminSupport.ToString() && c.Created_By_User_Id == userId);
 
         if (existing != null) return await MapToConversationDto(existing, userId);
 
         var conversation = new Conversation {
-            Id = Guid.NewGuid(), Type = ConversationType.AdminSupport.ToDbString(),
+            Id = Guid.NewGuid(), Type = ConversationType.AdminSupport.ToString(),
             Created_By_User_Id = userId, Status = ConversationStatus.Active.ToDbString()
         };
 
@@ -108,7 +108,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         var dto = MapMessageToDto(msg);
 
         var targetIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();
-        if (conv.Type == ConversationType.AdminSupport.ToDbString()) {
+        if (conv.Type == ConversationType.AdminSupport.ToString()) {
             await ChatHubContext.Clients.Group(UserRole.Admin.ToDbString()).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
         }
         await ChatHubContext.Clients.Groups(targetIds).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
@@ -124,7 +124,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         var query = Context.Conversations.Include(c => c.Participants).ThenInclude(p => p.User).AsQueryable();
 
         if (role == UserRole.Admin.ToDbString())
-            query = query.Where(c => c.Type == ConversationType.AdminSupport.ToDbString() || c.Participants.Any(p => p.User_Id == userId));
+            query = query.Where(c => c.Type == ConversationType.AdminSupport.ToString() || c.Participants.Any(p => p.User_Id == userId));
         else
             query = query.Where(c => c.Participants.Any(p => p.User_Id == userId));
 
