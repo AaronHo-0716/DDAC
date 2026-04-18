@@ -21,7 +21,7 @@ public record MessageDto(
 public record ChatParticipantDto(
     Guid UserId, 
     string Name, 
-    UserRole Role, 
+    string Role, 
     string? AvatarUrl, 
     decimal? AverageRating
 );

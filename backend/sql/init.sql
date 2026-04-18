@@ -277,13 +277,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 2. Create the Trigger
-DROP TRIGGER IF EXISTS tr_after_message_insert ON messages;
-
 CREATE TRIGGER tr_after_message_insert
 AFTER INSERT ON messages
 FOR EACH ROW
 EXECUTE FUNCTION handle_new_message_stats();
+
+-- Ensure unread_count never drops below 0 if there's a logic error in C#
+CREATE OR REPLACE FUNCTION ensure_positive_unread()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.unread_count < 0 THEN
+        NEW.unread_count := 0;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_check_unread_count
+BEFORE UPDATE ON conversation_participants
+FOR EACH ROW
+EXECUTE FUNCTION ensure_positive_unread();
+
+-- Speed up the "Inbox" view
+CREATE INDEX IF NOT EXISTS ix_conversations_last_message 
+ON conversations(last_message_at_utc DESC NULLS LAST);
+
+-- Speed up the "Message History" view
+CREATE INDEX IF NOT EXISTS ix_messages_conversation_date 
+ON messages(conversation_id, created_at_utc ASC);
 
 CREATE TABLE IF NOT EXISTS user_ratings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
