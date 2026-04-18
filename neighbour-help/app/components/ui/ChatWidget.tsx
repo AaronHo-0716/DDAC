@@ -1,20 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  MessageCircle,
-  Send,
-  X,
-} from "lucide-react";
+import { ArrowLeft, MessageCircle, Send, X } from "lucide-react";
 import { HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
-import {
-  ConversationType,
-  type ChatMessage,
-  type Conversation
-} from "@/app/types";
+import { ConversationType, type ChatMessage, type Conversation } from "@/app/types";
 import { useAuth } from "@/app/lib/context/AuthContext";
-import { messagesService } from "@/app/lib/api/messages";
+import { messagesService, supportService } from "@/app/lib/api/messages"; // Imported both services
 import { getAccessToken } from "@/app/lib/api/client";
 import { useChatWidget } from "../../lib/context/ChatWidgetContext";
 
@@ -32,75 +23,43 @@ const CHAT_HUB_URL = `${CHAT_HUB_BASE_URL.replace(/\/+$/, "")}/api/chat-hub`;
 function formatTime(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-MY", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatLastSeen(iso?: string) {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-MY", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleString("en-MY", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 function getConversationDisplay(conversation: Conversation, currentUserId: string) {
   const others = conversation.participants.filter((p) => p.userId !== currentUserId);
   const otherUserName = others.length > 0 ? others.map((p) => p.name).join(", ") : "Unknown user";
-
   if (conversation.type === ConversationType.JobChat) {
-    return {
-      title: otherUserName,
-      subtitle: conversation.relatedJobTitle ? `Job: ${conversation.relatedJobTitle}` : "Job Chat",
-    };
+    return { title: otherUserName, subtitle: conversation.relatedJobTitle ? `Job: ${conversation.relatedJobTitle}` : "Job Chat" };
   }
-
   if (conversation.type === ConversationType.AdminSupport) {
-    return {
-      title: "Admin Support",
-      subtitle: otherUserName,
-    };
+    return { title: "Admin Support", subtitle: otherUserName };
   }
-
-  return {
-    title: otherUserName,
-    subtitle: undefined,
-  };
+  return { title: otherUserName, subtitle: undefined };
 }
 
 export default function ChatWidget() {
   const { user } = useAuth();
-  const {
-    isOpen,
-    open,
-    close,
-    activeConversationId,
-    setActiveConversationId,
-    pendingJobChat,
-    clearPendingJobChat,
-  } = useChatWidget();
+  const { isOpen, open, close, activeConversationId, setActiveConversationId, pendingJobChat, clearPendingJobChat } = useChatWidget();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
-  const [conversationsError, setConversationsError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const [creatingConversation, setCreatingConversation] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   const connectionRef = useRef<HubConnection | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
-  const isOpenRef = useRef(false);
   const conversationsRef = useRef<Conversation[]>([]);
 
   const activeConversation = useMemo(
@@ -109,54 +68,66 @@ export default function ChatWidget() {
   );
 
   const activeConversationDisplay = useMemo(() => {
-    if (!activeConversation) {
-      return { title: "Chats", subtitle: undefined as string | undefined };
-    }
+    if (!activeConversation) return { title: "Chats", subtitle: undefined };
     return getConversationDisplay(activeConversation, user?.id ?? "");
   }, [activeConversation, user?.id]);
 
-  useEffect(() => {
-    activeConversationIdRef.current = activeConversationId;
-  }, [activeConversationId]);
+  useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = useCallback((behavior: "smooth" | "auto" = "smooth") => {
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
+      }
+    }, 50);
+  }, []);
 
   useEffect(() => {
-    isOpenRef.current = isOpen;
-  }, [isOpen]);
+    if (activeConversationId && messages.length > 0) {
+      scrollToBottom("smooth");
+    }
+  }, [messages, activeConversationId, scrollToBottom]);
 
   useEffect(() => {
-    conversationsRef.current = conversations;
-  }, [conversations]);
+    if (activeConversationId && isOpen) {
+      scrollToBottom("auto"); 
+    }
+  }, [activeConversationId, isOpen, scrollToBottom]);
 
   const refreshUnread = useCallback(async () => {
-    if (!user) {
-      setUnreadCount(0);
-      return;
-    }
-
+    if (!user) return;
     try {
-      // Updated to match new totalUnread DTO key
-      const count = await messagesService.getUnreadCount();
-      setUnreadCount(count);
+      const [jobUnread, supportUnread] = await Promise.all([
+        messagesService.getUnreadCount(),
+        supportService.getUnreadCount()
+      ]);
+      setUnreadCount(jobUnread + supportUnread);
     } catch {
       setUnreadCount(0);
     }
   }, [user]);
 
   const loadConversations = useCallback(async () => {
-    if (!user) {
-      setConversations([]);
-      return;
-    }
-
+    if (!user) return;
     setConversationsLoading(true);
-    setConversationsError(null);
-
     try {
-      // Backend now returns a direct array
-      const response = await messagesService.getConversations();
-      setConversations(response);
-    } catch (err) {
-      setConversationsError(err instanceof Error ? err.message : "Unable to load chats right now.");
+      const [jobList, supportList] = await Promise.all([
+        messagesService.getConversations(),
+        supportService.getConversations()
+      ]);
+      
+      const rawCombined = [...jobList, ...supportList];
+      const unique = Array.from(new Map(rawCombined.map((c) => [c.id, c])).values());
+
+      setConversations(unique.sort((a, b) => {
+        const timeA = a.lastMessageAtUtc ? new Date(a.lastMessageAtUtc).getTime() : 0;
+        const timeB = b.lastMessageAtUtc ? new Date(b.lastMessageAtUtc).getTime() : 0;
+        return timeB - timeA;
+      }));
+    } catch {
       setConversations([]);
     } finally {
       setConversationsLoading(false);
@@ -165,289 +136,98 @@ export default function ChatWidget() {
 
   const loadMessages = useCallback(async (conversationId: string) => {
     setMessagesLoading(true);
-    setMessagesError(null);
-
     try {
-      // Backend now returns a direct array
-      const response = await messagesService.getMessages(conversationId);
+      const conv = conversationsRef.current.find(c => c.id === conversationId);
+      const isSupport = conv?.type === ConversationType.AdminSupport;
 
-      const sorted = [...response].sort(
-        (a, b) => +new Date(a.createdAtUtc) - +new Date(b.createdAtUtc)
-      );
-      setMessages(sorted);
+      const response = isSupport 
+        ? await supportService.getMessages(conversationId)
+        : await messagesService.getMessages(conversationId);
 
-      await messagesService.markAsRead(conversationId);
-      await refreshUnread();
-      await loadConversations();
-      window.dispatchEvent(new Event("nh_messages_updated"));
-    } catch (err) {
-      setMessagesError(err instanceof Error ? err.message : "Unable to load messages.");
+      setMessages([...response].sort((a, b) => +new Date(a.createdAtUtc) - +new Date(b.createdAtUtc)));
+
+      if (isSupport) await supportService.markAsRead(conversationId);
+      else await messagesService.markAsRead(conversationId);
+
+      refreshUnread();
+    } catch {
       setMessages([]);
     } finally {
       setMessagesLoading(false);
     }
-  }, [loadConversations, refreshUnread]);
+  }, [refreshUnread]);
 
   useEffect(() => {
-    if (!user) {
-      setConversations([]);
-      setMessages([]);
-      setUnreadCount(0);
-      return;
-    }
-
-    void refreshUnread();
-
-    const listener = () => {
-      void refreshUnread();
-      if (isOpen) void loadConversations();
-    };
-
-    window.addEventListener("nh_messages_updated", listener);
-    return () => window.removeEventListener("nh_messages_updated", listener);
-  }, [user, refreshUnread, isOpen, loadConversations]);
-
-  useEffect(() => {
-    if (!isOpen || !user) return;
-    void loadConversations();
-  }, [isOpen, user, loadConversations]);
-
-  useEffect(() => {
-    if (!isOpen || !pendingJobChat || !user) return;
-
-    let cancelled = false;
-
-    const openConversationFromBid = async () => {
-      setCreatingConversation(true);
-      setConversationsError(null);
-      try {
-        const conversation = await messagesService.createJobConversation({
-          jobId: pendingJobChat.jobId,
-          otherUserId: pendingJobChat.otherUserId,
-        });
-
-        if (!cancelled) {
-          setActiveConversationId(conversation.id);
-          await loadConversations();
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setConversationsError(err instanceof Error ? err.message : "Unable to open chat.");
-        }
-      } finally {
-        if (!cancelled) {
-          setCreatingConversation(false);
-          clearPendingJobChat();
-        }
-      }
-    };
-
-    void openConversationFromBid();
-    return () => { cancelled = true; };
-  }, [isOpen, pendingJobChat, user, setActiveConversationId, loadConversations, clearPendingJobChat]);
-
-  useEffect(() => {
-    if (!isOpen || !activeConversationId || !user) return;
-    void loadMessages(activeConversationId);
-  }, [isOpen, activeConversationId, user, loadMessages]);
-
-  useEffect(() => {
-    if (!user) {
-      setRealtimeConnected(false);
-      if (connectionRef.current) {
-        void connectionRef.current.stop();
-        connectionRef.current = null;
-      }
-      return;
-    }
-
-    let disposed = false;
+    if (!user) return;
 
     const connection = new HubConnectionBuilder()
-      .withUrl(CHAT_HUB_URL, {
-        accessTokenFactory: () => getAccessToken() ?? "",
-        withCredentials: true,
-      })
+      .withUrl(CHAT_HUB_URL, { accessTokenFactory: () => getAccessToken() ?? "", withCredentials: true })
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();
-
-    connectionRef.current = connection;
 
     connection.on("ReceiveMessage", (payload: ChatHubMessagePayload) => {
       const conversationId = payload.convId;
       const incoming = payload.message;
       if (!conversationId || !incoming) return;
 
-      const hasConversation = conversationsRef.current.some((conversation) => conversation.id === conversationId);
-      if (!hasConversation) {
-        void loadConversations();
-        void refreshUnread();
-        window.dispatchEvent(new Event("nh_messages_updated"));
-        return;
-      }
-
-      const isActiveConversation =
-        isOpenRef.current && activeConversationIdRef.current === conversationId;
-
-      if (isActiveConversation) {
+      if (activeConversationIdRef.current === conversationId) {
         setMessages((prev) => {
-          if (prev.some((message) => message.id === incoming.id)) {
-            return prev;
-          }
-          return [...prev, incoming];
+          const messageMap = new Map(prev.map((m) => [m.id, m]));
+          messageMap.set(incoming.id, incoming);
+          
+          return Array.from(messageMap.values()).sort(
+            (a, b) => +new Date(a.createdAtUtc) - +new Date(b.createdAtUtc)
+          );
         });
 
-        void messagesService
-          .markAsRead(conversationId)
-          .catch(() => undefined)
-          .finally(() => {
-            void refreshUnread();
-            void loadConversations();
-            window.dispatchEvent(new Event("nh_messages_updated"));
-          });
-      } else {
-        setConversations((prev) => {
-          const index = prev.findIndex((conversation) => conversation.id === conversationId);
-          if (index === -1) return prev;
-
-          const target = prev[index];
-          const shouldIncrementUnread = incoming.senderId !== user.id;
-          const updated: Conversation = {
-            ...target,
-            lastMessage: incoming,
-            lastMessageAtUtc: incoming.createdAtUtc,
-            unreadCount: shouldIncrementUnread ? target.unreadCount + 1 : target.unreadCount,
-          };
-
-          return [updated, ...prev.filter((_, currentIndex) => currentIndex !== index)];
-        });
-
-        if (incoming.senderId !== user.id) {
-          setUnreadCount((prev) => prev + 1);
-        }
-
-        window.dispatchEvent(new Event("nh_messages_updated"));
+        const isSupport = conversationsRef.current.find(c => c.id === conversationId)?.type === ConversationType.AdminSupport;
+        if (isSupport) supportService.markAsRead(conversationId).then(refreshUnread);
+        else messagesService.markAsRead(conversationId).then(refreshUnread);
       }
+      loadConversations();
+      refreshUnread();
     });
 
-    connection.on("NotificationMarkedRead", (conversationId: string) => {
-      setConversations((prev) =>
-        prev.map((conversation) =>
-          conversation.id === conversationId
-            ? { ...conversation, unreadCount: 0 }
-            : conversation
-        )
-      );
-
-      void refreshUnread();
-      window.dispatchEvent(new Event("nh_messages_updated"));
+    connection.on("NotificationMarkedRead", () => {
+      loadConversations();
+      refreshUnread();
     });
 
-    connection.onreconnecting(() => {
-      if (!disposed) {
-        setRealtimeConnected(false);
-      }
-    });
+    connection.start().catch(console.error);
+    connectionRef.current = connection;
 
-    connection.onreconnected(() => {
-      if (!disposed) {
-        setRealtimeConnected(true);
-        void refreshUnread();
-        if (isOpenRef.current) {
-          void loadConversations();
-        }
-      }
-    });
-
-    connection.onclose(() => {
-      if (!disposed) {
-        setRealtimeConnected(false);
-      }
-    });
-
-    const startConnection = async () => {
-      try {
-        await connection.start();
-        if (!disposed) {
-          setRealtimeConnected(true);
-          void refreshUnread();
-          if (isOpenRef.current) {
-            void loadConversations();
-          }
-        }
-      } catch {
-        if (!disposed) {
-          setRealtimeConnected(false);
-        }
-      }
-    };
-
-    void startConnection();
-
-    return () => {
-      disposed = true;
-      setRealtimeConnected(false);
-      connection.off("ReceiveMessage");
-      connection.off("NotificationMarkedRead");
-      if (connectionRef.current === connection) {
-        connectionRef.current = null;
-      }
-      void connection.stop();
-    };
+    return () => { connection.stop(); };
   }, [user, loadConversations, refreshUnread]);
 
-  useEffect(() => {
-    if (!isOpen || !user || realtimeConnected) return;
-
-    const intervalId = window.setInterval(() => {
-      void refreshUnread();
-      void loadConversations();
-      if (activeConversationId) void loadMessages(activeConversationId);
-    }, 5000);
-
-    return () => window.clearInterval(intervalId);
-  }, [isOpen, user, activeConversationId, refreshUnread, loadConversations, loadMessages, realtimeConnected]);
+  useEffect(() => { if (user) refreshUnread(); }, [user, refreshUnread]);
+  useEffect(() => { if (isOpen && user) loadConversations(); }, [isOpen, user, loadConversations]);
+  useEffect(() => { if (isOpen && activeConversationId && user) loadMessages(activeConversationId); }, [isOpen, activeConversationId, user, loadMessages]);
 
   const handleSend = async () => {
-    if (!activeConversationId || !user || sending) return;
+    if (!activeConversationId || !user || sending || !draft.trim()) return;
     const value = draft.trim();
-    if (!value) return;
+    const isSupport = activeConversation?.type === ConversationType.AdminSupport;
 
-    const tempId = `temp-${Date.now()}`;
-    const optimisticMessage: ChatMessage = {
-      id: tempId,
-      senderId: user.id,
-      type: "text",
-      content: value,
-      createdAtUtc: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, optimisticMessage]);
-    setDraft("");
-    setMessagesError(null);
     setSending(true);
-
     try {
-      const sent = await messagesService.sendMessage(activeConversationId, {
-        content: value,
-        messageType: "text",
-      });
+      const sent = isSupport
+        ? await supportService.sendMessage(activeConversationId, { content: value, messageType: "text" })
+        : await messagesService.sendMessage(activeConversationId, { content: value, messageType: "text" });
 
       setMessages((prev) => {
-        const replaced = prev.map((msg) => (msg.id === tempId ? sent : msg));
-        const seen = new Set<string>();
-        return replaced.filter((msg) => {
-          if (seen.has(msg.id)) return false;
-          seen.add(msg.id);
-          return true;
-        });
+        const messageMap = new Map(prev.map((m) => [m.id, m]));
+        messageMap.set(sent.id, sent);
+        return Array.from(messageMap.values()).sort(
+          (a, b) => +new Date(a.createdAtUtc) - +new Date(b.createdAtUtc)
+        );
       });
-      await loadConversations();
-      window.dispatchEvent(new Event("nh_messages_updated"));
-    } catch (err) {
-      setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
-      setMessagesError(err instanceof Error ? err.message : "Unable to send message.");
+
+      setDraft("");
+      // Scroll immediately after sending for better UX
+      scrollToBottom("smooth"); 
+    } catch {
+      setMessagesError("Unable to send message.");
     } finally {
       setSending(false);
     }
@@ -569,6 +349,7 @@ export default function ChatWidget() {
                         </div>
                       );
                     })}
+                    <div ref={messagesEndRef} className="h-0 w-0" aria-hidden="true" />
                   </div>
                 )}
               </div>

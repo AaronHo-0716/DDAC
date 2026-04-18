@@ -40,12 +40,6 @@ export const messagesService = {
     return normalizeConversation(response);
   },
 
-  async createSupportConversation(): Promise<Conversation> {
-    // Ensuring the body {} is passed as the 2nd argument
-    const response = await apiClient.post<any>("/messages/conversations/support", {});
-    return normalizeConversation(response);
-  },
-
   async getConversations(): Promise<Conversation[]> {
     // Added {} as the 2nd argument (params/config)
     const response = await apiClient.get<any[]>("/messages/conversations", {});
@@ -80,6 +74,38 @@ export const messagesService = {
   async getUnreadCount(): Promise<number> {
     // Added {} as the 2nd argument
     const response = await apiClient.get<UnreadCountResponse>("/messages/unread-count", {});
+    return response.totalUnread;
+  }
+};
+
+// --- NEW SUPPORT SERVICE ---
+export const supportService = {
+  async createSupportConversation(): Promise<Conversation> {
+    const response = await apiClient.post<any>("/support/conversation", {});
+    return normalizeConversation(response);
+  },
+
+  async getConversations(): Promise<Conversation[]> {
+    const response = await apiClient.get<any[]>("/support/conversations", {});
+    return response.map(normalizeConversation);
+  },
+
+  async getMessages(conversationId: string): Promise<ChatMessage[]> {
+    const response = await apiClient.get<any[]>(`/support/conversations/${conversationId}/messages`, {});
+    return response.map(normalizeMessage);
+  },
+
+  async sendMessage(conversationId: string, data: SendMessageRequest): Promise<ChatMessage> {
+    const response = await apiClient.post<any>(`/support/conversations/${conversationId}/messages`, data);
+    return normalizeMessage(response);
+  },
+
+  async markAsRead(conversationId: string): Promise<void> {
+    await apiClient.patch(`/support/conversations/${conversationId}/read`, {});
+  },
+  
+  async getUnreadCount(): Promise<number> {
+    const response = await apiClient.get<UnreadCountResponse>("/support/unread-count", {});
     return response.totalUnread;
   }
 };

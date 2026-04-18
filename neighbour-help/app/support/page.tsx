@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import { useChatWidget } from "@/app/lib/context/ChatWidgetContext";
-import { messagesService } from "@/app/lib/api/messages";
+import { supportService } from "@/app/lib/api/messages";
 import {
   MessageCircle,
   Phone,
@@ -160,7 +160,7 @@ export default function SupportPage() {
     setSupportChatLoading(true);
     setSupportChatError(null);
     try {
-      const conversation = await messagesService.createSupportConversation();
+      const conversation = await supportService.createSupportConversation();
       setActiveConversationId(conversation.id);
       open();
     } catch (err) {

@@ -164,6 +164,7 @@ builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<IStorageService, S3StorageService>();
+builder.Services.AddScoped<ISupportMessageService, SupportMessageService>();
 
 // Swagger
 builder.Services.AddSwaggerGen(options =>

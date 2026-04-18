@@ -16,12 +16,6 @@ public class MessageController(IMessageService messageService) : BaseController
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    [HttpPost("conversations/support")]
-    public async Task<ActionResult<ConversationDto>> StartSupportChat() {
-        try { return Ok(await messageService.GetOrCreateSupportConversationAsync()); }
-        catch (HttpRequestException ex) { return HandleError(ex); }
-    }
-
     [HttpGet("conversations")]
     public async Task<ActionResult<IEnumerable<ConversationDto>>> GetConversations() {
         return Ok(await messageService.GetUserConversationsAsync());

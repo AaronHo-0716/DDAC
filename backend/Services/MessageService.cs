@@ -9,7 +9,6 @@ namespace backend.Services;
 
 public class MessageService(ServiceDependencies deps) : BaseService(deps), IMessageService
 {
-    public async Task<ConversationDto> GetOrCreateSupportConversationAsync() { return null; }
     public async Task<ConversationDto> GetOrCreateJobConversationAsync(CreateJobChatRequest request)
     {
         var currentUserId = await GetCurrentUserIdAsync();
@@ -137,6 +136,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
             .Include(p => p.Conversation).ThenInclude(c => c.Participants).ThenInclude(cp => cp.User)
             .OrderByDescending(p => p.Conversation.Last_Message_At_Utc)
             .Select(p => p.Conversation)
+            .Where(c => c.Type == ConversationType.JobChat.ToString())
             .ToListAsync();
 
         var results = new List<ConversationDto>();
@@ -181,7 +181,8 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         var currentUserId = await GetCurrentUserIdAsync();
 
         return await Context.Conversation_Participants
-            .Where(p => p.User_Id == currentUserId)
+            .Where(p => p.User_Id == currentUserId && 
+                        p.Conversation.Type == ConversationType.JobChat.ToString())
             .SumAsync(p => p.Unread_Count);
     }
 
