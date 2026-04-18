@@ -300,6 +300,8 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         var eventTypeToStore = ResolveBidEventType(normalizedActionType, normalizedReason);
 
         if (eventTypeToStore == BidEventType.ForceRejected.ToDbString()){
+            var wasAcceptedBid = bid.Status == BidStatus.Accepted.ToDbString();
+
             if (bid.Locked)
                 throw new HttpRequestException("The bid is locked, try to unlock it first.", null, HttpStatusCode.BadRequest);
 
@@ -313,21 +315,29 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
             bid.Job.Status = JobStatus.Open.ToDbString();
             bid.Job.Updated_At_Utc = now;
 
-            var forceRejectMessage = trimmedReason is null
-                ? $"Your bid for '{bid.Job.Title}' was force rejected by admin."
-                : $"Your bid for '{bid.Job.Title}' was force rejected by admin. Reason: {trimmedReason}.";
-
+            var rejectionReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
             await CreateNotification(
                 bid.Handyman_User_Id,
                 NotificationType.BidRejected,
-                forceRejectMessage,
+                $"Your bid for '{bid.Job.Title}' was force rejected by admin. Reason: {rejectionReason}.",
                 bid.Job_Id
             );
+
+            if (wasAcceptedBid && bid.Job.Posted_By_User_Id != bid.Handyman_User_Id)
+            {
+                await CreateNotification(
+                    bid.Job.Posted_By_User_Id,
+                    NotificationType.BidRejected,
+                    $"The accepted bid for your job '{bid.Job.Title}' was force rejected by admin. Reason: {rejectionReason}.",
+                    bid.Job_Id
+                );
+            }
         }
 
         if (eventTypeToStore == BidEventType.LockAdded.ToDbString())
         {
             bid.Locked = true;
+            var isAcceptedBid = bid.Status == BidStatus.Accepted.ToDbString();
 
             var lockReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
             var existingBidLock = await Context.Bid_Locks.FirstOrDefaultAsync(bl => bl.Bid_Id == bid.Id);
@@ -355,11 +365,24 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
                 $"Your bid for '{bid.Job.Title}' was locked by admin. Reason: {lockReason}.",
                 bid.Job_Id
             );
+
+            if (isAcceptedBid && bid.Job.Posted_By_User_Id != bid.Handyman_User_Id)
+            {
+                await CreateNotification(
+                    bid.Job.Posted_By_User_Id,
+                    NotificationType.SystemMessage,
+                    $"The accepted bid for your job '{bid.Job.Title}' was locked by admin. Reason: {lockReason}.",
+                    bid.Job_Id
+                );
+            }
         }
 
         if (eventTypeToStore == BidEventType.LockRemoved.ToDbString())
         {
+            var wasAcceptedBid = bid.Status == BidStatus.Accepted.ToDbString();
+            var wasRejectedByUnlockRule = false;
             bid.Locked = false;
+            var unlockReason = string.IsNullOrWhiteSpace(reason) ? "No reason provided." : reason.Trim();
 
             var existingBidLock = await Context.Bid_Locks.FirstOrDefaultAsync(bl => bl.Bid_Id == bid.Id);
             if (existingBidLock is not null)
@@ -370,14 +393,39 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
             // - in-progress/completed job: keep accepted bids, reject others
             if ((bid.Job.Status == JobStatus.InProgress.ToDbString() || bid.Job.Status == JobStatus.Completed.ToDbString())
                 && bid.Status != BidStatus.Accepted.ToDbString())
+            {
                 bid.Status = BidStatus.Rejected.ToDbString();
+                wasRejectedByUnlockRule = true;
+            }
 
-            await CreateNotification(
-                bid.Handyman_User_Id,
-                NotificationType.SystemMessage,
-                $"Your bid for '{bid.Job.Title}' was unlocked by admin.",
-                bid.Job_Id
-            );
+            if (wasRejectedByUnlockRule)
+            {
+                await CreateNotification(
+                    bid.Handyman_User_Id,
+                    NotificationType.BidRejected,
+                    $"Your bid for '{bid.Job.Title}' was unlocked by admin and then rejected because the job already has an accepted bid. Reason: {unlockReason}.",
+                    bid.Job_Id
+                );
+            }
+            else
+            {
+                await CreateNotification(
+                    bid.Handyman_User_Id,
+                    NotificationType.SystemMessage,
+                    $"Your bid for '{bid.Job.Title}' was unlocked by admin. Reason: {unlockReason}.",
+                    bid.Job_Id
+                );
+            }
+
+            if (wasAcceptedBid && bid.Job.Posted_By_User_Id != bid.Handyman_User_Id)
+            {
+                await CreateNotification(
+                    bid.Job.Posted_By_User_Id,
+                    NotificationType.SystemMessage,
+                    $"The accepted bid for your job '{bid.Job.Title}' was unlocked by admin. Reason: {unlockReason}.",
+                    bid.Job_Id
+                );
+            }
         }
 
         if (eventTypeToStore == BidEventType.FlagAdded.ToDbString())
