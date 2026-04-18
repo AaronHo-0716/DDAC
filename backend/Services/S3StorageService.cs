@@ -108,7 +108,7 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
             throw new HttpRequestException("Access Denied.", null, HttpStatusCode.Forbidden);
 
         // Upload and Save
-        var upload = await UploadImageAsync(request.File, $"{UploadTypes.JobImage.ToPrefixString()}/{conversationId}", ct);
+        var upload = await UploadImageAsync(request.File, $"{UploadTypes.JobConversationAtt.ToPrefixString()}/{conversationId}", ct);
         
         var message = new Message {
             Id = Guid.NewGuid(), Conversation_Id = conversationId, Sender_User_Id = currentUserId,
@@ -149,7 +149,7 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         else if (!isParticipant) throw new HttpRequestException("Forbidden.", null, HttpStatusCode.Forbidden);
 
         // Upload and Save
-        var upload = await UploadImageAsync(request.File, $"{UploadTypes.JobConversationAtt.ToPrefixString()}/{conversationId}", ct);
+        var upload = await UploadImageAsync(request.File, $"{UploadTypes.SupportConversationAtt.ToPrefixString()}/{conversationId}", ct);
         
         var message = new Message {
             Id = Guid.NewGuid(), Conversation_Id = conversationId, Sender_User_Id = currentUserId,
