@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   MessageCircle,
   Send,
   X,
 } from "lucide-react";
+import { HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import {
   ConversationType,
   type ChatMessage,
@@ -14,7 +15,19 @@ import {
 } from "@/app/types";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import { messagesService } from "@/app/lib/api/messages";
+import { getAccessToken } from "@/app/lib/api/client";
 import { useChatWidget } from "../../lib/context/ChatWidgetContext";
+
+interface ChatHubMessagePayload {
+  convId?: string;
+  message?: ChatMessage;
+}
+
+const CHAT_HUB_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL?.trim() ||
+  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+  "http://localhost:5073";
+const CHAT_HUB_URL = `${CHAT_HUB_BASE_URL.replace(/\/+$/, "")}/api/chat-hub`;
 
 function formatTime(iso: string) {
   const date = new Date(iso);
@@ -73,11 +86,29 @@ export default function ChatWidget() {
   const [sending, setSending] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+
+  const connectionRef = useRef<HubConnection | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const isOpenRef = useRef(false);
+  const conversationsRef = useRef<Conversation[]>([]);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeConversationId) ?? null,
     [conversations, activeConversationId]
   );
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   const refreshUnread = useCallback(async () => {
     if (!user) {
@@ -204,7 +235,153 @@ export default function ChatWidget() {
   }, [isOpen, activeConversationId, user, loadMessages]);
 
   useEffect(() => {
-    if (!isOpen || !user) return;
+    if (!user) {
+      setRealtimeConnected(false);
+      if (connectionRef.current) {
+        void connectionRef.current.stop();
+        connectionRef.current = null;
+      }
+      return;
+    }
+
+    let disposed = false;
+
+    const connection = new HubConnectionBuilder()
+      .withUrl(CHAT_HUB_URL, {
+        accessTokenFactory: () => getAccessToken() ?? "",
+        withCredentials: true,
+      })
+      .withAutomaticReconnect()
+      .configureLogging(LogLevel.Warning)
+      .build();
+
+    connectionRef.current = connection;
+
+    connection.on("ReceiveMessage", (payload: ChatHubMessagePayload) => {
+      const conversationId = payload.convId;
+      const incoming = payload.message;
+      if (!conversationId || !incoming) return;
+
+      const hasConversation = conversationsRef.current.some((conversation) => conversation.id === conversationId);
+      if (!hasConversation) {
+        void loadConversations();
+        void refreshUnread();
+        window.dispatchEvent(new Event("nh_messages_updated"));
+        return;
+      }
+
+      const isActiveConversation =
+        isOpenRef.current && activeConversationIdRef.current === conversationId;
+
+      if (isActiveConversation) {
+        setMessages((prev) => {
+          if (prev.some((message) => message.id === incoming.id)) {
+            return prev;
+          }
+          return [...prev, incoming];
+        });
+
+        void messagesService
+          .markAsRead(conversationId)
+          .catch(() => undefined)
+          .finally(() => {
+            void refreshUnread();
+            void loadConversations();
+            window.dispatchEvent(new Event("nh_messages_updated"));
+          });
+      } else {
+        setConversations((prev) => {
+          const index = prev.findIndex((conversation) => conversation.id === conversationId);
+          if (index === -1) return prev;
+
+          const target = prev[index];
+          const shouldIncrementUnread = incoming.senderId !== user.id;
+          const updated: Conversation = {
+            ...target,
+            lastMessage: incoming,
+            lastMessageAtUtc: incoming.createdAtUtc,
+            unreadCount: shouldIncrementUnread ? target.unreadCount + 1 : target.unreadCount,
+          };
+
+          return [updated, ...prev.filter((_, currentIndex) => currentIndex !== index)];
+        });
+
+        if (incoming.senderId !== user.id) {
+          setUnreadCount((prev) => prev + 1);
+        }
+
+        window.dispatchEvent(new Event("nh_messages_updated"));
+      }
+    });
+
+    connection.on("NotificationMarkedRead", (conversationId: string) => {
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === conversationId
+            ? { ...conversation, unreadCount: 0 }
+            : conversation
+        )
+      );
+
+      void refreshUnread();
+      window.dispatchEvent(new Event("nh_messages_updated"));
+    });
+
+    connection.onreconnecting(() => {
+      if (!disposed) {
+        setRealtimeConnected(false);
+      }
+    });
+
+    connection.onreconnected(() => {
+      if (!disposed) {
+        setRealtimeConnected(true);
+        void refreshUnread();
+        if (isOpenRef.current) {
+          void loadConversations();
+        }
+      }
+    });
+
+    connection.onclose(() => {
+      if (!disposed) {
+        setRealtimeConnected(false);
+      }
+    });
+
+    const startConnection = async () => {
+      try {
+        await connection.start();
+        if (!disposed) {
+          setRealtimeConnected(true);
+          void refreshUnread();
+          if (isOpenRef.current) {
+            void loadConversations();
+          }
+        }
+      } catch {
+        if (!disposed) {
+          setRealtimeConnected(false);
+        }
+      }
+    };
+
+    void startConnection();
+
+    return () => {
+      disposed = true;
+      setRealtimeConnected(false);
+      connection.off("ReceiveMessage");
+      connection.off("NotificationMarkedRead");
+      if (connectionRef.current === connection) {
+        connectionRef.current = null;
+      }
+      void connection.stop();
+    };
+  }, [user, loadConversations, refreshUnread]);
+
+  useEffect(() => {
+    if (!isOpen || !user || realtimeConnected) return;
 
     const intervalId = window.setInterval(() => {
       void refreshUnread();
@@ -213,7 +390,7 @@ export default function ChatWidget() {
     }, 5000);
 
     return () => window.clearInterval(intervalId);
-  }, [isOpen, user, activeConversationId, refreshUnread, loadConversations, loadMessages]);
+  }, [isOpen, user, activeConversationId, refreshUnread, loadConversations, loadMessages, realtimeConnected]);
 
   const handleSend = async () => {
     if (!activeConversationId || !user || sending) return;
@@ -240,7 +417,15 @@ export default function ChatWidget() {
         messageType: "text",
       });
 
-      setMessages((prev) => prev.map((msg) => (msg.id === tempId ? sent : msg)));
+      setMessages((prev) => {
+        const replaced = prev.map((msg) => (msg.id === tempId ? sent : msg));
+        const seen = new Set<string>();
+        return replaced.filter((msg) => {
+          if (seen.has(msg.id)) return false;
+          seen.add(msg.id);
+          return true;
+        });
+      });
       await loadConversations();
       window.dispatchEvent(new Event("nh_messages_updated"));
     } catch (err) {
