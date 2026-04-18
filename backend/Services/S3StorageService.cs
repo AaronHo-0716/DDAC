@@ -94,53 +94,81 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         return await MapJobToDto(job);
     }
 
-    public async Task<MessageDto> SendChatAttachmentAsync(UploadImageRequest request, CancellationToken ct)
+    public async Task<MessageDto> SendJobChatImageAsync(UploadImageRequest request, CancellationToken ct)
     {
-        var userId = await GetCurrentUserIdAsync();
+        var currentUserId = await GetCurrentUserIdAsync();
+        var conversationId = request.TargetId ?? throw new HttpRequestException("Conversation ID required.", null, HttpStatusCode.BadRequest);
 
-        if (!request.TargetId.HasValue)
-            throw new HttpRequestException("Target Conversation ID is required for chat attachments.", null, HttpStatusCode.BadRequest);
-    
-        var conversation = await Context.Conversations
+        var conv = await Context.Conversations
             .Include(c => c.Participants)
-            .FirstOrDefaultAsync(c => c.Id == request.TargetId, ct)
-            ?? throw new HttpRequestException("Conversation not found.", null, HttpStatusCode.NotFound);
+            .FirstOrDefaultAsync(c => c.Id == conversationId && c.Type == ConversationType.JobChat.ToString(), ct)
+            ?? throw new HttpRequestException("Job conversation not found.", null, HttpStatusCode.NotFound);
 
-        if (conversation.Status == ConversationStatus.Locked.ToDbString())
-            throw new HttpRequestException("Conversation is locked.", null, HttpStatusCode.BadRequest);
+        if (!conv.Participants.Any(p => p.User_Id == currentUserId))
+            throw new HttpRequestException("Access Denied.", null, HttpStatusCode.Forbidden);
 
-        if (!conversation.Participants.Any(p => p.User_Id == userId))
-            throw new HttpRequestException("Access denied: You are not a participant.", null, HttpStatusCode.Forbidden);
-
-        var prefix = $"{UploadTypes.ChatAttachmentImage.ToPrefixString()}/{request.TargetId}";
-        var upload = await UploadImageAsync(request.File, prefix, ct);
-
-        var message = new Message
-        {
-            Id = Guid.NewGuid(),
-            Conversation_Id = request.TargetId.Value,
-            Sender_User_Id = userId,
-            Message_Type = MessageType.Image.ToDbString(),
-            Body_Text = upload.ObjectKey, 
-            Created_At_Utc = DateTime.UtcNow
+        // Upload and Save
+        var upload = await UploadImageAsync(request.File, $"{UploadTypes.JobImage.ToPrefixString()}/{conversationId}", ct);
+        
+        var message = new Message {
+            Id = Guid.NewGuid(), Conversation_Id = conversationId, Sender_User_Id = currentUserId,
+            Message_Type = MessageType.Image.ToDbString(), Body_Text = upload.ObjectKey, Created_At_Utc = DateTime.UtcNow
         };
 
         Context.Messages.Add(message);
-        
-        conversation.Last_Message_At_Utc = DateTime.UtcNow;
-
-        await Context.Conversation_Participants
-            .Where(p => p.Conversation_Id == request.TargetId && p.User_Id != userId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Unread_Count, p => p.Unread_Count + 1), ct);
-
         await Context.SaveChangesAsync(ct);
 
         var dto = MapMessageToDto(message);
 
-        var targetIds = conversation.Participants.Select(p => p.User_Id.ToString()).ToList();
+        // Push to participants
+        var targetIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();
+        await ChatHubContext.Clients.Groups(targetIds).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+
+        return dto;
+    }
+
+    public async Task<MessageDto> SendSupportChatImageAsync(UploadImageRequest request, CancellationToken ct)
+    {
+        var currentUserId = await GetCurrentUserIdAsync();
+        var currentUserRole = GetCurrentUserRole();
+        var conversationId = request.TargetId ?? throw new HttpRequestException("Conversation ID required.", null, HttpStatusCode.BadRequest);
+
+        var conv = await Context.Conversations
+            .Include(c => c.Participants)
+            .FirstOrDefaultAsync(c => c.Id == conversationId && c.Type == ConversationType.AdminSupport.ToString(), ct)
+            ?? throw new HttpRequestException("Support conversation not found.", null, HttpStatusCode.NotFound);
+
+        // Admin Auto-Join Logic
+        var isParticipant = conv.Participants.Any(p => p.User_Id == currentUserId);
+        if (!isParticipant && currentUserRole == UserRole.Admin.ToDbString())
+        {
+            Context.Conversation_Participants.Add(new Conversation_Participant {
+                Id = Guid.NewGuid(), Conversation_Id = conversationId, User_Id = currentUserId, Participant_Role = UserRole.Admin.ToDbString()
+            });
+        }
+        else if (!isParticipant) throw new HttpRequestException("Forbidden.", null, HttpStatusCode.Forbidden);
+
+        // Upload and Save
+        var upload = await UploadImageAsync(request.File, $"{UploadTypes.JobConversationAtt.ToPrefixString()}/{conversationId}", ct);
         
-        await ChatHubContext.Clients.Groups(targetIds)
-            .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = request.TargetId, message = dto });
+        var message = new Message {
+            Id = Guid.NewGuid(), Conversation_Id = conversationId, Sender_User_Id = currentUserId,
+            Message_Type = MessageType.Image.ToDbString(), Body_Text = upload.ObjectKey, Created_At_Utc = DateTime.UtcNow
+        };
+
+        Context.Messages.Add(message);
+        await Context.SaveChangesAsync(ct);
+
+        var dto = MapMessageToDto(message);
+
+        // Broadcast Logic
+        // 1. If user sent, notify Admins group
+        if (currentUserRole != UserRole.Admin.ToDbString())
+            await ChatHubContext.Clients.Group("Admins").SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+        
+        // 2. Notify current participants
+        var targetIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();
+        await ChatHubContext.Clients.Groups(targetIds).SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
 
         return dto;
     }
