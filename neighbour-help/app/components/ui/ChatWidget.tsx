@@ -175,7 +175,7 @@ export default function ChatWidget() {
       try {
         const conversation = await messagesService.createJobConversation({
           jobId: pendingJobChat.jobId,
-          bidId: pendingJobChat.bidId,
+          otherUserId: pendingJobChat.otherUserId,
         });
 
         if (!cancelled) {

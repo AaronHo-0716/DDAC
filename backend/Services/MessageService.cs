@@ -1,11 +1,9 @@
-using backend.Data;
 using backend.Models.DTOs;
 using backend.Models.Entities;
 using backend.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 using Microsoft.AspNetCore.SignalR;
-using backend.Hubs;
 
 namespace backend.Services;
 
@@ -16,41 +14,65 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
     {
         var currentUserId = await GetCurrentUserIdAsync();
 
-        // 1. Validate Job/Bid and 1-on-1 Authorization
-        var bid = await Context.Bids
-            .Include(b => b.Job)
-            .FirstOrDefaultAsync(b => b.Id == request.BidId && b.Job_Id == request.JobId)
-            ?? throw new HttpRequestException("The specified job/bid relation does not exist.", null, HttpStatusCode.NotFound);
+        // 1. Fetch the Job to identify the Homeowner
+        var job = await Context.Jobs.FindAsync(request.JobId)
+            ?? throw new HttpRequestException("Job not found.", null, HttpStatusCode.NotFound);
 
-        bool isOwner = bid.Job.Posted_By_User_Id == currentUserId;
-        bool isBidder = bid.Handyman_User_Id == currentUserId;
+        Guid homeownerId = job.Posted_By_User_Id;
+        Guid handymanId;
 
-        if (!isOwner && !isBidder)
-            throw new HttpRequestException("You are not authorized to chat for this job.", null, HttpStatusCode.Forbidden);
+        // 2. Validate Roles and Bidding Relationship
+        if (currentUserId == homeownerId)
+        {
+            // Current user is the Homeowner. 
+            // Logic: Check if the 'OtherUserId' (Handyman) has actually placed a bid on this job.
+            handymanId = request.OtherUserId;
+            var hasBid = await Context.Bids.AnyAsync(b => b.Job_Id == job.Id && b.Handyman_User_Id == handymanId);
+            
+            if (!hasBid)
+                throw new HttpRequestException("This user has not placed a bid on your job.", null, HttpStatusCode.Forbidden);
+        }
+        else
+        {
+            // Current user is the Handyman. 
+            // Logic: 1. Ensure they are talking to the Job Owner. 2. Ensure they actually bid on this job.
+            handymanId = currentUserId;
+            
+            if (request.OtherUserId != homeownerId)
+                throw new HttpRequestException("You can only start a chat with the owner of this job.", null, HttpStatusCode.Forbidden);
 
-        // 2. Check for existing conversation for this specific bid
+            var myBid = await Context.Bids.AnyAsync(b => b.Job_Id == job.Id && b.Handyman_User_Id == handymanId);
+            if (!myBid)
+                throw new HttpRequestException("You must place a bid on this job before you can message the owner.", null, HttpStatusCode.Forbidden);
+        }
+
+        // 3. Check for existing conversation for this Job + Handyman pair
+        // This prevents creating duplicate "rooms" for the same job.
         var existing = await Context.Conversations
             .Include(c => c.Participants).ThenInclude(p => p.User)
-            .FirstOrDefaultAsync(c => c.Type == ConversationType.JobChat.ToString() && c.Related_Bid_Id == request.BidId);
+            .FirstOrDefaultAsync(c => 
+                c.Type == ConversationType.JobChat.ToString() && 
+                c.Related_Job_Id == job.Id &&
+                c.Participants.Any(p => p.User_Id == homeownerId) &&
+                c.Participants.Any(p => p.User_Id == handymanId));
 
         if (existing != null) return await MapToConversationDto(existing, currentUserId);
 
-        // 3. Create New 1-on-1 Conversation
+        // 4. Create New 1-on-1 Job Conversation
         var conversation = new Conversation
         {
             Id = Guid.NewGuid(),
             Type = ConversationType.JobChat.ToString(),
-            Related_Job_Id = request.JobId,
-            Related_Bid_Id = request.BidId,
+            Related_Job_Id = job.Id,
             Created_By_User_Id = currentUserId,
             Status = ConversationStatus.Active.ToDbString()
         };
 
         Context.Conversations.Add(conversation);
 
-        // Add both participants (Homeowner and Handyman)
-        var participantIds = new[] { bid.Job.Posted_By_User_Id, bid.Handyman_User_Id };
-        foreach (var pId in participantIds)
+        // 5. Add both participants (Handyman and Homeowner)
+        var participants = new[] { homeownerId, handymanId };
+        foreach (var pId in participants)
         {
             var user = await Context.Users.FindAsync(pId);
             Context.Conversation_Participants.Add(new Conversation_Participant
@@ -58,7 +80,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
                 Id = Guid.NewGuid(),
                 Conversation_Id = conversation.Id,
                 User_Id = pId,
-                Participant_Role = user!.Role
+                Participant_Role = user!.Role // "homeowner" or "handyman"
             });
         }
 
@@ -99,13 +121,9 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
 
         var dto = MapMessageToDto(message);
 
-        // SignalR Push to recipients
-        if (ChatHubContext != null)
-        {
-            var targetIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();
-            await ChatHubContext.Clients.Groups(targetIds)
-                .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
-        }
+        var targetIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();
+        await ChatHubContext.Clients.Groups(targetIds)
+            .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
 
         return dto;
     }
@@ -179,8 +197,6 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         return await MapToConversationDto(conv, currentUserId);
     }
 
-    #region Helpers
-
     private async Task<ConversationDto> MapToConversationDto(Conversation c, Guid currentUserId)
     {
         var lastMsg = await Context.Messages
@@ -191,7 +207,6 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         var participants = new List<ChatParticipantDto>();
         foreach (var p in c.Participants)
         {
-            // MapUserToDto handles the rating and S3 avatars automatically
             var userDto = await MapUserToDto(p.User);
             participants.Add(new ChatParticipantDto(
                 userDto.Id, 
@@ -213,6 +228,4 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
             participants
         );
     }
-
-    #endregion
 }

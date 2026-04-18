@@ -287,7 +287,7 @@ export interface Conversation {
 
 export interface CreateJobChatRequest {
   jobId: string;
-  bidId: string;
+  otherUserId: string;
 }
 
 export interface SendMessageRequest {

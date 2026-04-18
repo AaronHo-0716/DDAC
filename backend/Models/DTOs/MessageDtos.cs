@@ -2,7 +2,7 @@ using backend.Constants;
 
 namespace backend.Models.DTOs;
 
-public record CreateJobChatRequest(Guid JobId, Guid BidId);
+public record CreateJobChatRequest(Guid JobId, Guid OtherUserId);
 public record SendMessageRequest(
     string Content, 
     MessageType MessageType = MessageType.Text
