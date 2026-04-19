@@ -65,10 +65,19 @@ data "aws_availability_zones" "available" {
 
 data "aws_ami" "ubuntu_2404" {
   most_recent = true
-  owners      = ["099720109477"]
+  owners      = ["099720109477"] # Canonical
   filter {
     name   = "name"
     values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+}
+
+data "aws_ami" "ubuntu_2404_arm64" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"]
   }
 }
 
@@ -229,6 +238,14 @@ resource "aws_security_group" "app_sg" {
     self        = true
   }
 
+  ingress {
+    description = "Redis"
+    from_port   = 6379
+    to_port     = 6379
+    protocol    = "tcp"
+    self        = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -238,12 +255,12 @@ resource "aws_security_group" "app_sg" {
 }
 
 resource "aws_security_group" "db_sg" {
-  name        = "private-db-sg"
-  description = "Allow Postgres traffic from App Tier"
+  name        = "db_sg"
+  description = "Security group for PostgreSQL RDS"
   vpc_id      = aws_vpc.app_vpc.id
 
   ingress {
-    description     = "PostgreSQL from App Tier"
+    description     = "PostgreSQL from App Subnet"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
@@ -698,6 +715,62 @@ resource "aws_instance" "monitoring_instance" {
 }
 
 # --- Database: PostgreSQL RDS ---
+resource "aws_instance" "redis_instance" {
+  ami                    = data.aws_ami.ubuntu_2404_arm64.id
+  instance_type          = "r7g.medium"
+  subnet_id              = aws_subnet.private_app.id
+  iam_instance_profile   = aws_iam_instance_profile.ec2_ssm_profile.name
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.app_sg.id]
+
+  user_data_replace_on_change = true
+
+  user_data = <<-EOF
+              #!/bin/bash
+
+              # Redirect output to log file
+              exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+
+              # Update and install Docker
+              apt-get update
+              apt-get install -y ca-certificates curl gnupg
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+              chmod a+r /etc/apt/keyrings/docker.gpg
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+              apt-get update
+              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+              systemctl enable docker
+              systemctl start docker
+
+              mkdir -p /opt/redis
+              cd /opt/redis
+
+              cat << 'COMPOSE' > docker-compose.yml
+              version: '3.8'
+              services:
+                redis:
+                  image: redis:alpine
+                  container_name: redis
+                  ports:
+                    - "6379:6379"
+                  command: redis-server --appendonly yes
+                  restart: always
+              COMPOSE
+
+              docker compose up -d
+
+              # Configure memory overcommit
+              echo "vm.overcommit_memory=1" >> /etc/sysctl.conf
+              sysctl -p
+              EOF
+
+  tags = {
+    Name = "redis-instance"
+  }
+}
+
 resource "aws_db_subnet_group" "rds_subnet_group" {
   name       = "app-db-subnet-group"
   subnet_ids = [aws_subnet.private_app.id, aws_subnet.private_data.id]
@@ -774,8 +847,14 @@ resource "aws_ssm_parameter" "db_username" {
 }
 
 resource "aws_ssm_parameter" "db_password" {
-  name        = "/app/db/password"
-  description = "Database admin password"
+  name        = "/app/db_password"
+  description = "Database password"
   type        = "SecureString"
   value       = var.db_password
+}
+
+resource "aws_ssm_parameter" "redis_host" {
+  name  = "/app/redis_host"
+  type  = "String"
+  value = aws_instance.redis_instance.private_ip
 }
