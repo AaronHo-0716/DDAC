@@ -410,7 +410,14 @@ resource "aws_instance" "caddy_nat_instance" {
               #!/bin/bash
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
-              apt-get install -y iptables iptables-persistent docker.io
+              apt-get install -y iptables iptables-persistent
+              apt-get install -y ca-certificates curl
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+              chmod a+r /etc/apt/keyrings/docker.asc
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+              apt-get update -o Acquire::ForceIPv4=true
+              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
               sysctl -w net.ipv4.ip_forward=1
               echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.d/99-ip-forwarding.conf
               PRIMARY_IF=$(ip route show default | awk '/default/ {print $5}')
@@ -448,13 +455,21 @@ resource "aws_instance" "caddy_nat_instance" {
               systemctl enable --now caddy
               systemctl restart caddy
 
-              docker run -d --restart always \
-                --name node-exporter \
-                --net="host" \
-                --pid="host" \
-                -v "/:/host:ro,rslave" \
-                quay.io/prometheus/node-exporter:latest \
-                --path.rootfs=/host
+              cat > /opt/docker-compose.yml << 'COMPOSE'
+              services:
+                node-exporter:
+                  image: quay.io/prometheus/node-exporter:latest
+                  container_name: node-exporter
+                  restart: always
+                  network_mode: "host"
+                  pid: "host"
+                  volumes:
+                    - "/:/host:ro,rslave"
+                  command:
+                    - "--path.rootfs=/host"
+              COMPOSE
+
+              docker compose -f /opt/docker-compose.yml up -d
               EOF
 
   tags = { Name = "App-Caddy-NAT" }
@@ -490,7 +505,14 @@ resource "aws_instance" "app_instance" {
               apt-get update -o Acquire::ForceIPv4=true
 
               # 3. Install Unzip, Docker & SSH
-              apt-get install -y docker.io openssh-server unzip
+              apt-get install -y openssh-server unzip
+              apt-get install -y ca-certificates curl
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+              chmod a+r /etc/apt/keyrings/docker.asc
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+              apt-get update -o Acquire::ForceIPv4=true
+              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
               systemctl enable --now docker
               usermod -aG docker ubuntu
 
@@ -514,13 +536,21 @@ resource "aws_instance" "app_instance" {
 
               systemctl restart ssh
 
-              docker run -d --restart always \
-                --name node-exporter \
-                --net="host" \
-                --pid="host" \
-                -v "/:/host:ro,rslave" \
-                quay.io/prometheus/node-exporter:latest \
-                --path.rootfs=/host
+              cat > /opt/docker-compose.yml << 'COMPOSE'
+              services:
+                node-exporter:
+                  image: quay.io/prometheus/node-exporter:latest
+                  container_name: node-exporter
+                  restart: always
+                  network_mode: "host"
+                  pid: "host"
+                  volumes:
+                    - "/:/host:ro,rslave"
+                  command:
+                    - "--path.rootfs=/host"
+              COMPOSE
+
+              docker compose -f /opt/docker-compose.yml up -d
               EOF
 
 
@@ -557,7 +587,14 @@ resource "aws_instance" "frontend_instance" {
               apt-get update -o Acquire::ForceIPv4=true
 
               # 3. Install Unzip, Docker & SSH
-              apt-get install -y docker.io openssh-server unzip
+              apt-get install -y openssh-server unzip
+              apt-get install -y ca-certificates curl
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+              chmod a+r /etc/apt/keyrings/docker.asc
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+              apt-get update -o Acquire::ForceIPv4=true
+              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
               systemctl enable --now docker
               usermod -aG docker ubuntu
 
@@ -581,13 +618,21 @@ resource "aws_instance" "frontend_instance" {
 
               systemctl restart ssh
 
-              docker run -d --restart always \
-                --name node-exporter \
-                --net="host" \
-                --pid="host" \
-                -v "/:/host:ro,rslave" \
-                quay.io/prometheus/node-exporter:latest \
-                --path.rootfs=/host
+              cat > /opt/docker-compose.yml << 'COMPOSE'
+              services:
+                node-exporter:
+                  image: quay.io/prometheus/node-exporter:latest
+                  container_name: node-exporter
+                  restart: always
+                  network_mode: "host"
+                  pid: "host"
+                  volumes:
+                    - "/:/host:ro,rslave"
+                  command:
+                    - "--path.rootfs=/host"
+              COMPOSE
+
+              docker compose -f /opt/docker-compose.yml up -d
               EOF
 
 
@@ -618,7 +663,14 @@ resource "aws_instance" "monitoring_instance" {
               done
 
               apt-get update -o Acquire::ForceIPv4=true
-              apt-get install -y docker.io docker-compose openssh-server unzip
+              apt-get install -y openssh-server unzip
+              apt-get install -y ca-certificates curl
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+              chmod a+r /etc/apt/keyrings/docker.asc
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+              apt-get update -o Acquire::ForceIPv4=true
+              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
               systemctl enable --now docker
               usermod -aG docker ubuntu
 
@@ -695,20 +747,24 @@ resource "aws_instance" "monitoring_instance" {
                   depends_on:
                     - prometheus
 
+                node-exporter:
+                  image: quay.io/prometheus/node-exporter:latest
+                  container_name: node-exporter
+                  restart: always
+                  network_mode: "host"
+                  pid: "host"
+                  volumes:
+                    - "/:/host:ro,rslave"
+                  command:
+                    - "--path.rootfs=/host"
+
               volumes:
                 prometheus_data:
                 grafana_data:
               DOCKERCOMPOSE
 
-              docker-compose up -d
+              docker compose up -d
 
-              docker run -d --restart always \
-                --name node-exporter \
-                --net="host" \
-                --pid="host" \
-                -v "/:/host:ro,rslave" \
-                quay.io/prometheus/node-exporter:latest \
-                --path.rootfs=/host
               EOF
 
   tags = { Name = "App-Monitoring" }
@@ -727,6 +783,15 @@ resource "aws_instance" "redis_instance" {
 
   user_data = <<-EOF
               #!/bin/bash
+              export DEBIAN_FRONTEND=noninteractive
+
+              echo "Waiting for internet connectivity..."
+              for i in {1..30}; do
+                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
+                      break
+                  fi
+                  sleep 10
+              done
 
               # Redirect output to log file
               exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
