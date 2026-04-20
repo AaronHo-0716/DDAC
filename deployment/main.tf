@@ -405,72 +405,13 @@ resource "aws_instance" "caddy_nat_instance" {
 
   vpc_security_group_ids = [aws_security_group.public_sg.id]
   source_dest_check      = false
-
-  user_data = <<-EOF
-              #!/bin/bash
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update
-              apt-get install -y iptables iptables-persistent
-              apt-get install -y ca-certificates curl
-              install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-              chmod a+r /etc/apt/keyrings/docker.asc
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-              apt-get update -o Acquire::ForceIPv4=true
-              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-              sysctl -w net.ipv4.ip_forward=1
-              echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.d/99-ip-forwarding.conf
-              PRIMARY_IF=$(ip route show default | awk '/default/ {print $5}')
-              iptables -t nat -A POSTROUTING -o $PRIMARY_IF -s ${aws_vpc.app_vpc.cidr_block} -j MASQUERADE
-              iptables-save > /etc/iptables/rules.v4
-              systemctl enable --now docker
-              usermod -aG docker ubuntu
-
-              # Install Caddy
-              apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
-              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-              apt-get update
-              apt-get install -y caddy
-
-              # Configure Caddy reverse proxy to frontend and backend
-              cat > /etc/caddy/Caddyfile << 'CADDYFILE'
-              neighbourhelp.me {
-                  handle_path /api/proxy/* {
-                      rewrite * /api{path}
-                      reverse_proxy ${aws_instance.app_instance.private_ip}:5073
-                  }
-                  handle /grafana/* {
-                      reverse_proxy ${aws_instance.monitoring_instance.private_ip}:3000
-                  }
-                  handle /prometheus/* {
-                      reverse_proxy ${aws_instance.monitoring_instance.private_ip}:9090
-                  }
-                  handle {
-                      reverse_proxy ${aws_instance.frontend_instance.private_ip}:3000
-                  }
-              }
-              CADDYFILE
-
-              systemctl enable --now caddy
-              systemctl restart caddy
-
-              cat > /opt/docker-compose.yml << 'COMPOSE'
-              services:
-                node-exporter:
-                  image: quay.io/prometheus/node-exporter:latest
-                  container_name: node-exporter
-                  restart: always
-                  network_mode: "host"
-                  pid: "host"
-                  volumes:
-                    - "/:/host:ro,rslave"
-                  command:
-                    - "--path.rootfs=/host"
-              COMPOSE
-
-              docker compose -f /opt/docker-compose.yml up -d
-              EOF
+  user_data = templatefile("${path.module}/scripts/caddy_nat_instance.sh", {
+    docker_compose_content                      = file("${path.module}/compose/caddy_nat_instance.yml")
+    aws_vpc_app_vpc_cidr_block                  = aws_vpc.app_vpc.cidr_block
+    aws_instance_app_instance_private_ip        = aws_instance.app_instance.private_ip
+    aws_instance_monitoring_instance_private_ip = aws_instance.monitoring_instance.private_ip
+    aws_instance_frontend_instance_private_ip   = aws_instance.frontend_instance.private_ip
+  })
 
   tags = { Name = "App-Caddy-NAT" }
 }
@@ -485,73 +426,10 @@ resource "aws_instance" "app_instance" {
 
   vpc_security_group_ids      = [aws_security_group.app_sg.id]
   user_data_replace_on_change = true
-
-  user_data = <<-EOF
-              #!/bin/bash
-              export DEBIAN_FRONTEND=noninteractive
-
-              # 1. Wait for internet connectivity (NAT Gateway takes time to provision)
-              echo "Waiting for internet connectivity..."
-              for i in {1..30}; do
-                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
-                      echo "Internet is reachable!"
-                      break
-                  fi
-                  echo "Attempt $i: Internet not reachable yet. Waiting 10s..."
-                  sleep 10
-              done
-
-              # 2. Update packages (Force IPv4)
-              apt-get update -o Acquire::ForceIPv4=true
-
-              # 3. Install Unzip, Docker & SSH
-              apt-get install -y openssh-server unzip
-              apt-get install -y ca-certificates curl
-              install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-              chmod a+r /etc/apt/keyrings/docker.asc
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-              apt-get update -o Acquire::ForceIPv4=true
-              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-              systemctl enable --now docker
-              usermod -aG docker ubuntu
-
-              # 3.1 Install AWS CLI
-              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip awscliv2.zip
-              ./aws/install
-
-              # 4. Create 'user' account
-              useradd -m -s /bin/bash user
-              echo "user:${var.instance_password}" | chpasswd
-              usermod -aG sudo user
-
-              # 5. Fix SSH Config for Ubuntu 24.04
-              if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
-                  sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
-              fi
-
-              sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-
-              systemctl restart ssh
-
-              cat > /opt/docker-compose.yml << 'COMPOSE'
-              services:
-                node-exporter:
-                  image: quay.io/prometheus/node-exporter:latest
-                  container_name: node-exporter
-                  restart: always
-                  network_mode: "host"
-                  pid: "host"
-                  volumes:
-                    - "/:/host:ro,rslave"
-                  command:
-                    - "--path.rootfs=/host"
-              COMPOSE
-
-              docker compose -f /opt/docker-compose.yml up -d
-              EOF
+  user_data = templatefile("${path.module}/scripts/app_instance.sh", {
+    docker_compose_content = file("${path.module}/compose/app_instance.yml")
+    var_instance_password  = var.instance_password
+  })
 
 
   tags = { Name = "App-Backend-Tier" }
@@ -567,73 +445,10 @@ resource "aws_instance" "frontend_instance" {
 
   vpc_security_group_ids      = [aws_security_group.app_sg.id]
   user_data_replace_on_change = true
-
-  user_data = <<-EOF
-              #!/bin/bash
-              export DEBIAN_FRONTEND=noninteractive
-
-              # 1. Wait for internet connectivity (NAT Gateway takes time to provision)
-              echo "Waiting for internet connectivity..."
-              for i in {1..30}; do
-                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
-                      echo "Internet is reachable!"
-                      break
-                  fi
-                  echo "Attempt $i: Internet not reachable yet. Waiting 10s..."
-                  sleep 10
-              done
-
-              # 2. Update packages (Force IPv4)
-              apt-get update -o Acquire::ForceIPv4=true
-
-              # 3. Install Unzip, Docker & SSH
-              apt-get install -y openssh-server unzip
-              apt-get install -y ca-certificates curl
-              install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-              chmod a+r /etc/apt/keyrings/docker.asc
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-              apt-get update -o Acquire::ForceIPv4=true
-              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-              systemctl enable --now docker
-              usermod -aG docker ubuntu
-
-              # 3.1 Install AWS CLI
-              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip awscliv2.zip
-              ./aws/install
-
-              # 4. Create 'user' account
-              useradd -m -s /bin/bash user
-              echo "user:${var.instance_password}" | chpasswd
-              usermod -aG sudo user
-
-              # 5. Fix SSH Config for Ubuntu 24.04
-              if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
-                  sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
-              fi
-
-              sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-
-              systemctl restart ssh
-
-              cat > /opt/docker-compose.yml << 'COMPOSE'
-              services:
-                node-exporter:
-                  image: quay.io/prometheus/node-exporter:latest
-                  container_name: node-exporter
-                  restart: always
-                  network_mode: "host"
-                  pid: "host"
-                  volumes:
-                    - "/:/host:ro,rslave"
-                  command:
-                    - "--path.rootfs=/host"
-              COMPOSE
-
-              docker compose -f /opt/docker-compose.yml up -d
-              EOF
+  user_data = templatefile("${path.module}/scripts/frontend_instance.sh", {
+    docker_compose_content = file("${path.module}/compose/frontend_instance.yml")
+    var_instance_password  = var.instance_password
+  })
 
 
   tags = { Name = "App-Frontend-Tier" }
@@ -649,123 +464,13 @@ resource "aws_instance" "monitoring_instance" {
 
   vpc_security_group_ids      = [aws_security_group.app_sg.id]
   user_data_replace_on_change = true
-
-  user_data = <<-EOF
-              #!/bin/bash
-              export DEBIAN_FRONTEND=noninteractive
-
-              echo "Waiting for internet connectivity..."
-              for i in {1..30}; do
-                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
-                      break
-                  fi
-                  sleep 10
-              done
-
-              apt-get update -o Acquire::ForceIPv4=true
-              apt-get install -y openssh-server unzip
-              apt-get install -y ca-certificates curl
-              install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-              chmod a+r /etc/apt/keyrings/docker.asc
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-              apt-get update -o Acquire::ForceIPv4=true
-              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-              systemctl enable --now docker
-              usermod -aG docker ubuntu
-
-              useradd -m -s /bin/bash user
-              echo "user:${var.instance_password}" | chpasswd
-              usermod -aG sudo user
-
-              if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
-                  sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
-              fi
-
-              sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-
-              systemctl restart ssh
-
-
-              mkdir -p /opt/monitoring
-              cd /opt/monitoring
-
-              cat << 'PROMETHEUS' > prometheus.yml
-              global:
-                scrape_interval: 15s
-
-              scrape_configs:
-                - job_name: 'node_exporter'
-                  ec2_sd_configs:
-                    - region: ${var.aws_region}
-                      port: 9100
-                  relabel_configs:
-                    - source_labels: [__meta_ec2_tag_Name]
-                      action: keep
-                      regex: (App-Backend-Tier|App-Frontend-Tier|App-Caddy-NAT|App-Monitoring)
-                    - source_labels: [__meta_ec2_private_ip]
-                      target_label: instance
-              PROMETHEUS
-
-              cat << 'DOCKERCOMPOSE' > docker-compose.yml
-              version: "3.8"
-
-              services:
-                prometheus:
-                  image: prom/prometheus:latest
-                  container_name: prometheus
-                  restart: unless-stopped
-                  ports:
-                    - "9090:9090"
-                  volumes:
-                    - ./prometheus.yml:/etc/prometheus/prometheus.yml
-                    - prometheus_data:/prometheus
-                  command:
-                    - "--config.file=/etc/prometheus/prometheus.yml"
-                    - "--storage.tsdb.path=/prometheus"
-                    - "--web.console.libraries=/etc/prometheus/console_libraries"
-                    - "--web.console.templates=/etc/prometheus/consoles"
-                    - "--web.enable-lifecycle"
-                    - "--web.external-url=http://neighbourhelp.me/prometheus/"
-
-                grafana:
-                  image: grafana/grafana:latest
-                  container_name: grafana
-                  restart: unless-stopped
-                  ports:
-                    - "3000:3000"
-                  volumes:
-                    - grafana_data:/var/lib/grafana
-                  environment:
-                    - GF_SECURITY_ADMIN_USER=admin
-                    - GF_SECURITY_ADMIN_PASSWORD=${var.grafana_password}
-                    - GF_SERVER_DOMAIN=neighbourhelp.me
-                    - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana/
-                    - GF_SERVER_SERVE_FROM_SUB_PATH=true
-
-                  depends_on:
-                    - prometheus
-
-                node-exporter:
-                  image: quay.io/prometheus/node-exporter:latest
-                  container_name: node-exporter
-                  restart: always
-                  network_mode: "host"
-                  pid: "host"
-                  volumes:
-                    - "/:/host:ro,rslave"
-                  command:
-                    - "--path.rootfs=/host"
-
-              volumes:
-                prometheus_data:
-                grafana_data:
-              DOCKERCOMPOSE
-
-              docker compose up -d
-
-              EOF
+  user_data = templatefile("${path.module}/scripts/monitoring_instance.sh", {
+    docker_compose_content = templatefile("${path.module}/compose/monitoring_instance.yml", {
+      var_grafana_password = var.grafana_password
+    })
+    var_instance_password = var.instance_password
+    var_aws_region        = var.aws_region
+  })
 
   tags = { Name = "App-Monitoring" }
 }
@@ -780,56 +485,7 @@ resource "aws_instance" "redis_instance" {
   vpc_security_group_ids = [aws_security_group.app_sg.id]
 
   user_data_replace_on_change = true
-
-  user_data = <<-EOF
-              #!/bin/bash
-              export DEBIAN_FRONTEND=noninteractive
-
-              echo "Waiting for internet connectivity..."
-              for i in {1..30}; do
-                  if curl -s --max-time 5 http://archive.ubuntu.com &>/dev/null; then
-                      break
-                  fi
-                  sleep 10
-              done
-
-              # Redirect output to log file
-              exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
-
-              # Update and install Docker
-              apt-get update
-              apt-get install -y ca-certificates curl gnupg
-              install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-              chmod a+r /etc/apt/keyrings/docker.gpg
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-              apt-get update
-              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-              systemctl enable docker
-              systemctl start docker
-
-              mkdir -p /opt/redis
-              cd /opt/redis
-
-              cat << 'COMPOSE' > docker-compose.yml
-              version: '3.8'
-              services:
-                redis:
-                  image: redis:alpine
-                  container_name: redis
-                  ports:
-                    - "6379:6379"
-                  command: redis-server --appendonly yes
-                  restart: always
-              COMPOSE
-
-              docker compose up -d
-
-              # Configure memory overcommit
-              echo "vm.overcommit_memory=1" >> /etc/sysctl.conf
-              sysctl -p
-              EOF
+  user_data                   = templatefile("${path.module}/scripts/redis_instance.sh", {})
 
   tags = {
     Name = "redis-instance"
