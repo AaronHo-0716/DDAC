@@ -22,6 +22,10 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       # Use 'db' as the host to connect to the container above
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=neighbourhelp_postgres;Username=neighbourhelp_user;Password=neighbourhelp_dev_password;
+      # REDIS: Use the service name 'redis' as the hostname
+      - Redis__ConnectionString=redis:6379
+      # CORS: Allow changing the frontend URL easily
+      - AllowedOrigins=http://localhost:3000
       - Jwt__Key=Your_Super_Secret_Fallback_Key_32_Chars_Long!
       - Jwt__Issuer=NeighborHelpApi
       - Jwt__Audience=NeighborHelpFrontend
@@ -38,6 +42,7 @@ services:
     depends_on:
       - db
       - localstack
+      - redis
 
   adminer:
     image: adminer
