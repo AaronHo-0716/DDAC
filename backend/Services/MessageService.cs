@@ -149,7 +149,7 @@ public class MessageService(ServiceDependencies deps) : BaseService(deps), IMess
         return messages.Select(MapMessageToDto);
     }
 
-    public async Task MarkAsReadAsync(Guid conversationId) => await MarkAsReadAsync(conversationId);
+    public async Task MarkAsReadAsync(Guid conversationId) => await base.MarkAsReadAsync(conversationId);
 
     public async Task<int> GetTotalUnreadCountAsync()
     {

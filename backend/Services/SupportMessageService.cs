@@ -106,7 +106,7 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
         return results;
     }
 
-    public async Task MarkAsReadAsync(Guid conversationId) => await MarkAsReadAsync(conversationId, true);
+    public async Task MarkAsReadAsync(Guid conversationId) => await base.MarkAsReadAsync(conversationId, true);
 
     public async Task<IEnumerable<MessageDto>> GetConversationMessagesAsync(Guid conversationId)
     {

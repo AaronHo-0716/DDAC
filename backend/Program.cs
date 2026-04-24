@@ -54,10 +54,13 @@ builder.Services.AddDbContext<NeighbourHelpDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // SignalR Configuration with Redis Backplane
-var redisUrl = builder.Configuration["Redis:ConnectionString"] ?? "redis:6379";
+var redisUrl = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
 builder.Services.AddSignalR()
     .AddStackExchangeRedis(redisUrl, options => {
         options.Configuration.ChannelPrefix = RedisChannel.Literal("NeighborHelpChat");
+        options.Configuration.AbortOnConnectFail = false;
+        options.Configuration.ConnectRetry = 5;
+        options.Configuration.ConnectTimeout = 5000;
     });
 
 // 4. AUTHENTICATION & AUTHORIZATION
@@ -83,7 +86,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/api"))
+                if (!string.IsNullOrEmpty(accessToken) && 
+                   (path.StartsWithSegments("/api/chat-hub") || path.StartsWithSegments("/api/notification-hub")))
                 {
                     context.Token = accessToken;
                 }
@@ -100,7 +104,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("NextJsPolicy", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        var origins = builder.Configuration["AllowedOrigins"]?.Split(',') ?? new[] { "http://localhost:3000" };
+        policy.WithOrigins(origins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials(); 

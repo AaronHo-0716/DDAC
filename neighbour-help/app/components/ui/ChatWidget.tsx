@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ImagePlus, MessageCircle, Send, X } from "lucide-react";
-import { HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { ConversationType, type ChatMessage, type Conversation } from "@/app/types";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import { messagesService, supportService } from "@/app/lib/api/messages"; // Imported both services
@@ -216,7 +216,12 @@ export default function ChatWidget() {
     if (!user) return;
 
     const connection = new HubConnectionBuilder()
-      .withUrl(CHAT_HUB_URL, { accessTokenFactory: () => getAccessToken() ?? "", withCredentials: true })
+      .withUrl(CHAT_HUB_URL, { 
+        accessTokenFactory: () => getAccessToken() ?? "", 
+        withCredentials: true,
+        skipNegotiation: false, 
+        transport: HttpTransportType.WebSockets 
+      })
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();
