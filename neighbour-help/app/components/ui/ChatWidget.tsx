@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ImagePlus, MessageCircle, Send, X } from "lucide-react";
-import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } from "@microsoft/signalr";
 import { ConversationType, type ChatMessage, type Conversation } from "@/app/types";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import { messagesService, supportService } from "@/app/lib/api/messages"; // Imported both services
@@ -85,7 +85,9 @@ export default function ChatWidget() {
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [conversationsError, setConversationsError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -219,7 +221,7 @@ export default function ChatWidget() {
       .withUrl(CHAT_HUB_URL, { 
         accessTokenFactory: () => getAccessToken() ?? "", 
         withCredentials: true,
-        skipNegotiation: false, 
+        skipNegotiation: true, 
         transport: HttpTransportType.WebSockets 
       })
       .withAutomaticReconnect()
@@ -262,13 +264,15 @@ export default function ChatWidget() {
     connection.start().catch(console.error);
     connectionRef.current = connection;
 
-    return () => { connection.stop(); };
+    return () => { if (connection.state === HubConnectionState.Connected) connection.stop(); };
   }, [user, loadConversations, refreshUnread]);
 
+  // UI Flow Triggers
   useEffect(() => { if (user) refreshUnread(); }, [user, refreshUnread]);
   useEffect(() => { if (isOpen && user) loadConversations(); }, [isOpen, user, loadConversations]);
   useEffect(() => { if (isOpen && activeConversationId && user) loadMessages(activeConversationId); }, [isOpen, activeConversationId, user, loadMessages]);
-
+  useEffect(() => { if (messages.length > 0) scrollToBottom("smooth"); }, [messages.length, scrollToBottom]);
+  
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => {
       const messageMap = new Map(prev.map((m) => [m.id, m]));
@@ -347,6 +351,40 @@ export default function ChatWidget() {
       setSending(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen || !pendingJobChat || !user) return;
+
+    let cancelled = false;
+
+    const openConversationFromBid = async () => {
+      setCreatingConversation(true);
+      setConversationsError(null);
+      try {
+        const conversation = await messagesService.createJobConversation({
+          jobId: pendingJobChat.jobId,
+          otherUserId: pendingJobChat.otherUserId,
+        });
+
+        if (!cancelled) {
+          setActiveConversationId(conversation.id);
+          await loadConversations();
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setConversationsError(err instanceof Error ? err.message : "Unable to open chat.");
+        }
+      } finally {
+        if (!cancelled) {
+          setCreatingConversation(false);
+          clearPendingJobChat();
+        }
+      }
+    };
+
+    void openConversationFromBid();
+    return () => { cancelled = true; };
+  }, [isOpen, pendingJobChat, user, setActiveConversationId, loadConversations, clearPendingJobChat]);
 
   if (!user) return null;
 

@@ -1,45 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, DollarSign, CheckCircle, Truck, Star, Bell } from "lucide-react";
+import { HubConnection, HubConnectionBuilder, LogLevel, HttpTransportType, HubConnectionState } from "@microsoft/signalr";
 import type { Notification, NotificationEventType } from "@/app/types";
 import { notificationsService } from "@/app/lib/api/notifications";
+import { getAccessToken } from "@/app/lib/api/client";
+
+const NOTIF_HUB_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL?.trim() ||
+  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+  "http://localhost:5073";
+const NOTIF_HUB_URL = `${NOTIF_HUB_BASE_URL.replace(/\/+$/, "")}/api/notification-hub`;
 
 const NOTIF_CONFIG: Record<
   NotificationEventType,
   { icon: React.ReactNode; bg: string; color: string }
 > = {
-  bid_received: {
-    icon: <DollarSign className="w-4 h-4" />,
-    bg: "bg-blue-50",
-    color: "text-[#0B74FF]",
-  },
-  bid_rejected: {
-    icon: <Bell className="w-4 h-4" />,
-    bg: "bg-red-50",
-    color: "text-red-600",
-  },
-  bid_accepted: {
-    icon: <CheckCircle className="w-4 h-4" />,
-    bg: "bg-green-50",
-    color: "text-green-600",
-  },
-  handyman_arriving: {
-    icon: <Truck className="w-4 h-4" />,
-    bg: "bg-amber-50",
-    color: "text-amber-600",
-  },
-  job_completed: {
-    icon: <Star className="w-4 h-4" />,
-    bg: "bg-purple-50",
-    color: "text-purple-600",
-  },
-  system: {
-    icon: <Bell className="w-4 h-4" />,
-    bg: "bg-gray-100",
-    color: "text-gray-700",
-  },
+  bid_received: { icon: <DollarSign className="w-4 h-4" />, bg: "bg-blue-50", color: "text-[#0B74FF]" },
+  bid_rejected: { icon: <Bell className="w-4 h-4" />, bg: "bg-red-50", color: "text-red-600" },
+  bid_accepted: { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-green-50", color: "text-green-600" },
+  handyman_arriving: { icon: <Truck className="w-4 h-4" />, bg: "bg-amber-50", color: "text-amber-600" },
+  job_completed: { icon: <Star className="w-4 h-4" />, bg: "bg-purple-50", color: "text-purple-600" },
+  system: { icon: <Bell className="w-4 h-4" />, bg: "bg-gray-100", color: "text-gray-700" },
 };
 
 function timeAgo(iso: string) {
@@ -55,40 +39,101 @@ interface NotificationsPanelProps {
   onClose: () => void;
 }
 
-export default function NotificationsPanel({
-  onClose,
-}: NotificationsPanelProps) {
+export default function NotificationsPanel({ onClose }: NotificationsPanelProps) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  const connectionRef = useRef<HubConnection | null>(null);
+
+  const load = useCallback(async () => {
+    setFetching(true);
+    try {
+      const response = await notificationsService.getNotifications();
+      setNotifications(response.notifications || []);
+    } catch {
+      setError("Failed to load notifications.");
+    } finally {
+      setFetching(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    void load();
+  }, [load]);
 
-    const load = async () => {
-      setFetching(true);
-      setError(null);
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+
+    let isSubscribed = true; // Flag to prevent state updates after unmount
+
+    const connection = new HubConnectionBuilder()
+      .withUrl(NOTIF_HUB_URL, {
+        accessTokenFactory: () => token,
+        withCredentials: true,
+        skipNegotiation: true,
+        transport: HttpTransportType.WebSockets,
+      })
+      .withAutomaticReconnect()
+      .configureLogging(LogLevel.Warning)
+      .build();
+
+    connection.on("ReceiveNotification", (incoming: any) => {
+      if (!isSubscribed) return;
+      const newNotif: Notification = {
+        id: incoming.id,
+        type: incoming.type,
+        message: incoming.message,
+        read: incoming.isRead,
+        createdAt: incoming.createdAtUtc,
+        relatedJobId: incoming.relatedJobId
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+    });
+
+    connection.on("NotificationMarkedRead", (id: string) => {
+      if (!isSubscribed) return;
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    });
+
+    connection.on("AllNotificationsMarkedRead", () => {
+      if (!isSubscribed) return;
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    });
+
+    // Save connection to ref
+    connectionRef.current = connection;
+
+    const startConnection = async () => {
       try {
-        const response = await notificationsService.getNotifications();
-        if (!cancelled) {
-          setNotifications(response.notifications);
+        // Only start if the component is still mounted
+        if (isSubscribed && connection.state === HubConnectionState.Disconnected) {
+          await connection.start();
         }
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load notifications.");
-        }
-      } finally {
-        if (!cancelled) {
-          setFetching(false);
+        // Ignore the "stop() called before start()" error specifically
+        if (isSubscribed) {
+          console.error("SignalR Notification Error:", err);
         }
       }
     };
 
-    void load();
+    void startConnection();
 
     return () => {
-      cancelled = true;
+      isSubscribed = false; // Mark as unmounted
+      const conn = connectionRef.current;
+      if (conn) {
+        // Only call stop if it's actually in a state that can be stopped
+        if (conn.state === HubConnectionState.Connected || conn.state === HubConnectionState.Connecting) {
+            conn.stop().catch(() => {
+                // Silently ignore errors during teardown
+            });
+        }
+        connectionRef.current = null;
+      }
     };
   }, []);
 
@@ -104,12 +149,10 @@ export default function NotificationsPanel({
     void (async () => {
       try {
         await notificationsService.markAsRead(id);
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-        );
+        setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
         window.dispatchEvent(new Event("nh_notifications_updated"));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update notification.");
+        setError("Failed to update notification.");
       }
     })();
   }, [notifications]);
@@ -123,7 +166,7 @@ export default function NotificationsPanel({
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
         window.dispatchEvent(new Event("nh_notifications_updated"));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to mark all notifications as read.");
+        setError("Failed to mark all read.");
       }
     })();
   }, [notifications]);
@@ -135,46 +178,26 @@ export default function NotificationsPanel({
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/25 z-40 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
-
-      {/* Slide-out panel */}
+      <div className="fixed inset-0 bg-black/25 z-40 backdrop-blur-[1px]" onClick={onClose} />
       <div className="fixed right-0 top-0 h-full w-full max-w-sm bg-white border-l border-[#E5E7EB] shadow-xl z-50 flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
           <div className="flex items-center gap-2">
             <Bell className="w-4 h-4 text-[#111827]" />
-            <h2 className="text-base font-bold text-[#111827]">
-              Notifications
-            </h2>
+            <h2 className="text-base font-bold text-[#111827]">Notifications</h2>
             {unreadCount > 0 && (
-              <span className="bg-[#0B74FF] text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {unreadCount}
-              </span>
+              <span className="bg-[#0B74FF] text-white text-xs font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="text-xs text-[#0B74FF] hover:underline font-medium"
-              >
-                Mark all read
-              </button>
+              <button onClick={markAllAsRead} className="text-xs text-[#0B74FF] hover:underline font-medium">Mark all read</button>
             )}
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F7F8FA] hover:text-[#111827] transition-colors"
-            >
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F7F8FA] hover:text-[#111827] transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Notification list */}
         <div className="flex-1 overflow-y-auto">
           {fetching ? (
             <div className="p-5 text-sm text-[#6B7280]">Loading notifications...</div>
@@ -188,42 +211,21 @@ export default function NotificationsPanel({
           ) : (
             <div className="divide-y divide-[#F3F4F6]">
               {notifications.map((notif) => {
-                const cfg = NOTIF_CONFIG[notif.type];
+                const cfg = NOTIF_CONFIG[notif.type] || NOTIF_CONFIG.system;
                 return (
                   <div
                     key={notif.id}
                     onClick={() => markAsRead(notif.id)}
-                    className={`flex items-start gap-3 px-5 py-4 hover:bg-[#F7F8FA] transition-colors cursor-pointer ${
-                      !notif.read ? "bg-blue-50/40" : ""
-                    }`}
+                    className={`flex items-start gap-3 px-5 py-4 hover:bg-[#F7F8FA] transition-colors cursor-pointer ${!notif.read ? "bg-blue-50/40" : ""}`}
                   >
-                    {/* Icon */}
-                    <div
-                      className={`w-9 h-9 ${cfg.bg} ${cfg.color} rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5`}
-                    >
+                    <div className={`w-9 h-9 ${cfg.bg} ${cfg.color} rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5`}>
                       {cfg.icon}
                     </div>
-
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <p
-                        className={`text-sm leading-snug ${
-                          notif.read
-                            ? "text-[#374151]"
-                            : "text-[#111827] font-medium"
-                        }`}
-                      >
-                        {notif.message}
-                      </p>
-                      <p className="text-xs text-[#9CA3AF] mt-1">
-                        {timeAgo(notif.createdAt)}
-                      </p>
+                      <p className={`text-sm leading-snug ${notif.read ? "text-[#374151]" : "text-[#111827] font-medium"}`}>{notif.message}</p>
+                      <p className="text-xs text-[#9CA3AF] mt-1">{timeAgo(notif.createdAt)}</p>
                     </div>
-
-                    {/* Unread dot */}
-                    {!notif.read && (
-                      <div className="w-2 h-2 rounded-full bg-[#0B74FF] flex-shrink-0 mt-2" />
-                    )}
+                    {!notif.read && <div className="w-2 h-2 rounded-full bg-[#0B74FF] flex-shrink-0 mt-2" />}
                   </div>
                 );
               })}
@@ -231,14 +233,8 @@ export default function NotificationsPanel({
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-3 border-t border-[#E5E7EB]">
-          <button
-            onClick={handleViewAllNotifications}
-            className="w-full text-center text-sm text-[#0B74FF] hover:underline font-medium py-1"
-          >
-            View all notifications
-          </button>
+          <button onClick={handleViewAllNotifications} className="w-full text-center text-sm text-[#0B74FF] hover:underline font-medium py-1">View all notifications</button>
         </div>
       </div>
     </>
