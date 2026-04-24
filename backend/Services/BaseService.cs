@@ -288,6 +288,6 @@ public abstract class BaseService
 
         if (isAdminRead)
             await ChatHubContext.Clients.Group(currentUserId.ToString())
-            .SendAsync(HubMethod.NotificationMarkedRead.ToString(), conversationId);
+            .SendAsync(HubMethod.MessageMarkRead.ToString(), conversationId);
     }
 }

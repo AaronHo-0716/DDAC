@@ -4,6 +4,7 @@ public enum HubMethod
 { 
     ReceiveNotification,
     ReceiveMessage,
+    MessageMarkRead,
     NotificationMarkedRead,
     AllNotificationsMarkedRead
 }

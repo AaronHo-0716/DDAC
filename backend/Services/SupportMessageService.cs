@@ -65,10 +65,13 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
                 Participant_Role = UserRole.Admin.ToDbString()
             });
             
-            await ChatHubContext.Clients.Group(UserRole.Admin.ToDbString())
+            await ChatHubContext.Clients.Group(UserRole.Admin.ToString())
                 .SendAsync("SupportChatTaken", new { conversationId, adminId = currentUserId });
         }
-        else if (!isParticipant) throw new HttpRequestException("Forbidden.", null, HttpStatusCode.Forbidden); 
+        else if (!isParticipant) 
+        {
+            throw new HttpRequestException("Forbidden.", null, HttpStatusCode.Forbidden); 
+        }
 
         var message = new Message 
         {
@@ -81,10 +84,36 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
         };
 
         Context.Messages.Add(message);
-        
         await Context.SaveChangesAsync();
         
-        return MapMessageToDto(message);
+        var dto = MapMessageToDto(message);
+
+        if (currentUserRole != UserRole.Admin.ToDbString())
+        {
+            await ChatHubContext.Clients.Group(UserRole.Admin.ToString())
+                .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+        }
+
+        var participantIds = conv.Participants.Select(p => p.User_Id.ToString()).ToList();
+        
+        if (currentUserRole != UserRole.Admin.ToDbString())
+        {
+            // Send to Admins who ARE NOT participants yet
+            await ChatHubContext.Clients.Group(UserRole.Admin.ToString())
+                .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+                
+            // Send to the Customer specifically
+            await ChatHubContext.Clients.Groups(participantIds)
+                .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+        }
+        else 
+        {
+            // Admin is sending: Just send to specific participants
+            await ChatHubContext.Clients.Groups(participantIds)
+                .SendAsync(HubMethod.ReceiveMessage.ToString(), new { convId = conversationId, message = dto });
+        }
+        
+        return dto;
     }
 
     public async Task<IEnumerable<ConversationDto>> GetSupportConversationsAsync()
@@ -166,30 +195,28 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
             .OrderByDescending(m => m.Created_At_Utc)
             .FirstOrDefaultAsync();
 
-        string? relatedJobTitle = c.Related_Job?.Title;
-        if (relatedJobTitle is null && c.Related_Job_Id.HasValue)
-        {
-            relatedJobTitle = await Context.Jobs
-                .Where(j => j.Id == c.Related_Job_Id.Value)
-                .Select(j => j.Title)
-                .FirstOrDefaultAsync();
-        }
-
         int displayUnread = 0;
         var myParticipantRecord = c.Participants.FirstOrDefault(p => p.User_Id == currentUserId);
 
-        if (myParticipantRecord != null) displayUnread = myParticipantRecord.Unread_Count;
-        
+        if (myParticipantRecord != null)
+        {
+            // Path A: I am already a participant, show my database unread count
+            displayUnread = myParticipantRecord.Unread_Count;
+        }
+        else if (currentUserRole == UserRole.Admin.ToDbString())
+        {
+            // Path B: I am an Admin but not a participant yet. 
+            // If NO admin has joined this chat yet, show it as 1 unread (The Queue Alert).
+            bool hasAnyAdminJoined = c.Participants.Any(p => p.Participant_Role == UserRole.Admin.ToDbString());
+            if (!hasAnyAdminJoined) displayUnread = 1; 
+        }
+
+        // ... mapping participants ...
         var participants = new List<ChatParticipantDto>();
         foreach (var p in c.Participants)
         {
             var userDto = await MapUserToDto(p.User);
-            participants.Add(new ChatParticipantDto(
-                userDto.Id, 
-                userDto.Name, 
-                userDto.Role, 
-                userDto.AvatarUrl, 
-                userDto.Rating));
+            participants.Add(new ChatParticipantDto(userDto.Id, userDto.Name, userDto.Role, userDto.AvatarUrl, userDto.Rating));
         }
 
         Enum.TryParse<ConversationType>(c.Type.Replace("_", ""), true, out var typeEnum);
@@ -197,11 +224,11 @@ public class SupportMessageService(ServiceDependencies deps) : BaseService(deps)
         return new ConversationDto(
             c.Id, 
             typeEnum, 
-            c.Related_Job_Id,
-            relatedJobTitle,
+            Guid.Empty,
+            null,
             c.Created_At_Utc, 
             c.Last_Message_At_Utc,
-            displayUnread,
+            displayUnread, 
             lastMsg != null ? MapMessageToDto(lastMsg) : null,
             participants
         );
