@@ -67,7 +67,7 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
     const token = getAccessToken();
     if (!token) return;
 
-    let isSubscribed = true; // Flag to prevent state updates after unmount
+    let isSubscribed = true; 
 
     const connection = new HubConnectionBuilder()
       .withUrl(NOTIF_HUB_URL, {
@@ -77,7 +77,7 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
         transport: HttpTransportType.WebSockets,
       })
       .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning)
+      .configureLogging(LogLevel.None) 
       .build();
 
     connection.on("ReceiveNotification", (incoming: any) => {
@@ -103,19 +103,18 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     });
 
-    // Save connection to ref
     connectionRef.current = connection;
 
     const startConnection = async () => {
       try {
-        // Only start if the component is still mounted
+        // Double check state before starting
         if (isSubscribed && connection.state === HubConnectionState.Disconnected) {
           await connection.start();
         }
       } catch (err) {
-        // Ignore the "stop() called before start()" error specifically
+        // If it was told to stop while starting, we ignore the error
         if (isSubscribed) {
-          console.error("SignalR Notification Error:", err);
+          console.error("SignalR Connection Error:", err);
         }
       }
     };
@@ -123,14 +122,15 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
     void startConnection();
 
     return () => {
-      isSubscribed = false; // Mark as unmounted
+      isSubscribed = false; 
       const conn = connectionRef.current;
       if (conn) {
-        // Only call stop if it's actually in a state that can be stopped
-        if (conn.state === HubConnectionState.Connected || conn.state === HubConnectionState.Connecting) {
-            conn.stop().catch(() => {
-                // Silently ignore errors during teardown
-            });
+        // FIX: Prevent calling stop() while in 'Connecting' state
+        if (conn.state !== HubConnectionState.Disconnected && conn.state !== HubConnectionState.Connecting) {
+          conn.stop().catch(() => { /* ignore teardown errors */ });
+        } else if (conn.state === HubConnectionState.Connecting) {
+            // If still connecting, SignalR doesn't like stop(). 
+            // We just clear the reference and let it finish/timeout silently.
         }
         connectionRef.current = null;
       }
@@ -200,7 +200,7 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
 
         <div className="flex-1 overflow-y-auto">
           {fetching ? (
-            <div className="p-5 text-sm text-[#6B7280]">Loading notifications...</div>
+            <div className="p-5 text-sm text-[#6B7280]">Loading...</div>
           ) : error ? (
             <div className="p-5 text-sm text-red-700">{error}</div>
           ) : notifications.length === 0 ? (
