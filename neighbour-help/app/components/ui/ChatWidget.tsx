@@ -81,6 +81,7 @@ export default function ChatWidget() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [selectedImagePreviewUrl, setSelectedImagePreviewUrl] = useState<string | null>(null);
   const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [creatingConversation, setCreatingConversation] = useState(false);
 
   const connectionRef = useRef<HubConnection | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
