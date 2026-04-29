@@ -52,3 +52,35 @@ ${docker_compose_content}
 COMPOSE
 
 docker compose -f /opt/docker-compose.yml up -d
+
+# --- 6. Pull and run Frontend application ---
+echo "Fetching credentials from SSM..."
+GH_PAT=$(aws ssm get-parameter --name /app/github_pat --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
+GH_USER=$(aws ssm get-parameter --name /app/github_username --query Parameter.Value --output text --region ap-southeast-5)
+
+echo "Logging into GHCR..."
+echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin
+
+FRONTEND_IMAGE="ghcr.io/$GH_USER/project-frontend:latest"
+
+echo "Pulling frontend image..."
+docker pull $FRONTEND_IMAGE
+
+echo "Starting Frontend..."
+API_URL=$(aws ssm get-parameter --name /app/backend/api_url --query Parameter.Value --output text --region ap-southeast-5)
+
+cat > /opt/docker-frontend.yml << EOF
+services:
+  frontend:
+    image: $FRONTEND_IMAGE
+    container_name: frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=$API_URL
+      - NODE_ENV=production
+      - PORT=3000
+EOF
+
+docker compose -f /opt/docker-frontend.yml up -d

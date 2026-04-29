@@ -54,8 +54,31 @@ variable "caddy_elastic_ip" {
   sensitive   = true
 }
 
+variable "github_pat" {
+  description = "GitHub Personal Access Token for pulling GHCR images"
+  type        = string
+  sensitive   = true
+}
+
+variable "github_username" {
+  description = "GitHub Username or Organization for GHCR"
+  type        = string
+}
+
 provider "aws" {
   region = var.aws_region
+}
+
+resource "aws_ssm_parameter" "github_pat" {
+  name  = "/app/github_pat"
+  type  = "SecureString"
+  value = var.github_pat
+}
+
+resource "aws_ssm_parameter" "github_username" {
+  name  = "/app/github_username"
+  type  = "String"
+  value = var.github_username
 }
 
 # --- Dynamic Data Sources ---
@@ -99,14 +122,29 @@ resource "aws_subnet" "public_dmz" {
   cidr_block              = "10.0.1.0/24"
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
-  tags                    = { Name = "App-Public-DMZ" }
+  tags                    = { Name = "App-Public-DMZ-1" }
+}
+
+resource "aws_subnet" "public_dmz_2" {
+  vpc_id                  = aws_vpc.app_vpc.id
+  cidr_block              = "10.0.4.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[1]
+  map_public_ip_on_launch = true
+  tags                    = { Name = "App-Public-DMZ-2" }
 }
 
 resource "aws_subnet" "private_app" {
   vpc_id            = aws_vpc.app_vpc.id
   cidr_block        = "10.0.2.0/24"
   availability_zone = data.aws_availability_zones.available.names[0]
-  tags              = { Name = "App-Private-Tier" }
+  tags              = { Name = "App-Private-Tier-1" }
+}
+
+resource "aws_subnet" "private_app_2" {
+  vpc_id            = aws_vpc.app_vpc.id
+  cidr_block        = "10.0.5.0/24"
+  availability_zone = data.aws_availability_zones.available.names[1]
+  tags              = { Name = "App-Private-Tier-2" }
 }
 
 resource "aws_subnet" "private_data" {
@@ -127,6 +165,11 @@ resource "aws_route_table" "public_rt" {
 
 resource "aws_route_table_association" "public_assoc" {
   subnet_id      = aws_subnet.public_dmz.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "public_assoc_2" {
+  subnet_id      = aws_subnet.public_dmz_2.id
   route_table_id = aws_route_table.public_rt.id
 }
 
@@ -155,6 +198,11 @@ resource "aws_route" "private_nat_route" {
 
 resource "aws_route_table_association" "private_app_assoc" {
   subnet_id      = aws_subnet.private_app.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
+resource "aws_route_table_association" "private_app_assoc_2" {
+  subnet_id      = aws_subnet.private_app_2.id
   route_table_id = aws_route_table.private_rt.id
 }
 
@@ -220,6 +268,22 @@ resource "aws_security_group" "app_sg" {
     to_port         = 65535
     protocol        = "tcp"
     security_groups = [aws_security_group.public_sg.id]
+  }
+
+  ingress {
+    description = "Allow HTTP 3000 from Internal ALB"
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    self        = true # The ALB will use the same SG or we can allow self
+  }
+
+  ingress {
+    description = "Allow HTTP 5073 from Internal ALB"
+    from_port   = 5073
+    to_port     = 5073
+    protocol    = "tcp"
+    self        = true
   }
 
   ingress {
@@ -408,50 +472,184 @@ resource "aws_instance" "caddy_nat_instance" {
   user_data = templatefile("${path.module}/scripts/caddy_nat_instance.sh", {
     docker_compose_content                      = file("${path.module}/compose/caddy_nat_instance.yml")
     aws_vpc_app_vpc_cidr_block                  = aws_vpc.app_vpc.cidr_block
-    aws_instance_app_instance_private_ip        = aws_instance.app_instance.private_ip
     aws_instance_monitoring_instance_private_ip = aws_instance.monitoring_instance.private_ip
-    aws_instance_frontend_instance_private_ip   = aws_instance.frontend_instance.private_ip
+    internal_alb_dns                            = aws_lb.app_alb.dns_name
   })
 
   tags = { Name = "App-Caddy-NAT" }
 }
 
-# --- Compute: App Tier (Private Subnet) ---
-resource "aws_instance" "app_instance" {
-  ami                  = data.aws_ami.ubuntu_2404.id
-  instance_type        = "t3.medium"
-  subnet_id            = aws_subnet.private_app.id
-  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
-  key_name             = var.key_name
+# --- ALB & Auto Scaling Groups ---
+resource "aws_lb" "app_alb" {
+  name               = "app-internal-alb"
+  internal           = true
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.app_sg.id]
+  subnets            = [aws_subnet.private_app.id, aws_subnet.private_app_2.id]
 
-  vpc_security_group_ids      = [aws_security_group.app_sg.id]
-  user_data_replace_on_change = true
-  user_data = templatefile("${path.module}/scripts/app_instance.sh", {
-    docker_compose_content = file("${path.module}/compose/app_instance.yml")
-    var_instance_password  = var.instance_password
-  })
-
-
-  tags = { Name = "App-Backend-Tier" }
+  tags = { Name = "App-Internal-ALB" }
 }
 
-# --- Compute: Frontend Tier (Private Subnet) ---
-resource "aws_instance" "frontend_instance" {
-  ami                  = data.aws_ami.ubuntu_2404.id
-  instance_type        = "t3.micro"
-  subnet_id            = aws_subnet.private_app.id
-  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
-  key_name             = var.key_name
+# Frontend Target Group and Listener
+resource "aws_lb_target_group" "frontend_tg" {
+  name     = "frontend-tg"
+  port     = 3000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.app_vpc.id
 
-  vpc_security_group_ids      = [aws_security_group.app_sg.id]
-  user_data_replace_on_change = true
-  user_data = templatefile("${path.module}/scripts/frontend_instance.sh", {
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    matcher             = "200-399"
+  }
+}
+
+resource "aws_lb_listener" "frontend_listener" {
+  load_balancer_arn = aws_lb.app_alb.arn
+  port              = "3000"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend_tg.arn
+  }
+}
+
+# Backend Target Group and Listener
+resource "aws_lb_target_group" "backend_tg" {
+  name     = "backend-tg"
+  port     = 5073
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.app_vpc.id
+
+  health_check {
+    path                = "/api/health" # Or another valid health check endpoint if this fails
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+    matcher             = "200-499" # Give some leniency in case of 401s on root API
+  }
+}
+
+resource "aws_lb_listener" "backend_listener" {
+  load_balancer_arn = aws_lb.app_alb.arn
+  port              = "5073"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend_tg.arn
+  }
+}
+
+# Frontend Launch Template & ASG
+resource "aws_launch_template" "frontend_lt" {
+  name_prefix   = "frontend-lt"
+  image_id      = data.aws_ami.ubuntu_2404.id
+  instance_type = "t3.micro"
+  key_name      = var.key_name
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_ssm_profile.name
+  }
+
+  vpc_security_group_ids = [aws_security_group.app_sg.id]
+
+  user_data = base64encode(templatefile("${path.module}/scripts/frontend_instance.sh", {
     docker_compose_content = file("${path.module}/compose/frontend_instance.yml")
     var_instance_password  = var.instance_password
-  })
+  }))
 
+  tag_specifications {
+    resource_type = "instance"
+    tags          = { Name = "App-Frontend-Tier" }
+  }
+}
 
-  tags = { Name = "App-Frontend-Tier" }
+resource "aws_autoscaling_group" "frontend_asg" {
+  name                      = "frontend-asg"
+  max_size                  = 3
+  min_size                  = 1
+  desired_capacity          = 1
+  vpc_zone_identifier       = [aws_subnet.private_app.id, aws_subnet.private_app_2.id]
+  target_group_arns         = [aws_lb_target_group.frontend_tg.arn]
+  health_check_type         = "ELB"
+  health_check_grace_period = 300
+
+  launch_template {
+    id      = aws_launch_template.frontend_lt.id
+    version = "$Latest"
+  }
+}
+
+resource "aws_autoscaling_policy" "frontend_scaling" {
+  name                   = "frontend-cpu-scaling"
+  autoscaling_group_name = aws_autoscaling_group.frontend_asg.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = 60.0
+  }
+}
+
+# Backend Launch Template & ASG
+resource "aws_launch_template" "backend_lt" {
+  name_prefix   = "backend-lt"
+  image_id      = data.aws_ami.ubuntu_2404.id
+  instance_type = "t3.medium"
+  key_name      = var.key_name
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_ssm_profile.name
+  }
+
+  vpc_security_group_ids = [aws_security_group.app_sg.id]
+
+  user_data = base64encode(templatefile("${path.module}/scripts/app_instance.sh", {
+    docker_compose_content = file("${path.module}/compose/app_instance.yml")
+    var_instance_password  = var.instance_password
+  }))
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = { Name = "App-Backend-Tier" }
+  }
+}
+
+resource "aws_autoscaling_group" "backend_asg" {
+  name                      = "backend-asg"
+  max_size                  = 3
+  min_size                  = 1
+  desired_capacity          = 1
+  vpc_zone_identifier       = [aws_subnet.private_app.id, aws_subnet.private_app_2.id]
+  target_group_arns         = [aws_lb_target_group.backend_tg.arn]
+  health_check_type         = "ELB"
+  health_check_grace_period = 300
+
+  launch_template {
+    id      = aws_launch_template.backend_lt.id
+    version = "$Latest"
+  }
+}
+
+resource "aws_autoscaling_policy" "backend_scaling" {
+  name                   = "backend-cpu-scaling"
+  autoscaling_group_name = aws_autoscaling_group.backend_asg.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = 60.0
+  }
 }
 
 # --- Compute: Monitoring Tier (Private Subnet) ---
@@ -494,7 +692,7 @@ resource "aws_instance" "redis_instance" {
 
 resource "aws_db_subnet_group" "rds_subnet_group" {
   name       = "app-db-subnet-group"
-  subnet_ids = [aws_subnet.private_app.id, aws_subnet.private_data.id]
+  subnet_ids = [aws_subnet.private_app.id, aws_subnet.private_app_2.id, aws_subnet.private_data.id]
 }
 
 resource "aws_db_instance" "postgres" {
@@ -548,11 +746,16 @@ resource "aws_ssm_parameter" "s3_bucket_name" {
 }
 
 # --- Secrets & Configuration Store ---
+resource "aws_ssm_parameter" "api_url" {
+  name      = "/app/backend/api_url"
+  type      = "String"
+  value     = "http://${aws_lb.app_alb.dns_name}:5073"
+  overwrite = true
+}
 resource "aws_ssm_parameter" "db_connection_string" {
-  name = "/app/ConnectionStrings/DefaultConnection"
-  type = "String"
-  value = format("Host=%s;Port=5432;Database=neighbourhelp_postgres;Username=%s;Password=%s;",
-  aws_db_instance.postgres.address, var.db_username, var.db_password)
+  name  = "/app/ConnectionStrings/DefaultConnection"
+  type  = "String"
+  value = format("Host=%s;Port=5432;Database=neighbourhelp_postgres;Username=%s;Password=%s;", aws_db_instance.postgres.address, var.db_username, var.db_password)
 }
 
 resource "aws_ssm_parameter" "db_host" {

@@ -29,7 +29,7 @@ cat > /etc/caddy/Caddyfile << 'CADDYFILE'
 neighbourhelp.me {
     handle_path /api/proxy/* {
         rewrite * /api{path}
-        reverse_proxy ${aws_instance_app_instance_private_ip}:5073
+        reverse_proxy ${internal_alb_dns}:5073
     }
     handle /grafana/* {
         reverse_proxy ${aws_instance_monitoring_instance_private_ip}:3000
@@ -38,7 +38,7 @@ neighbourhelp.me {
         reverse_proxy ${aws_instance_monitoring_instance_private_ip}:9090
     }
     handle {
-        reverse_proxy ${aws_instance_frontend_instance_private_ip}:3000
+        reverse_proxy ${internal_alb_dns}:3000
     }
 }
 CADDYFILE

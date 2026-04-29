@@ -52,3 +52,54 @@ ${docker_compose_content}
 COMPOSE
 
 docker compose -f /opt/docker-compose.yml up -d
+
+# --- 6. Pull and run Backend application ---
+echo "Fetching credentials from SSM..."
+GH_PAT=$(aws ssm get-parameter --name /app/github_pat --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
+GH_USER=$(aws ssm get-parameter --name /app/github_username --query Parameter.Value --output text --region ap-southeast-5)
+DB_HOST=$(aws ssm get-parameter --name /app/db/host --query Parameter.Value --output text --region ap-southeast-5)
+DB_USER=$(aws ssm get-parameter --name /app/db/username --query Parameter.Value --output text --region ap-southeast-5)
+DB_PASS=$(aws ssm get-parameter --name /app/db_password --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
+DB_CONNECTION_STRING=$(aws ssm get-parameter --name /app/ConnectionStrings/DefaultConnection --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
+REDIS_HOST=$(aws ssm get-parameter --name /app/redis_host --query Parameter.Value --output text --region ap-southeast-5)
+S3_BUCKET=$(aws ssm get-parameter --name /app/backend/s3_uploads_bucket --query Parameter.Value --output text --region ap-southeast-5)
+
+echo "Logging into GHCR..."
+echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin
+
+BACKEND_IMAGE="ghcr.io/$GH_USER/project-backend:latest"
+MIGRATION_IMAGE="ghcr.io/$GH_USER/project-migration:latest"
+
+echo "Pulling images..."
+docker pull $BACKEND_IMAGE
+docker pull $MIGRATION_IMAGE
+
+echo "Running migrations..."
+docker run --rm --name migration -e PGHOST=$DB_HOST -e PGUSER=$DB_USER -e PGPASSWORD=$DB_PASS -e PGDATABASE=neighbourhelp_postgres $MIGRATION_IMAGE
+if [ $? -ne 0 ]; then echo "Migration failed!"; fi
+
+echo "Starting Backend..."
+cat > /opt/docker-backend.yml << EOF
+services:
+  backend:
+    image: $BACKEND_IMAGE
+    container_name: backend
+    restart: always
+    ports:
+      - "5073:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=$DB_CONNECTION_STRING
+      - Redis__ConnectionString=$REDIS_HOST:6379
+      - AllowedOrigins=https://neighbourhelp.me,http://neighbourhelp.me
+      - Jwt__Key=Your_Super_Secret_Fallback_Key_32_Chars_Long!
+      - Jwt__Issuer=NeighborHelpApi
+      - Jwt__Audience=NeighborHelpFrontend
+      - Storage__Provider=S3
+      - Storage__S3__BucketName=$S3_BUCKET
+      - Storage__S3__Region=ap-southeast-5
+      - Storage__S3__AutoCreateBucket=true
+      - Storage__S3__MaxFileSizeMb=10
+EOF
+
+docker compose -f /opt/docker-backend.yml up -d
