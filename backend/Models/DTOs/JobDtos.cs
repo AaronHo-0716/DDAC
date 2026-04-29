@@ -17,7 +17,10 @@ public record JobDto(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     int BidCount,
-    List<string>? ImageUrls
+    List<string>? ImageUrls,
+    string PaymentStatus = "unpaid",
+    DateTime? PaidAtUtc = null,
+    Guid? PaidBidId = null
 );
 
 public record CreateJobRequest(

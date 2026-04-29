@@ -43,7 +43,20 @@ function SectionCard({
                 <p className="text-sm font-semibold text-[#111827]">{job.title}</p>
                 <p className="text-xs text-[#6B7280] mt-0.5">{job.location} • {job.category}</p>
               </div>
-              <StatusBadge status={job.status} />
+              <div className="flex items-center gap-2">
+                {job.status === "completed" && (
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                      job.paymentStatus === "paid"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {job.paymentStatus === "paid" ? "Paid" : "Payment pending"}
+                  </span>
+                )}
+                <StatusBadge status={job.status} />
+              </div>
             </div>
 
             <p className="text-sm text-[#6B7280] mt-3 line-clamp-2">{job.description}</p>

@@ -47,6 +47,9 @@ interface RawJobDto {
   createdAt?: string | null;
   updatedAt?: string | null;
   bidCount?: number | null;
+  paymentStatus?: string | null;
+  paidAtUtc?: string | null;
+  paidBidId?: string | null;
 }
 
 interface RawJobListResponse {
@@ -86,6 +89,11 @@ function toJobStatus(value?: string | null): JobStatus {
   return "open";
 }
 
+function toPaymentStatus(value?: string | null): "unpaid" | "paid" {
+  const normalized = (value ?? "unpaid").toLowerCase();
+  return normalized === "paid" ? "paid" : "unpaid";
+}
+
 function normalizeUser(user?: RawUserDto | null): User {
   return {
     id: user?.id ?? "",
@@ -116,6 +124,9 @@ function normalizeJob(job: RawJobDto): Job {
     createdAt: job.createdAt ?? new Date(0).toISOString(),
     updatedAt: job.updatedAt ?? job.createdAt ?? new Date(0).toISOString(),
     bidCount: typeof job.bidCount === "number" ? job.bidCount : 0,
+    paymentStatus: toPaymentStatus(job.paymentStatus),
+    paidAtUtc: job.paidAtUtc ?? undefined,
+    paidBidId: job.paidBidId ?? undefined,
   };
 }
 

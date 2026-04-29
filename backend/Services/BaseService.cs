@@ -223,6 +223,32 @@ public abstract class BaseService
         var bidCount = isAdmin
             ? await Context.Bids.CountAsync(b => b.Job_Id == job.Id)
             : await Context.Bids.CountAsync(b => b.Job_Id == job.Id && !b.Locked);
+        var acceptedBid = await Context.Bids
+            .AsNoTracking()
+            .Where(b => b.Job_Id == job.Id && b.Status == BidStatus.Accepted.ToDbString())
+            .OrderByDescending(b => b.Updated_At_Utc)
+            .FirstOrDefaultAsync();
+
+        var paymentStatus = "unpaid";
+        DateTime? paidAtUtc = null;
+        Guid? paidBidId = null;
+
+        if (acceptedBid is not null)
+        {
+            var latestPaidAt = await Context.Bid_Transactions
+                .AsNoTracking()
+                .Where(tx => tx.Bid_Id == acceptedBid.Id && tx.Event_Type == BidEventType.PaymentPaid.ToDbString())
+                .OrderByDescending(tx => tx.Created_At_Utc)
+                .Select(tx => (DateTime?)tx.Created_At_Utc)
+                .FirstOrDefaultAsync();
+
+            if (latestPaidAt.HasValue)
+            {
+                paymentStatus = "paid";
+                paidAtUtc = latestPaidAt.Value;
+                paidBidId = acceptedBid.Id;
+            }
+        }
 
         if (!Enum.TryParse<UserRole>(job.Posted_By_User?.Role, true, out var roleEnum))
             roleEnum = UserRole.Homeowner;
@@ -242,7 +268,10 @@ public abstract class BaseService
             CreatedAt: job.Created_At_Utc,
             UpdatedAt: job.Updated_At_Utc,
             BidCount: bidCount,
-            ImageUrls: job.Job_Images.OrderBy(img => img.Sort_Order).Select(img => GetPresignedUrl(img.Object_Key)).ToList()
+            ImageUrls: job.Job_Images.OrderBy(img => img.Sort_Order).Select(img => GetPresignedUrl(img.Object_Key)).ToList(),
+            PaymentStatus: paymentStatus,
+            PaidAtUtc: paidAtUtc,
+            PaidBidId: paidBidId
         );
     }
 

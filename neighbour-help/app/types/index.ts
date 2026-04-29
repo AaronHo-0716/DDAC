@@ -121,6 +121,7 @@ export type JobCategory =
   | "General Maintenance";
 
 export type JobStatus = "open" | "in-progress" | "completed";
+export type PaymentStatus = "unpaid" | "paid";
 
 export interface Job {
   id: string;
@@ -138,6 +139,9 @@ export interface Job {
   createdAt: string;
   updatedAt: string;
   bidCount: number;
+  paymentStatus?: PaymentStatus;
+  paidAtUtc?: string;
+  paidBidId?: string;
 }
 
 export interface CreateJobRequest {

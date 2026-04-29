@@ -182,6 +182,9 @@ interface RawJobDto {
   createdAt?: string | null;
   updatedAt?: string | null;
   bidCount?: number | null;
+  paymentStatus?: string | null;
+  paidAtUtc?: string | null;
+  paidBidId?: string | null;
 }
 
 interface RawJobListResponse {
@@ -262,6 +265,11 @@ function toJobStatus(value?: string | null): Job["status"] {
   return "open";
 }
 
+function toPaymentStatus(value?: string | null): "unpaid" | "paid" {
+  const normalized = (value ?? "unpaid").toLowerCase();
+  return normalized === "paid" ? "paid" : "unpaid";
+}
+
 function toBackendJobStatus(value?: string): string | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase().replace("_", "-");
@@ -335,6 +343,9 @@ function normalizeJob(row: RawJobDto): Job {
     createdAt: row.createdAt ?? new Date(0).toISOString(),
     updatedAt: row.updatedAt ?? row.createdAt ?? new Date(0).toISOString(),
     bidCount: typeof row.bidCount === "number" ? row.bidCount : 0,
+    paymentStatus: toPaymentStatus(row.paymentStatus),
+    paidAtUtc: row.paidAtUtc ?? undefined,
+    paidBidId: row.paidBidId ?? undefined,
   };
 }
 

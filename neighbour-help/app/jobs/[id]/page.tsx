@@ -2,12 +2,13 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Calendar, DollarSign, MapPin, Pencil, Save, Star, Trash2, X } from "lucide-react";
 import type { Bid, Job, JobCategory } from "@/app/types";
 import { jobsService } from "@/app/lib/api/jobs";
 import { bidsService } from "@/app/lib/api/bids";
 import { ratingsService } from "@/app/lib/api/ratings";
+import { paymentsService } from "@/app/lib/api/payments";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import StatusBadge from "@/app/components/ui/StatusBadge";
@@ -46,6 +47,7 @@ function toEditForm(job: Job): EditForm {
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, refreshUser } = useAuth();
   const { openForBidChat } = useChatWidget();
 
@@ -65,7 +67,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [bidStatusFilter, setBidStatusFilter] = useState<"all" | Bid["status"]>("all");
   const [showBidModal, setShowBidModal] = useState(false);
   const [completingJob, setCompletingJob] = useState(false);
-  const [showPayImage, setShowPayImage] = useState(false);
+  const [showPaymentMock, setShowPaymentMock] = useState(false);
+  const [creatingCheckout, setCreatingCheckout] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
+  const [processedPaymentResult, setProcessedPaymentResult] = useState<string | null>(null);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [showRatingForm, setShowRatingForm] = useState(false);
   const [ratingScore, setRatingScore] = useState(5);
   const [ratingComment, setRatingComment] = useState("");
@@ -183,8 +190,55 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   );
 
   const canCompleteJob = !!job && isOwner && job.status === "in-progress" && !!acceptedBid;
-  const canPayForCompletedJob = !!job && isOwner && job.status === "completed";
+  const isPaymentPaid = job?.paymentStatus === "paid";
+  const isPaymentPending = paymentProcessing && !isPaymentPaid;
+  const canPayForCompletedJob = !!job && isOwner && job.status === "completed" && !isPaymentPaid && !isPaymentPending;
   const canRateHandyman = !!job && isOwner && job.status === "completed" && !!acceptedBid;
+
+  useEffect(() => {
+    if (!job?.id) return;
+    const currentJobId = job.id;
+
+    const paymentResult = searchParams.get("payment");
+    if (!paymentResult) return;
+    const sessionId = searchParams.get("session_id") ?? "";
+    const resultKey = `${paymentResult}:${sessionId}`;
+    if (processedPaymentResult === resultKey) return;
+
+    let cancelled = false;
+    const refreshJobAfterPayment = async () => {
+      try {
+        const refreshed = await jobsService.getJobById(currentJobId);
+        if (!cancelled) {
+          setJob(refreshed);
+          setPaymentError(null);
+          setProcessedPaymentResult(resultKey);
+          if (paymentResult === "success") {
+            setPaymentMessage("Payment successful. Transaction has been marked as paid.");
+            if (refreshed.paymentStatus === "paid") {
+              setPaymentProcessing(false);
+            }
+          } else if (paymentResult === "cancel") {
+            setPaymentMessage("Payment was cancelled. You can try again anytime.");
+            setPaymentProcessing(false);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPaymentError(err instanceof Error ? err.message : "Unable to refresh payment status.");
+        }
+      }
+    };
+
+    if (paymentResult === "success") {
+      setPaymentProcessing(true);
+    }
+
+    void refreshJobAfterPayment();
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.id, processedPaymentResult, searchParams]);
 
   useEffect(() => {
     if (!canRateHandyman || !acceptedBid || !user) {
@@ -307,11 +361,26 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     try {
       const updated = await jobsService.completeJob(job.id);
       setJob(updated);
-      setShowPayImage(false);
+      setShowPaymentMock(false);
+      setPaymentError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to complete job.");
     } finally {
       setCompletingJob(false);
+    }
+  };
+
+  const handleStartCheckout = async () => {
+    if (!job || !canPayForCompletedJob) return;
+
+    setCreatingCheckout(true);
+    setPaymentError(null);
+    try {
+      const response = await paymentsService.createCheckoutSession(job.id);
+      window.location.href = response.checkoutUrl;
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "Unable to start checkout.");
+      setCreatingCheckout(false);
     }
   };
 
@@ -438,6 +507,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
         )}
 
+        {paymentError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {paymentError}
+          </div>
+        )}
+
+        {paymentMessage && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {paymentMessage}
+          </div>
+        )}
+
         {showUnverifiedBidWarning && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <div className="flex items-start gap-2">
@@ -512,6 +593,24 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 <span className="inline-flex items-center gap-1.5">
                   <DollarSign className="w-4 h-4" /> Budget: RM {job.budget ?? "-"}
                 </span>
+                <span className="inline-flex items-center gap-1.5">
+                  Payment:{" "}
+                  <span
+                    className={`font-semibold ${job.paymentStatus === "paid" || isPaymentPending ? "text-emerald-700" : "text-amber-700"}`}
+                  >
+                      {job.paymentStatus === "paid" ? "Paid" : isPaymentPending ? "Paid (processing)" : "Unpaid"}
+                  </span>
+                </span>
+                {job.paymentStatus === "paid" && job.paidAtUtc && (
+                  <span className="inline-flex items-center gap-1.5">
+                    Paid on{" "}
+                    {new Date(job.paidAtUtc).toLocaleDateString("en-MY", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                )}
               </div>
 
               <p className="text-sm text-[#374151] leading-relaxed whitespace-pre-wrap">{job.description}</p>
@@ -548,23 +647,35 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 </div>
               )}
 
-              {isOwner && (canCompleteJob || canPayForCompletedJob || canRateHandyman) && (
+              {isOwner && (canCompleteJob || canPayForCompletedJob || canRateHandyman || isPaymentPaid || isPaymentPending) && (
                 <div className="mt-6 flex justify-end gap-2">
                   {canCompleteJob && (
                     <PrimaryButton size="sm" onClick={handleCompleteJob} disabled={completingJob}>
                       {completingJob ? "Completing..." : "Complete Job"}
                     </PrimaryButton>
                   )}
+                  {(isPaymentPaid || isPaymentPending) && (
+                    <span
+                      className={`inline-flex items-center rounded-lg border px-3 py-2 text-xs font-semibold ${
+                        isPaymentPaid ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {isPaymentPaid ? "Paid" : "Payment processing"}
+                    </span>
+                  )}
                   {canPayForCompletedJob && (
                     <PrimaryButton
                       size="sm"
                       variant="secondary"
-                      onClick={() => setShowPayImage((prev) => !prev)}
+                      onClick={() => {
+                        setShowPaymentMock((prev) => !prev);
+                        setPaymentError(null);
+                      }}
                     >
                       Pay
                     </PrimaryButton>
                   )}
-                  {canRateHandyman && (
+                {canRateHandyman && (
                     <PrimaryButton
                       size="sm"
                       variant="outline"
@@ -579,14 +690,35 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 </div>
               )}
 
-              {isOwner && canPayForCompletedJob && showPayImage && (
+              {isOwner && canPayForCompletedJob && showPaymentMock && (
                 <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
-                  <p className="text-sm font-semibold text-[#111827] mb-2">Payment Preview</p>
-                  <img
-                    src="/qr.jpeg"
-                    alt="Payment preview"
-                    className="h-52 w-full max-w-sm rounded-lg border border-[#E5E7EB] bg-white object-contain"
-                  />
+                  <p className="text-sm font-semibold text-[#111827] mb-2">Stripe Test Payment</p>
+                  <p className="text-sm text-[#4B5563] mb-3">
+                    Use Stripe test card details on the checkout page:
+                  </p>
+                  <div className="rounded-lg border border-[#D1D5DB] bg-white p-3 mb-3 text-sm text-[#111827]">
+                    <p><strong>Card:</strong> 4242 4242 4242 4242</p>
+                    <p><strong>Expiry:</strong> Any future date (e.g. 12/34)</p>
+                    <p><strong>CVC:</strong> Any 3 digits (e.g. 123)</p>
+                    <p><strong>ZIP:</strong> Any 5 digits (e.g. 12345)</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <PrimaryButton
+                      size="sm"
+                      onClick={handleStartCheckout}
+                      disabled={creatingCheckout}
+                    >
+                      {creatingCheckout ? "Redirecting..." : "Proceed to Stripe Test Checkout"}
+                    </PrimaryButton>
+                    <PrimaryButton
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setShowPaymentMock(false)}
+                      disabled={creatingCheckout}
+                    >
+                      Close
+                    </PrimaryButton>
+                  </div>
                 </div>
               )}
 

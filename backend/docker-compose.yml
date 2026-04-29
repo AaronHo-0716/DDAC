@@ -18,6 +18,8 @@ services:
     container_name: neighbourhelp-api
     ports:
       - "5073:8080"
+    env_file:
+      - .env.local
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       # Use 'db' as the host to connect to the container above

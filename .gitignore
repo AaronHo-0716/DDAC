@@ -3,3 +3,5 @@
 deployment/.terraform.lock.hcl
 backend/Program.cs.bak
 *.sln
+.codex
+/backend/.env.local

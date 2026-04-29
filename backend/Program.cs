@@ -126,6 +126,7 @@ builder.Services.AddRateLimiter(options =>
 
 // S3 Storage Setup
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection(StripeOptions.SectionName));
 builder.Services.AddSingleton<IAmazonS3>(serviceProvider =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
@@ -170,6 +171,7 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<ISupportMessageService, SupportMessageService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
 
 // Swagger
 builder.Services.AddSwaggerGen(options =>

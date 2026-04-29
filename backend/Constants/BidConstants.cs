@@ -12,7 +12,9 @@ public enum BidEventType
     LockRemoved,
     FlagAdded,
     FlagRemoved,
-    ForceRejected
+    ForceRejected,
+    PaymentInitiated,
+    PaymentPaid
 }
 
 public enum BidModerationAction
@@ -33,6 +35,8 @@ public static class BidConstants
         BidEventType.FlagAdded => "flag_added",
         BidEventType.FlagRemoved => "flag_removed",
         BidEventType.ForceRejected => "force_rejected",
+        BidEventType.PaymentInitiated => "payment_initiated",
+        BidEventType.PaymentPaid => "payment_paid",
         _ => type.ToString().ToLower()
     };
 
