@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Mail, Shield, Star, Upload, X } from "lucide-react";
+import Link from "next/link";
 import PrimaryButton from "@/app/components/ui/PrimaryButton";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
 import { useAuth } from "@/app/lib/context/AuthContext";
@@ -49,6 +50,9 @@ export default function ProfilePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -124,6 +128,36 @@ export default function ProfilePage() {
       setMessage("Profile picture updated successfully.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update profile picture.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const passwordMismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+
+  const updatePassword = async () => {
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+
+    if (passwordMismatch) {
+      setError("New password and confirmation do not match.");
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      await authService.changePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Password changed successfully.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to change password.");
     } finally {
       setSubmitting(false);
     }
@@ -262,6 +296,70 @@ export default function ProfilePage() {
                 </PrimaryButton>
               </div>
             </form>
+          </section>
+        </div>
+        <div className="mt-6">
+          <section className="bg-white border border-[#E5E7EB] rounded-2xl p-6 max-w-4xl mx-auto">
+            <h2 className="text-lg font-semibold text-[#111827] mb-4">Account security</h2>
+
+            <p className="text-sm text-[#6B7280] mb-4">Change your account password. This operation uses the backend password change endpoint when available.</p>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                  placeholder="Current password"
+                />
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                  placeholder="New password"
+                />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                  placeholder="Confirm new password"
+                />
+              </div>
+
+              {passwordMismatch && (
+                <p className="text-xs text-red-600 mt-2">Password confirmation does not match.</p>
+              )}
+
+              {message && (
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div>
+              )}
+
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+              )}
+
+              <div className="pt-1 flex gap-3">
+                <PrimaryButton onClick={handleSave} disabled={submitting || !hasChanges}>
+                  {submitting ? "Uploading..." : "Upload Picture"}
+                </PrimaryButton>
+                <PrimaryButton
+                  variant="secondary"
+                  onClick={updatePassword}
+                  disabled={
+                    submitting ||
+                    currentPassword.length === 0 ||
+                    newPassword.length === 0 ||
+                    confirmPassword.length === 0 ||
+                    passwordMismatch
+                  }
+                >
+                  {submitting ? "Updating..." : "Change Password"}
+                </PrimaryButton>
+              </div>
+            </div>
           </section>
         </div>
       </div>

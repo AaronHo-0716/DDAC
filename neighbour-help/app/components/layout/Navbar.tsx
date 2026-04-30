@@ -151,9 +151,6 @@ export default function Navbar() {
                       <Link href="/profile" className="block px-4 py-2.5 text-sm text-[#111827] hover:bg-[#F7F8FA] transition-colors">
                         Profile
                       </Link>
-                      <Link href="/settings" className="block px-4 py-2.5 text-sm text-[#111827] hover:bg-[#F7F8FA] transition-colors">
-                        Settings
-                      </Link>
                       {(user.role === "homeowner" || user.role === "handyman") && (
                         <Link href="/reports" className="block px-4 py-2.5 text-sm text-[#111827] hover:bg-[#F7F8FA] transition-colors">
                           My Reports
@@ -257,13 +254,6 @@ export default function Navbar() {
                 onClick={() => setMobileOpen(false)}
               >
                 Profile
-              </Link>
-              <Link
-                href="/settings"
-                className="block px-4 py-2.5 text-sm font-medium text-[#6B7280] hover:text-[#111827] hover:bg-[#F7F8FA] rounded-lg transition-colors"
-                onClick={() => setMobileOpen(false)}
-              >
-                Settings
               </Link>
               {(user.role === "homeowner" || user.role === "handyman") && (
                 <Link
