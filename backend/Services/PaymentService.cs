@@ -4,6 +4,7 @@ using backend.Constants;
 using backend.Models.Config;
 using backend.Models.DTOs;
 using backend.Models.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Stripe;
@@ -19,9 +20,6 @@ public class PaymentService(ServiceDependencies deps, IOptions<StripeOptions> st
     {
         var userId = await GetCurrentUserIdAsync();
         var userRole = GetCurrentUserRole();
-
-        if (userRole != UserRole.Homeowner.ToDbString() && userRole != UserRole.Admin.ToDbString())
-            throw new HttpRequestException("Unauthorized role for payment action.", null, HttpStatusCode.Forbidden);
 
         EnsureStripeConfiguredForCheckout();
 

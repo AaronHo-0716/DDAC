@@ -4,6 +4,8 @@ public enum UserRole { Handyman, Homeowner, Admin }
 
 public enum VerificationStatus { Pending, Approved, Rejected }
 
+public enum EmailPurpose { EmailVerification, PasswordReset }
+
 public static class AuthConstants
 {
     public const int RefreshTokenExpiryDays = 7;

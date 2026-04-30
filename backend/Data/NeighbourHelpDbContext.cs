@@ -64,6 +64,19 @@ public partial class NeighbourHelpDbContext : DbContext
                 .HasForeignKey(d => d.Blocked_By_User_Id);
 
             entity.Property(e => e.TokenVersion).HasColumnName("token_version");
+
+            // entity.Property(e => e.EmailVerificationToken)
+            //     .HasColumnName("verification_token");
+
+            entity.Property(e => e.PasswordResetToken)
+                .HasColumnName("password_reset_token");
+
+            entity.Property(e => e.ResetTokenExpiresUtc)
+                .HasColumnName("reset_token_expires_utc");
+
+            entity.Property(e => e.Email_Verified).HasColumnName("email_verified");
+            entity.Property(e => e.Email_Otp).HasColumnName("email_otp").HasMaxLength(6);
+            entity.Property(e => e.Otp_Expiry_Utc).HasColumnName("otp_expiry_utc");
         });
 
         modelBuilder.Entity<Job>(entity =>

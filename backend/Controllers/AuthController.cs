@@ -3,6 +3,7 @@ using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using backend.Models.DTOs;
 using Microsoft.AspNetCore.RateLimiting;
+using backend.Constants;
 
 namespace backend.Controllers;
 
@@ -78,6 +79,45 @@ public class AuthController(IAuthService authService) : BaseController
         }
     }
 
-    // /api/auth/password/otp/request
-    // * POST /api/auth/password/otp/verify
+    [HttpPost("otp/send")]
+    public async Task<IActionResult> SendOtp([FromBody] SendOtpRequest req)
+    {
+        try 
+        { 
+            await authService.SendOtpAsync(req.Email, EmailPurpose.EmailVerification); 
+            return Ok(new { message = "Verification code sent to your email." }); 
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req)
+    {
+        try 
+        { 
+            return Ok(await authService.ChangePasswordAsync(req)); 
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest req)
+    {
+        try 
+        { 
+            return Ok(await authService.ForgotPasswordAsync(req.Email)); 
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest req)
+    {
+        try { return Ok(await authService.ResetPasswordAsync(req)); }
+        catch (HttpRequestException ex) 
+        { 
+            return HandleError(ex); 
+        }
+    }
 }

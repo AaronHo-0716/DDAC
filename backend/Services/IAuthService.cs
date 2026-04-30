@@ -1,3 +1,4 @@
+using backend.Constants;
 using backend.Models.DTOs;
 
 namespace backend.Services;
@@ -10,4 +11,8 @@ public interface IAuthService
     Task<AuthResponse> RefreshToken(string token);
     Task Logout(LogoutRequest request);
     Task<HandymanVerificationDto> CreateHandymanVerification();
+    Task SendOtpAsync(string email, EmailPurpose purpose);
+    Task<string> ForgotPasswordAsync(string email);
+    Task<AuthResponse> ResetPasswordAsync(ResetPasswordRequest req);
+    Task<AuthResponse> ChangePasswordAsync(ChangePasswordRequest req);
 }

@@ -22,6 +22,12 @@ public partial class User
     public Guid? Blocked_By_User_Id { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime Updated_At_Utc { get; set; } = DateTime.UtcNow;
+    // public string? EmailVerificationToken { get; set; }
+    public string? PasswordResetToken { get; set; }
+    public DateTime? ResetTokenExpiresUtc { get; set; }
+    public bool Email_Verified { get; set; } = false;
+    public string? Email_Otp { get; set; }
+    public DateTime? Otp_Expiry_Utc { get; set; }
 
     public virtual ICollection<User> Inverse_Blocked_By_User { get; set; } = new List<User>();
     public virtual ICollection<Admin_Action> Admin_Actions { get; set; } = new List<Admin_Action>();

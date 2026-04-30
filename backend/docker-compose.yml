@@ -27,7 +27,7 @@ services:
       # REDIS: Use the service name 'redis' as the hostname
       - Redis__ConnectionString=redis:6379
       # CORS: Allow changing the frontend URL easily
-      - AllowedOrigins=http://localhost:3000
+      - AllowedOrigins=http://localhost:3000,http://localhost:5073
       - Jwt__Key=Your_Super_Secret_Fallback_Key_32_Chars_Long!
       - Jwt__Issuer=NeighborHelpApi
       - Jwt__Audience=NeighborHelpFrontend
@@ -41,10 +41,16 @@ services:
       - Storage__S3__SecretKey=test
       - Storage__S3__AutoCreateBucket=true
       - Storage__S3__MaxFileSizeMb=10
+      - SiteSettings__FrontendUrl=http://localhost:3000
+      - Email__Host=mailpit
+      - Email__Port=1025
+      - Email__From=noreply@neighborhelp.test
+      
     depends_on:
       - db
       - localstack
       - redis
+      - mailpit
 
   adminer:
     image: adminer
@@ -68,6 +74,13 @@ services:
     container_name: neighbourhelp-redis
     ports:
       - "6379:6379"
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: neighbourhelp-mail
+    ports:
+      - "8025:8025" # Web UI (Check emails here)
+      - "1025:1025" # SMTP Port
 
 volumes:
   postgres_data:

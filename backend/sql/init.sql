@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   token_version INT NOT NULL DEFAULT 1,
+  email_verified BOOLEAN DEFAULT FALSE,
+  -- verification_token TEXT,
+  password_reset_token TEXT,
+  reset_token_expires_utc TIMESTAMPTZ,
+  email_otp VARCHAR(6),
+  otp_expiry_utc TIMESTAMPTZ,
   CONSTRAINT uq_users_email UNIQUE (email),
   CONSTRAINT chk_users_rating_range CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))
 );

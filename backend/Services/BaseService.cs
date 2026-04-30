@@ -17,6 +17,8 @@ namespace backend.Services;
 public record ServiceDependencies(
     NeighbourHelpDbContext Context,
     ILoggerFactory LoggerFactory,
+    IEmailService Email,
+    IOptions<SiteOptions> SiteOptions,
     IHttpContextAccessor HttpContextAccessor,
     IAmazonS3 S3Client,
     IOptions<StorageOptions> StorageOptions,
@@ -28,6 +30,8 @@ public abstract class BaseService
 {
     protected readonly NeighbourHelpDbContext Context;
     protected readonly ILogger Logger;
+    protected readonly IEmailService Email;
+    protected readonly string FrontendUrl;
     protected readonly IAmazonS3 S3Client;
     protected readonly S3StorageOptions StorageOptions;
     protected readonly IHubContext<NotificationHub> NotificationHubContext;
@@ -38,6 +42,8 @@ public abstract class BaseService
     {
         Context = deps.Context;
         Logger = deps.LoggerFactory.CreateLogger(GetType()); 
+        Email = deps.Email;
+        FrontendUrl = deps.SiteOptions.Value.FrontendUrl.TrimEnd('/');
         HttpContextAccessor = deps.HttpContextAccessor;
         S3Client = deps.S3Client;
         StorageOptions = deps.StorageOptions.Value.S3;

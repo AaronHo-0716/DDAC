@@ -172,6 +172,8 @@ builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<ISupportMessageService, SupportMessageService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
 
 // Swagger
 builder.Services.AddSwaggerGen(options =>
