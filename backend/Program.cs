@@ -173,6 +173,8 @@ builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<ISupportMessageService, SupportMessageService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IHandymanBankService, HandymanBankService>();
+builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
 
 // Swagger

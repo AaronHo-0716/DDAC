@@ -44,6 +44,17 @@ function toEditForm(job: Job): EditForm {
   };
 }
 
+function roundCurrency(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function formatCurrency(value: number) {
+  return value.toLocaleString("en-MY", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -188,6 +199,23 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     () => bids.find((bid) => bid.status === "accepted") ?? null,
     [bids]
   );
+  const paymentBreakdown = useMemo(() => {
+    if (!acceptedBid) return null;
+
+    const bidAmount = roundCurrency(acceptedBid.price);
+    const sstAmount = roundCurrency(bidAmount * 0.06);
+    const homeownerPlatformFee = roundCurrency(bidAmount * 0.03);
+    const handymanPlatformFee = roundCurrency(bidAmount * 0.03);
+
+    return {
+      bidAmount,
+      sstAmount,
+      homeownerPlatformFee,
+      handymanPlatformFee,
+      homeownerTotal: roundCurrency(bidAmount + sstAmount + homeownerPlatformFee),
+      handymanCredit: roundCurrency(bidAmount - handymanPlatformFee),
+    };
+  }, [acceptedBid]);
 
   const canCompleteJob = !!job && isOwner && job.status === "in-progress" && !!acceptedBid;
   const isPaymentPaid = job?.paymentStatus === "paid";
@@ -208,13 +236,21 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     let cancelled = false;
     const refreshJobAfterPayment = async () => {
       try {
+        if (paymentResult === "success" && sessionId) {
+          await paymentsService.confirmCheckoutSession(currentJobId, sessionId);
+        }
+
         const refreshed = await jobsService.getJobById(currentJobId);
         if (!cancelled) {
           setJob(refreshed);
           setPaymentError(null);
           setProcessedPaymentResult(resultKey);
           if (paymentResult === "success") {
-            setPaymentMessage("Payment successful. Transaction has been marked as paid.");
+            setPaymentMessage(
+              refreshed.paymentStatus === "paid"
+                ? "Payment successful. Transaction has been marked as paid."
+                : "Payment successful. Waiting for Stripe confirmation."
+            );
             if (refreshed.paymentStatus === "paid") {
               setPaymentProcessing(false);
             }
@@ -226,6 +262,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       } catch (err) {
         if (!cancelled) {
           setPaymentError(err instanceof Error ? err.message : "Unable to refresh payment status.");
+          setPaymentProcessing(false);
         }
       }
     };
@@ -693,6 +730,30 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               {isOwner && canPayForCompletedJob && showPaymentMock && (
                 <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
                   <p className="text-sm font-semibold text-[#111827] mb-2">Stripe Test Payment</p>
+                  {paymentBreakdown && (
+                    <div className="mb-3 rounded-lg border border-[#D1D5DB] bg-white p-3 text-sm text-[#111827]">
+                      <div className="flex items-center justify-between gap-3 py-1">
+                        <span>Accepted bid</span>
+                        <span className="font-medium">RM {formatCurrency(paymentBreakdown.bidAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 py-1">
+                        <span>SST (6%)</span>
+                        <span className="font-medium">RM {formatCurrency(paymentBreakdown.sstAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 py-1">
+                        <span>Platform fee (3%)</span>
+                        <span className="font-medium">RM {formatCurrency(paymentBreakdown.homeownerPlatformFee)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#E5E7EB] pt-2">
+                        <span className="font-semibold">Total charged</span>
+                        <span className="font-semibold">RM {formatCurrency(paymentBreakdown.homeownerTotal)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-3 text-xs text-[#6B7280]">
+                        <span>Handyman receives after 3% fee</span>
+                        <span>RM {formatCurrency(paymentBreakdown.handymanCredit)}</span>
+                      </div>
+                    </div>
+                  )}
                   <p className="text-sm text-[#4B5563] mb-3">
                     Use Stripe test card details on the checkout page:
                   </p>

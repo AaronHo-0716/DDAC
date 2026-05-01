@@ -1,6 +1,14 @@
 import { apiClient } from "./client";
 import type { ChatMessage } from "@/app/types";
 
+interface RawChatMessage {
+  id?: string;
+  senderId?: string;
+  type?: unknown;
+  content?: string;
+  createdAtUtc?: string;
+}
+
 function normalizeMessageType(value: unknown): ChatMessage["type"] {
   if (typeof value === "number") {
     if (value === 1) return "image";
@@ -18,13 +26,13 @@ function normalizeMessageType(value: unknown): ChatMessage["type"] {
   return "text";
 }
 
-function normalizeChatMessage(data: any): ChatMessage {
+function normalizeChatMessage(data: RawChatMessage): ChatMessage {
   return {
-    id: data.id,
-    senderId: data.senderId,
+    id: data.id ?? "",
+    senderId: data.senderId ?? "",
     type: normalizeMessageType(data.type),
-    content: data.content,
-    createdAtUtc: data.createdAtUtc,
+    content: data.content ?? "",
+    createdAtUtc: data.createdAtUtc ?? new Date(0).toISOString(),
   };
 }
 
@@ -38,23 +46,47 @@ export const uploadsService = {
     await apiClient.postForm<unknown>("/uploads", formData);
   },
 
-  async uploadJobChatAttachmentImage(file: File, conversationId: string): Promise<ChatMessage> {
+  async uploadBankStatementProof(
+    file: File,
+    bankDetailsId: string,
+  ): Promise<unknown> {
+    const formData = new FormData();
+    formData.append("File", file);
+    formData.append("UploadType", "BankStatementProof");
+    formData.append("TargetId", bankDetailsId);
+
+    return apiClient.postForm<unknown>("/uploads", formData);
+  },
+
+  async uploadJobChatAttachmentImage(
+    file: File,
+    conversationId: string,
+  ): Promise<ChatMessage> {
     const formData = new FormData();
     formData.append("File", file);
     formData.append("UploadType", "JobConversationAtt");
     formData.append("TargetId", conversationId);
 
-    const response = await apiClient.postForm<any>("/uploads", formData);
+    const response = await apiClient.postForm<RawChatMessage>(
+      "/uploads",
+      formData,
+    );
     return normalizeChatMessage(response);
   },
 
-  async uploadSupportChatAttachmentImage(file: File, conversationId: string): Promise<ChatMessage> {
+  async uploadSupportChatAttachmentImage(
+    file: File,
+    conversationId: string,
+  ): Promise<ChatMessage> {
     const formData = new FormData();
     formData.append("File", file);
     formData.append("UploadType", "SupportConversationAtt");
     formData.append("TargetId", conversationId);
 
-    const response = await apiClient.postForm<any>("/uploads", formData);
+    const response = await apiClient.postForm<RawChatMessage>(
+      "/uploads",
+      formData,
+    );
     return normalizeChatMessage(response);
   },
 };

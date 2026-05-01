@@ -27,6 +27,9 @@ public class UploadController(IStorageService storageService) : BaseController
 
                 UploadTypes.IdentityCardImage => 
                     await storageService.UpdateIdentityCardAsync(request.File, ct),
+
+                UploadTypes.BankStatementProof =>
+                    await storageService.UpdateBankStatementProofAsync(request, ct),
                 
                 UploadTypes.JobConversationAtt => 
                     await storageService.SendJobChatImageAsync(request, ct),

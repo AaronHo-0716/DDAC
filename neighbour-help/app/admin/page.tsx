@@ -174,6 +174,12 @@ export default function AdminPage() {
               Jobs
             </Link>
             <Link
+              href="/admin/payments"
+              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
+            >
+              Payments
+            </Link>
+            <Link
               href="/admin/reports"
               className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
             >

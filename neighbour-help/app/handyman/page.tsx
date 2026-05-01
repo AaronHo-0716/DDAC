@@ -207,22 +207,30 @@ export default function HandymanPage() {
               {jobs.length} open job{jobs.length !== 1 ? "s" : ""}
             </p>
           </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
-              showFilters || activeFilterCount > 0
-                ? "bg-[#0B74FF] text-white border-[#0B74FF]"
-                : "bg-white text-[#111827] border-[#E5E7EB] hover:bg-[#F7F8FA]"
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            Filters
-            {activeFilterCount > 0 && (
-              <span className="bg-white text-[#0B74FF] text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/handyman/payments"
+              className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#111827] hover:bg-[#F7F8FA]"
+            >
+              Payments
+            </Link>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                showFilters || activeFilterCount > 0
+                  ? "bg-[#0B74FF] text-white border-[#0B74FF]"
+                  : "bg-white text-[#111827] border-[#E5E7EB] hover:bg-[#F7F8FA]"
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="bg-white text-[#0B74FF] text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         {!isApproved && (

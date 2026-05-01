@@ -80,14 +80,21 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
       .configureLogging(LogLevel.None) 
       .build();
 
-    connection.on("ReceiveNotification", (incoming: any) => {
+    connection.on("ReceiveNotification", (incoming: Partial<{
+      id: string;
+      type: Notification["type"];
+      message: string;
+      isRead: boolean;
+      createdAtUtc: string;
+      relatedJobId: string;
+    }>) => {
       if (!isSubscribed) return;
       const newNotif: Notification = {
-        id: incoming.id,
-        type: incoming.type,
-        message: incoming.message,
-        read: incoming.isRead,
-        createdAt: incoming.createdAtUtc,
+        id: incoming.id ?? crypto.randomUUID(),
+        type: incoming.type ?? "system",
+        message: incoming.message ?? "",
+        read: incoming.isRead ?? false,
+        createdAt: incoming.createdAtUtc ?? new Date().toISOString(),
         relatedJobId: incoming.relatedJobId
       };
       setNotifications((prev) => [newNotif, ...prev]);

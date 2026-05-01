@@ -173,9 +173,72 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         return dto;
     }
 
+    public async Task<BankDetailsDto> UpdateBankStatementProofAsync(UploadImageRequest request, CancellationToken ct)
+    {
+        var userId = await GetCurrentUserIdAsync();
+        var bankDetailsId = request.TargetId
+            ?? throw new HttpRequestException("Bank details ID required.", null, HttpStatusCode.BadRequest);
+
+        var bankDetails = await Context.Handyman_Bank_Details
+            .FirstOrDefaultAsync(b => b.Id == bankDetailsId && b.Handyman_User_Id == userId, ct)
+            ?? throw new HttpRequestException("Bank details not found.", null, HttpStatusCode.NotFound);
+
+        if (bankDetails.Verification_Status is "verified" or "disabled")
+            throw new HttpRequestException("Cannot update proof for verified or disabled bank details. Please create a new bank detail instead.", null, HttpStatusCode.BadRequest);
+
+        var hasPendingWithdrawal = await Context.Withdrawal_Requests
+            .AnyAsync(w => w.Handyman_User_Id == userId && w.Status == "pending", ct);
+
+        if (hasPendingWithdrawal)
+            throw new HttpRequestException("Cannot update bank proof while you have a pending withdrawal request.", null, HttpStatusCode.BadRequest);
+
+        try
+        {
+            var upload = await UploadImageAsync(request.File, $"{UploadTypes.BankStatementProof.ToPrefixString()}/{userId}/{bankDetails.Id}", ct);
+
+            bankDetails.Bank_Statement_Proof_Url = upload.ObjectKey;
+            bankDetails.Verification_Status = "unverified";
+            bankDetails.Rejection_Reason = null;
+            bankDetails.Verified_At_Utc = null;
+            bankDetails.Verified_By_User_Id = null;
+            bankDetails.Updated_At_Utc = DateTime.UtcNow;
+
+            await Context.SaveChangesAsync(ct);
+
+            Logger.LogInformation("Bank statement uploaded for handyman {HandymanId}, bank details {BankDetailsId}", userId, bankDetailsId);
+
+            return new BankDetailsDto(
+                Id: bankDetails.Id,
+                BankName: bankDetails.Bank_Name,
+                AccountName: bankDetails.Account_Name,
+                AccountNumber: bankDetails.Account_Number,
+                VerificationStatus: bankDetails.Verification_Status,
+                BankStatementProofUrl: GetPresignedUrl(bankDetails.Bank_Statement_Proof_Url),
+                RejectionReason: bankDetails.Rejection_Reason,
+                VerifiedAtUtc: bankDetails.Verified_At_Utc ?? DateTime.MinValue,
+                CreatedAtUtc: bankDetails.Created_At_Utc,
+                UpdatedAtUtc: bankDetails.Updated_At_Utc
+            );
+        }
+        catch (HttpRequestException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to upload bank statement for handyman {HandymanId}", userId);
+            throw new HttpRequestException("Failed to upload bank statement. Please try again.", null, HttpStatusCode.InternalServerError);
+        }
+    }
+
     private async Task<UploadImageResponse> UploadImageAsync(IFormFile file, string prefix, CancellationToken ct)
     {
         ValidateImage(file);
+        return await UploadFileAsync(file, prefix, ct);
+    }
+
+    private async Task<UploadImageResponse> UploadFileAsync(IFormFile file, string prefix, CancellationToken ct)
+    {
         await EnsureBucketExistsAsync(ct);
 
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -231,4 +294,5 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             throw new HttpRequestException("Invalid file type. Only image files are allowed.", null, HttpStatusCode.BadRequest);
     }
+
 }

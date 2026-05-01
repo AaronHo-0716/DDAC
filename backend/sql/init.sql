@@ -325,3 +325,144 @@ CREATE TABLE IF NOT EXISTS user_ratings (
 );
 
 CREATE INDEX IF NOT EXISTS ix_user_ratings_target_id ON user_ratings(target_user_id, created_at_utc DESC);
+
+CREATE TABLE handyman_bank_details (
+    id UUID PRIMARY KEY,
+
+    handyman_user_id UUID NOT NULL,
+
+    bank_name VARCHAR(100) NOT NULL,
+    account_name VARCHAR(150) NOT NULL,
+    account_number VARCHAR(50) NOT NULL,
+
+    verification_status VARCHAR(20) NOT NULL DEFAULT 'unverified'
+      CHECK (verification_status IN ('unverified', 'verified', 'rejected', 'disabled')),
+
+    bank_statement_proof_url TEXT,
+
+    rejection_reason TEXT,
+
+    verified_by_user_id UUID,
+    verified_at_utc TIMESTAMP,
+
+    created_at_utc TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at_utc TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    -- FK
+    CONSTRAINT fk_bank_user FOREIGN KEY (handyman_user_id) REFERENCES users(id),
+    CONSTRAINT fk_bank_verified_by FOREIGN KEY (verified_by_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE withdrawal_requests (
+    id UUID PRIMARY KEY,
+
+    handyman_user_id UUID NOT NULL,
+    bank_details_id UUID NOT NULL,
+
+    amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+
+    bank_details_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected', 'paid')),
+
+    rejection_reason TEXT,
+
+    approved_by_user_id UUID,
+    approved_at_utc TIMESTAMP,
+
+    paid_at_utc TIMESTAMP,
+    paid_by_user_id UUID,
+
+    bank_transfer_reference TEXT,
+
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    created_at_utc TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at_utc TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    -- FK
+    CONSTRAINT fk_wr_handyman FOREIGN KEY (handyman_user_id) REFERENCES users(id),
+    CONSTRAINT fk_wr_bank FOREIGN KEY (bank_details_id) REFERENCES handyman_bank_details(id),
+    CONSTRAINT fk_wr_approved_by FOREIGN KEY (approved_by_user_id) REFERENCES users(id),
+    CONSTRAINT fk_wr_paid_by FOREIGN KEY (paid_by_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE payments (
+    id UUID PRIMARY KEY,
+
+    bid_id UUID NOT NULL,
+    job_id UUID NOT NULL,
+    homeowner_user_id UUID NOT NULL,
+    handyman_user_id UUID NOT NULL,
+
+    bid_amount NUMERIC(12,2) NOT NULL,
+    sst_amount NUMERIC(12,2) NOT NULL,
+    homeowner_platform_fee NUMERIC(12,2) NOT NULL,
+    handyman_platform_fee NUMERIC(12,2) NOT NULL,
+
+    homeowner_total NUMERIC(12,2) NOT NULL,
+    handyman_credit NUMERIC(12,2) NOT NULL,
+
+    stripe_session_id TEXT,
+    stripe_payment_intent_id TEXT,
+
+    status VARCHAR(20) NOT NULL DEFAULT 'initiated'
+        CHECK (status IN ('initiated', 'paid')),
+
+    payment_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    created_at_utc TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at_utc TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    -- FK
+    CONSTRAINT fk_payment_bid FOREIGN KEY (bid_id) REFERENCES bids(id),
+    CONSTRAINT fk_payment_job FOREIGN KEY (job_id) REFERENCES jobs(id),
+    CONSTRAINT fk_payment_homeowner FOREIGN KEY (homeowner_user_id) REFERENCES users(id),
+    CONSTRAINT fk_payment_handyman FOREIGN KEY (handyman_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE handyman_credits (
+    id UUID PRIMARY KEY,
+
+    handyman_user_id UUID NOT NULL,
+
+    transaction_type VARCHAR(20) NOT NULL
+        CHECK (transaction_type IN ('earned', 'withdrawn')),
+
+    amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+
+    description TEXT NOT NULL,
+
+    related_payment_id UUID,
+    related_job_id UUID,
+    related_bid_id UUID,
+    related_withdrawal_request_id UUID,
+
+    balance_after NUMERIC(12,2) NOT NULL,
+
+    created_at_utc TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    -- FK
+    CONSTRAINT fk_credit_user FOREIGN KEY (handyman_user_id) REFERENCES users(id),
+    CONSTRAINT fk_credit_payment FOREIGN KEY (related_payment_id) REFERENCES payments(id),
+    CONSTRAINT fk_credit_job FOREIGN KEY (related_job_id) REFERENCES jobs(id),
+    CONSTRAINT fk_credit_bid FOREIGN KEY (related_bid_id) REFERENCES bids(id),
+    CONSTRAINT fk_credit_withdrawal FOREIGN KEY (related_withdrawal_request_id) REFERENCES withdrawal_requests(id)
+);
+
+-- Withdrawal
+CREATE INDEX idx_wr_handyman ON withdrawal_requests(handyman_user_id);
+CREATE INDEX idx_wr_status ON withdrawal_requests(status);
+
+-- Payments
+CREATE INDEX idx_payment_handyman ON payments(handyman_user_id);
+CREATE INDEX idx_payment_homeowner ON payments(homeowner_user_id);
+
+-- Credits
+CREATE INDEX idx_credit_handyman ON handyman_credits(handyman_user_id);
+CREATE INDEX idx_credit_type ON handyman_credits(transaction_type);
+
+-- Bank
+CREATE INDEX idx_bank_user ON handyman_bank_details(handyman_user_id);
+CREATE INDEX idx_bank_status ON handyman_bank_details(verification_status);

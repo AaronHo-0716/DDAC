@@ -268,6 +268,9 @@ public class JobService(ServiceDependencies deps) : BaseService(deps), IJobServi
         if (job.Posted_By_User_Id != userId)
             throw new HttpRequestException("You can only delete your own jobs", null, HttpStatusCode.Forbidden);
 
+        if (job.Status != JobStatus.Open.ToDbString())
+            throw new HttpRequestException("Only open jobs can be deleted", null, HttpStatusCode.BadRequest);
+
         Context.Jobs.Remove(job);
         await Context.SaveChangesAsync();
         Logger.LogInformation("Job {JobId} deleted by User {UserId}", jobId, userId);

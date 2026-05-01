@@ -7,6 +7,7 @@ import {
   Bell,
   HelpCircle,
   ChevronRight,
+  CreditCard,
 } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import JobCard from "../components/ui/JobCard";
@@ -160,6 +161,13 @@ export default function DashboardPage() {
                   bg: "bg-amber-50",
                   label: "Notifications",
                   sub: notificationsSubtext,
+                },
+                {
+                  href: "/payments",
+                  icon: <CreditCard className="w-4 h-4 text-purple-600" />,
+                  bg: "bg-purple-50",
+                  label: "Payments",
+                  sub: "Receipts and history",
                 },
                 {
                   href: "/support",

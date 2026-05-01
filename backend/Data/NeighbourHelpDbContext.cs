@@ -28,6 +28,10 @@ public partial class NeighbourHelpDbContext : DbContext
     public virtual DbSet<Message> Messages { get; set; }
     public virtual DbSet<Message_Moderation_Action> Message_Moderation_Actions { get; set; }
     public virtual DbSet<User_Rating> User_Ratings { get; set; }
+    public virtual DbSet<Payment> Payments { get; set; }
+    public virtual DbSet<Handyman_Bank_Details> Handyman_Bank_Details { get; set; }
+    public virtual DbSet<Handyman_Credit> Handyman_Credits { get; set; }
+    public virtual DbSet<Withdrawal_Request> Withdrawal_Requests { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -360,6 +364,114 @@ public partial class NeighbourHelpDbContext : DbContext
             entity.HasOne(d => d.TargetUser).WithMany().HasForeignKey(d => d.TargetUserId);
             
             entity.HasIndex(e => new { e.RaterUserId, e.TargetUserId }).IsUnique();
+        });
+
+        // --- 17. PAYMENTS ---
+        modelBuilder.Entity<Payment>(entity =>
+        {
+            entity.ToTable("payments");
+            entity.HasKey(e => e.Id).HasName("payments_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Bid_Id).HasColumnName("bid_id");
+            entity.Property(e => e.Job_Id).HasColumnName("job_id");
+            entity.Property(e => e.Homeowner_User_Id).HasColumnName("homeowner_user_id");
+            entity.Property(e => e.Handyman_User_Id).HasColumnName("handyman_user_id");
+            entity.Property(e => e.Bid_Amount).HasColumnName("bid_amount").HasPrecision(10, 2);
+            entity.Property(e => e.Sst_Amount).HasColumnName("sst_amount").HasPrecision(10, 2);
+            entity.Property(e => e.Homeowner_Platform_Fee).HasColumnName("homeowner_platform_fee").HasPrecision(10, 2);
+            entity.Property(e => e.Handyman_Platform_Fee).HasColumnName("handyman_platform_fee").HasPrecision(10, 2);
+            entity.Property(e => e.Homeowner_Total).HasColumnName("homeowner_total").HasPrecision(10, 2);
+            entity.Property(e => e.Handyman_Credit).HasColumnName("handyman_credit").HasPrecision(10, 2);
+            entity.Property(e => e.Stripe_Session_Id).HasColumnName("stripe_session_id");
+            entity.Property(e => e.Stripe_Payment_Intent_Id).HasColumnName("stripe_payment_intent_id");
+            entity.Property(e => e.Status).HasColumnName("status").HasDefaultValue("initiated");
+            entity.Property(e => e.Payment_Metadata).HasColumnName("payment_metadata").HasColumnType("jsonb");
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+            entity.Property(e => e.Updated_At_Utc).HasColumnName("updated_at_utc").HasDefaultValueSql("now()");
+            
+            entity.HasOne(d => d.Bid).WithMany().HasForeignKey(d => d.Bid_Id);
+            entity.HasOne(d => d.Job).WithMany().HasForeignKey(d => d.Job_Id);
+            entity.HasOne(d => d.Homeowner_User).WithMany().HasForeignKey(d => d.Homeowner_User_Id);
+            entity.HasOne(d => d.Handyman_User).WithMany().HasForeignKey(d => d.Handyman_User_Id);
+        });
+
+        // --- 18. HANDYMAN BANK DETAILS ---
+        modelBuilder.Entity<Handyman_Bank_Details>(entity =>
+        {
+            entity.ToTable("handyman_bank_details");
+            entity.HasKey(e => e.Id).HasName("handyman_bank_details_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Handyman_User_Id).HasColumnName("handyman_user_id");
+            entity.Property(e => e.Bank_Name).HasColumnName("bank_name");
+            entity.Property(e => e.Account_Name).HasColumnName("account_name");
+            entity.Property(e => e.Account_Number).HasColumnName("account_number");
+            entity.Property(e => e.Verification_Status).HasColumnName("verification_status").HasDefaultValue("unverified");
+            entity.Property(e => e.Bank_Statement_Proof_Url).HasColumnName("bank_statement_proof_url");
+            entity.Property(e => e.Rejection_Reason).HasColumnName("rejection_reason");
+            entity.Property(e => e.Verified_By_User_Id).HasColumnName("verified_by_user_id");
+            entity.Property(e => e.Verified_At_Utc).HasColumnName("verified_at_utc");
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+            entity.Property(e => e.Updated_At_Utc).HasColumnName("updated_at_utc").HasDefaultValueSql("now()");
+            
+            entity.HasOne(d => d.Handyman_User).WithMany().HasForeignKey(d => d.Handyman_User_Id);
+            entity.HasOne(d => d.Verified_By_User).WithMany().HasForeignKey(d => d.Verified_By_User_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.Handyman_User_Id);
+        });
+
+        // --- 19. HANDYMAN CREDITS ---
+        modelBuilder.Entity<Handyman_Credit>(entity =>
+        {
+            entity.ToTable("handyman_credits");
+            entity.HasKey(e => e.Id).HasName("handyman_credits_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Handyman_User_Id).HasColumnName("handyman_user_id");
+            entity.Property(e => e.Transaction_Type).HasColumnName("transaction_type");
+            entity.Property(e => e.Amount).HasColumnName("amount").HasPrecision(10, 2);
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.Related_Payment_Id).HasColumnName("related_payment_id");
+            entity.Property(e => e.Related_Job_Id).HasColumnName("related_job_id");
+            entity.Property(e => e.Related_Bid_Id).HasColumnName("related_bid_id");
+            entity.Property(e => e.Related_Withdrawal_Request_Id).HasColumnName("related_withdrawal_request_id");
+            entity.Property(e => e.Balance_After).HasColumnName("balance_after").HasPrecision(10, 2);
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+            
+            entity.HasOne(d => d.Handyman_User).WithMany().HasForeignKey(d => d.Handyman_User_Id);
+            entity.HasOne(d => d.Related_Payment).WithMany().HasForeignKey(d => d.Related_Payment_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.Related_Job).WithMany().HasForeignKey(d => d.Related_Job_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.Related_Bid).WithMany().HasForeignKey(d => d.Related_Bid_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.Related_Withdrawal_Request).WithMany().HasForeignKey(d => d.Related_Withdrawal_Request_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.Handyman_User_Id);
+            entity.HasIndex(e => new { e.Handyman_User_Id, e.Created_At_Utc });
+        });
+
+        // --- 20. WITHDRAWAL REQUESTS ---
+        modelBuilder.Entity<Withdrawal_Request>(entity =>
+        {
+            entity.ToTable("withdrawal_requests");
+            entity.HasKey(e => e.Id).HasName("withdrawal_requests_pkey");
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Handyman_User_Id).HasColumnName("handyman_user_id");
+            entity.Property(e => e.Bank_Details_Id).HasColumnName("bank_details_id");
+            entity.Property(e => e.Amount).HasColumnName("amount").HasPrecision(10, 2);
+            entity.Property(e => e.Bank_Details_Snapshot).HasColumnName("bank_details_snapshot").HasColumnType("jsonb");
+            entity.Property(e => e.Status).HasColumnName("status").HasDefaultValue("pending");
+            entity.Property(e => e.Rejection_Reason).HasColumnName("rejection_reason");
+            entity.Property(e => e.Approved_By_User_Id).HasColumnName("approved_by_user_id");
+            entity.Property(e => e.Approved_At_Utc).HasColumnName("approved_at_utc");
+            entity.Property(e => e.Paid_At_Utc).HasColumnName("paid_at_utc");
+            entity.Property(e => e.Paid_By_User_Id).HasColumnName("paid_by_user_id");
+            entity.Property(e => e.Bank_Transfer_Reference).HasColumnName("bank_transfer_reference");
+            entity.Property(e => e.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
+            entity.Property(e => e.Updated_At_Utc).HasColumnName("updated_at_utc").HasDefaultValueSql("now()");
+            
+            entity.HasOne(d => d.Handyman_User).WithMany().HasForeignKey(d => d.Handyman_User_Id);
+            entity.HasOne(d => d.Bank_Details).WithMany(p => p.Withdrawal_Requests).HasForeignKey(d => d.Bank_Details_Id);
+            entity.HasOne(d => d.Approved_By_User).WithMany().HasForeignKey(d => d.Approved_By_User_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.Paid_By_User).WithMany().HasForeignKey(d => d.Paid_By_User_Id).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.Handyman_User_Id);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => new { e.Handyman_User_Id, e.Status });
         });
 
         OnModelCreatingPartial(modelBuilder);
