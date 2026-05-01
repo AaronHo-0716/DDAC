@@ -95,9 +95,14 @@ public class PaymentService(ServiceDependencies deps, IOptions<StripeOptions> st
         var successUrl = BuildFrontendReturnUrl(_stripeOptions.SuccessUrlBase, jobId, "success", includeSessionId: true);
         var cancelUrl = BuildFrontendReturnUrl(_stripeOptions.CancelUrlBase, jobId, "cancel", includeSessionId: false);
 
+        var allowedPaymentMethods = new List<string> { "card", "fpx", "grabpay", "alipay" };
+
+        // must be one of card, acss_debit, affirm, afterpay_clearpay, alipay, au_becs_debit, bacs_debit, bancontact, blik, boleto, cashapp, crypto, customer_balance, eps, fpx, giropay, grabpay, ideal, klarna, konbini, link, mb_way, multibanco, oxxo, p24, pay_by_bank, paynow, paypal, payto, pix, promptpay, sepa_debit, sunbit, sofort, swish, upi, us_bank_account, wechat_pay, revolut_pay, mobilepay, zip, amazon_pay, alma, twint, kr_card, naver_pay, kakao_pay, payco, nz_bank_account, samsung_pay, billie, bizum, paypay, or satispay
+
         var sessionOptions = new SessionCreateOptions
         {
             Mode = "payment",
+            PaymentMethodTypes = allowedPaymentMethods, 
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
             Metadata = new Dictionary<string, string>
