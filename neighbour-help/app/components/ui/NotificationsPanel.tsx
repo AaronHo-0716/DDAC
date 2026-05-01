@@ -8,11 +8,29 @@ import type { Notification, NotificationEventType } from "@/app/types";
 import { notificationsService } from "@/app/lib/api/notifications";
 import { getAccessToken } from "@/app/lib/api/client";
 
-const NOTIF_HUB_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.trim() ||
-  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-  "http://localhost:5073";
-const NOTIF_HUB_URL = `${NOTIF_HUB_BASE_URL.replace(/\/+$/, "")}/api/notification-hub`;
+const getNotificationHubBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:5073`;
+  }
+
+  return (
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+    "http://localhost:5073"
+  );
+};
+
+const NOTIF_HUB_URL = `${getNotificationHubBaseUrl().replace(/\/+$/, "")}/api/notification-hub`;
+
+if (typeof window !== "undefined") {
+  console.log("[NotificationsPanel] SignalR Hub URL:", NOTIF_HUB_URL);
+  console.log("[NotificationsPanel] Environment:", {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+  });
+}
 
 const NOTIF_CONFIG: Record<
   NotificationEventType,
@@ -72,12 +90,11 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
     const connection = new HubConnectionBuilder()
       .withUrl(NOTIF_HUB_URL, {
         accessTokenFactory: () => token,
-        withCredentials: true,
-        skipNegotiation: true,
         transport: HttpTransportType.WebSockets,
+        skipNegotiation: true,  // Use WebSocket directly, no HTTP negotiation
       })
       .withAutomaticReconnect()
-      .configureLogging(LogLevel.None) 
+      .configureLogging(LogLevel.Warning)  // Show warnings and errors 
       .build();
 
     connection.on("ReceiveNotification", (incoming: Partial<{
@@ -116,12 +133,24 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
       try {
         // Double check state before starting
         if (isSubscribed && connection.state === HubConnectionState.Disconnected) {
+          console.log("[NotificationsPanel] Connecting to SignalR hub...", NOTIF_HUB_URL);
           await connection.start();
+          console.log("[NotificationsPanel] SignalR connection established");
         }
       } catch (err) {
         // If it was told to stop while starting, we ignore the error
         if (isSubscribed) {
-          console.error("SignalR Connection Error:", err);
+          console.error("[NotificationsPanel] SignalR Connection Error:", err);
+          
+          // Try to provide diagnostic info
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          if (errorMsg.includes("NetworkError") || errorMsg.includes("fetch")) {
+            console.error("[NotificationsPanel] Backend appears unreachable at:", NOTIF_HUB_URL);
+            console.error("[NotificationsPanel] Please ensure backend is running on port 5073");
+          }
+          if (errorMsg.includes("negotiation")) {
+            console.error("[NotificationsPanel] Failed during CORS negotiation - check CORS policy");
+          }
         }
       }
     };

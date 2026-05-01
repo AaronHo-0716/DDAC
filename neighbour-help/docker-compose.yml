@@ -13,7 +13,7 @@ services:
     environment:
       # For server-side requests/rewrite destination resolution.
       # Use backend service DNS name when both run on the same Docker network.
-      API_URL: ${API_URL:-http://backend:5000}
+      API_URL: ${API_URL:-http://backend:8080}
       NODE_ENV: production
       PORT: 3000
     restart: unless-stopped

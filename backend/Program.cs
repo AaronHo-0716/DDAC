@@ -53,9 +53,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddDbContext<NeighbourHelpDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// SignalR Configuration with Redis Backplane
+// SignalR Configuration with Redis Backplane + CORS for WebSocket handshakes
 var redisUrl = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
-builder.Services.AddSignalR()
+builder.Services.AddSignalR(hubOptions =>
+{
+    hubOptions.MaximumReceiveMessageSize = 1024 * 1024; // 1MB max message
+})
     .AddStackExchangeRedis(redisUrl, options => {
         options.Configuration.ChannelPrefix = RedisChannel.Literal("NeighborHelpChat");
         options.Configuration.AbortOnConnectFail = false;
@@ -104,11 +107,47 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("NextJsPolicy", policy =>
     {
-        var origins = builder.Configuration["AllowedOrigins"]?.Split(',') ?? new[] { "http://localhost:3000" };
-        policy.WithOrigins(origins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials(); 
+        if (builder.Environment.IsDevelopment())
+        {
+            // In development, allow localhost and local network addresses
+            // For WebSocket support, we use SetIsOriginAllowed without AllowCredentials
+            // Credentials are passed via JWT in query string for SignalR WebSocket handshakes
+            policy.SetIsOriginAllowed(origin =>
+                {
+                    var uri = new Uri(origin);
+                    return uri.Host == "localhost" ||
+                           uri.Host == "127.0.0.1" ||
+                           uri.Host.StartsWith("192.168.") ||
+                           uri.Host.StartsWith("10.") ||
+                           uri.Host.StartsWith("172.16.") ||
+                           uri.Host.StartsWith("172.17.") ||
+                           uri.Host.StartsWith("172.18.") ||
+                           uri.Host.StartsWith("172.19.") ||
+                           uri.Host.StartsWith("172.20.") ||
+                           uri.Host.StartsWith("172.21.") ||
+                           uri.Host.StartsWith("172.22.") ||
+                           uri.Host.StartsWith("172.23.") ||
+                           uri.Host.StartsWith("172.24.") ||
+                           uri.Host.StartsWith("172.25.") ||
+                           uri.Host.StartsWith("172.26.") ||
+                           uri.Host.StartsWith("172.27.") ||
+                           uri.Host.StartsWith("172.28.") ||
+                           uri.Host.StartsWith("172.29.") ||
+                           uri.Host.StartsWith("172.30.") ||
+                           uri.Host.StartsWith("172.31.");
+                })
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
+        else
+        {
+            // In production, use specifically configured origins with credentials
+            var origins = builder.Configuration["AllowedOrigins"]?.Split(',') ?? new[] { "http://localhost:3000" };
+            policy.WithOrigins(origins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
     });
 });
 

@@ -15,9 +15,26 @@ interface ChatHubMessagePayload {
   message?: ChatMessage;
 }
 
-const CHAT_HUB_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://localhost:5073";
-const CHAT_HUB_URL = `${CHAT_HUB_BASE_URL.replace(/\/+$/, "")}/api/chat-hub`;
+const getChatHubBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:5073`;
+  }
+
+  return (
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+    "http://localhost:5073"
+  );
+};
+
+const CHAT_HUB_URL = `${getChatHubBaseUrl().replace(/\/+$/, "")}/api/chat-hub`;
 const MAX_CHAT_IMAGE_SIZE_MB = 10;
+
+if (typeof window !== "undefined") {
+  console.log("[ChatWidget] SignalR Hub URL:", CHAT_HUB_URL);
+}
 
 // [Helpers normalizeMessageType, validateImageFile, formatTime, formatLastSeen, getConversationDisplay remain identical]
 function normalizeMessageType(value: unknown): ChatMessage["type"] {
@@ -177,8 +194,13 @@ export default function ChatWidget() {
     if (!user) return;
 
     const connection = new HubConnectionBuilder()
-      .withUrl(CHAT_HUB_URL, { accessTokenFactory: () => getAccessToken() ?? "", withCredentials: true, skipNegotiation: true, transport: HttpTransportType.WebSockets })
+      .withUrl(CHAT_HUB_URL, { 
+        accessTokenFactory: () => getAccessToken() ?? "", 
+        transport: HttpTransportType.WebSockets,
+        skipNegotiation: true,  // Use WebSocket directly, no HTTP negotiation
+      })
       .withAutomaticReconnect()
+      .configureLogging(LogLevel.Warning)  // Show warnings and errors
       .build();
 
     connection.on("ReceiveMessage", (payload: ChatHubMessagePayload) => {

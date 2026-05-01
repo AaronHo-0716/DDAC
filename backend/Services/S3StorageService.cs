@@ -249,8 +249,17 @@ public class S3StorageService(ServiceDependencies deps) : BaseService(deps), ISt
         var putRequest = new PutObjectRequest { BucketName = StorageOptions.BucketName, Key = objectKey, InputStream = stream, ContentType = file.ContentType };
         await S3Client.PutObjectAsync(putRequest, ct);
 
-        var publicBaseUrl = string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl) ? StorageOptions.ServiceUrl : StorageOptions.PublicBaseUrl;
-        var imageUrl = $"{publicBaseUrl.TrimEnd('/')}/{StorageOptions.BucketName}/{objectKey}";
+        string imageUrl;
+        var request = HttpContextAccessor?.HttpContext?.Request;
+        if (request != null)
+        {
+            imageUrl = BuildStorageProxyUrl(request, StorageOptions.BucketName, objectKey);
+        }
+        else
+        {
+            var publicBaseUrl = string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl) ? StorageOptions.ServiceUrl : StorageOptions.PublicBaseUrl;
+            imageUrl = $"{publicBaseUrl.TrimEnd('/')}/{StorageOptions.BucketName}/{objectKey}";
+        }
 
         return new UploadImageResponse(objectKey, imageUrl, file.Length, file.ContentType);
     }

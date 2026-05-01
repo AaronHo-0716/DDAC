@@ -9,6 +9,7 @@ using Amazon.S3;
 using Microsoft.Extensions.Options;
 using backend.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using System.Net;
 
@@ -69,14 +70,20 @@ public abstract class BaseService
 
         try
         {
-            var request = new GetPreSignedUrlRequest
+            var request = HttpContextAccessor?.HttpContext?.Request;
+            if (request != null)
+            {
+                return BuildStorageProxyUrl(request, StorageOptions.BucketName, objectKey);
+            }
+
+            var urlRequest = new GetPreSignedUrlRequest
             {
                 BucketName = StorageOptions.BucketName,
                 Key = objectKey,
                 Expires = DateTime.UtcNow.AddMinutes(expiryMinutes)
             };
 
-            string url = S3Client.GetPreSignedURL(request);
+            string url = S3Client.GetPreSignedURL(urlRequest);
 
             if (!string.IsNullOrWhiteSpace(StorageOptions.PublicBaseUrl))
             {
@@ -95,6 +102,11 @@ public abstract class BaseService
             Logger.LogWarning(ex, "Unable to generate presigned URL for object key {ObjectKey}", objectKey);
             return null!;
         }
+    }
+
+    protected string BuildStorageProxyUrl(HttpRequest request, string bucketName, string objectKey)
+    {
+        return $"/api/storage/{bucketName}/{objectKey}";
     }
 
     protected async Task<UserDto> MapUserToDto(User user, string? statusOverride = null)

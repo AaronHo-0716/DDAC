@@ -286,7 +286,6 @@ function normalizeVerificationStatus(value?: string | null): VerificationStatus 
   return "pending";
 }
 
-const DEFAULT_STORAGE_PUBLIC_BASE_URL = "http://localhost:4566";
 const DEFAULT_STORAGE_BUCKET = "neighbourhelp-media";
 
 export function resolveStoredImageUrl(value?: string | null): string | undefined {
@@ -299,13 +298,10 @@ export function resolveStoredImageUrl(value?: string | null): string | undefined
   const objectKey = value.replace(/^\/+/, "");
   if (!objectKey) return undefined;
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_STORAGE_PUBLIC_BASE_URL ??
-    DEFAULT_STORAGE_PUBLIC_BASE_URL;
-  const bucketName =
-    process.env.NEXT_PUBLIC_STORAGE_BUCKET_NAME ?? DEFAULT_STORAGE_BUCKET;
+  const bucketName = process.env.NEXT_PUBLIC_STORAGE_BUCKET_NAME ?? DEFAULT_STORAGE_BUCKET;
 
-  return `${baseUrl.replace(/\/+$/, "")}/${bucketName}/${objectKey}`;
+  // Use relative URL that gets proxied by Next.js to the backend
+  return `/api/storage/${bucketName}/${objectKey}`;
 }
 
 function normalizeUser(row?: RawUserDto | null) {
