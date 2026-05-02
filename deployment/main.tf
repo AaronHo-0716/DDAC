@@ -407,6 +407,15 @@ resource "aws_iam_role_policy" "ec2_describe_instances_policy" {
           "ec2:DescribeInstances"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -463,17 +472,16 @@ resource "aws_eip_association" "caddy_eip_assoc" {
 resource "aws_instance" "caddy_nat_instance" {
   ami                  = data.aws_ami.ubuntu_2404.id
   instance_type        = "t3.micro"
-  subnet_id            = aws_subnet.public_dmz.id
+  subnet_id            = aws_subnet.public_dmz_2.id  # Move to 5b to avoid capacity issues in 5a
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
   key_name             = var.key_name
 
   vpc_security_group_ids = [aws_security_group.public_sg.id]
   source_dest_check      = false
   user_data = templatefile("${path.module}/scripts/caddy_nat_instance.sh", {
-    docker_compose_content                      = file("${path.module}/compose/caddy_nat_instance.yml")
-    aws_vpc_app_vpc_cidr_block                  = aws_vpc.app_vpc.cidr_block
-    aws_instance_monitoring_instance_private_ip = aws_instance.monitoring_instance.private_ip
-    internal_alb_dns                            = aws_lb.app_alb.dns_name
+    docker_compose_content     = file("${path.module}/compose/caddy_nat_instance.yml")
+    aws_vpc_app_vpc_cidr_block = aws_vpc.app_vpc.cidr_block
+    aws_region                 = var.aws_region
   })
 
   tags = { Name = "App-Caddy-NAT" }
@@ -575,7 +583,7 @@ resource "aws_autoscaling_group" "frontend_asg" {
   max_size                  = 3
   min_size                  = 1
   desired_capacity          = 1
-  vpc_zone_identifier       = [aws_subnet.private_app.id, aws_subnet.private_app_2.id]
+  vpc_zone_identifier       = [aws_subnet.private_app_2.id]  # Only use 5b for now due to capacity issues in 5a
   target_group_arns         = [aws_lb_target_group.frontend_tg.arn]
   health_check_type         = "ELB"
   health_check_grace_period = 300
@@ -628,7 +636,7 @@ resource "aws_autoscaling_group" "backend_asg" {
   max_size                  = 3
   min_size                  = 1
   desired_capacity          = 1
-  vpc_zone_identifier       = [aws_subnet.private_app.id, aws_subnet.private_app_2.id]
+  vpc_zone_identifier       = [aws_subnet.private_app_2.id]  # Only use 5b for now due to capacity issues in 5a
   target_group_arns         = [aws_lb_target_group.backend_tg.arn]
   health_check_type         = "ELB"
   health_check_grace_period = 300
