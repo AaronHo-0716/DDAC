@@ -55,19 +55,63 @@ docker compose -f /opt/docker-compose.yml up -d
 
 # --- 6. Pull and run Frontend application ---
 echo "Fetching credentials from SSM..."
-GH_PAT=$(aws ssm get-parameter --name /app/github_pat --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
-GH_USER=$(aws ssm get-parameter --name /app/github_username --query Parameter.Value --output text --region ap-southeast-5)
+
+# Function to get SSM parameter with retry
+get_ssm_param() {
+    local param_name=$1
+    local max_retries=10
+    local retry=0
+    local result=""
+
+    while [ $retry -lt $max_retries ]; do
+        result=$(aws ssm get-parameter --name "$param_name" --with-decryption --query Parameter.Value --output text --region ap-southeast-5 2>&1)
+        if [[ ! "$result" == *"error"* ]] && [[ ! "$result" == *"ParameterNotFound"* ]]; then
+            echo "$result"
+            return 0
+        fi
+        echo "Attempt $retry: Waiting for parameter $param_name..."
+        retry=$((retry + 1))
+        sleep 10
+    done
+    echo "ERROR: Failed to get parameter $param_name after $max_retries attempts"
+    return 1
+}
+
+GH_PAT=$(get_ssm_param "/app/github_pat")
+echo "GH_PAT result: $GH_PAT"
+
+GH_USER=$(get_ssm_param "/app/github_username")
+echo "GH_USER result: $GH_USER"
+
+if [[ "$GH_PAT" == *"error"* ]] || [[ "$GH_USER" == *"error"* ]]; then
+    echo "ERROR: Failed to get GitHub credentials from SSM"
+    exit 1
+fi
 
 echo "Logging into GHCR..."
-echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin
+echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin 2>&1
+if [ $? -ne 0 ]; then
+    echo "ERROR: Docker login failed"
+    exit 1
+fi
 
-FRONTEND_IMAGE="ghcr.io/$GH_USER/project-frontend:latest"
+# Convert username to lowercase (Docker requires lowercase image names)
+GH_USER_LOWER=$(echo "$GH_USER" | tr '[:upper:]' '[:lower:]')
+echo "Using lowercase username: $GH_USER_LOWER"
+
+FRONTEND_IMAGE="ghcr.io/$GH_USER_LOWER/project-frontend:latest"
+echo "Frontend image: $FRONTEND_IMAGE"
 
 echo "Pulling frontend image..."
-docker pull $FRONTEND_IMAGE
+docker pull $FRONTEND_IMAGE 2>&1
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to pull frontend image"
+    exit 1
+fi
 
 echo "Starting Frontend..."
-API_URL=$(aws ssm get-parameter --name /app/backend/api_url --query Parameter.Value --output text --region ap-southeast-5)
+API_URL=$(get_ssm_param "/app/backend/api_url")
+echo "API_URL: $API_URL"
 
 cat > /opt/docker-frontend.yml << EOF
 services:
@@ -83,4 +127,12 @@ services:
       - PORT=3000
 EOF
 
-docker compose -f /opt/docker-frontend.yml up -d
+docker compose -f /opt/docker-frontend.yml up -d 2>&1
+sleep 10
+
+echo "Checking if frontend is running..."
+docker ps
+docker logs frontend 2>&1 || echo "No frontend container logs yet"
+
+# Simple health check endpoint test
+curl -f http://localhost:3000/ || echo "WARNING: Frontend health check failed"

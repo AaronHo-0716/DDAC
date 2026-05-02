@@ -14,7 +14,7 @@ done
 
 apt-get update
 apt-get install -y iptables iptables-persistent
-apt-get install -y ca-certificates curl
+apt-get install -y ca-certificates curl unzip
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
@@ -36,8 +36,6 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /
 apt-get update
 apt-get install -y caddy
 
-# Install AWS CLI for dynamic discovery (using same method as frontend script)
-apt-get install -y unzip
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip
 ./aws/install
@@ -72,9 +70,10 @@ fi
 
 # Generate new Caddyfile
 NEW_CADDYFILE="neighbourhelp.me {
-    handle_path /api/proxy/* {
-        rewrite * /api{path}
-        reverse_proxy $ALB_DNS:5073
+    handle /api/* {
+        reverse_proxy $ALB_DNS:5073 {
+            header_up Host $ALB_DNS
+        }
     }
     handle /grafana/* {
         reverse_proxy $MONITORING_IP:3000
@@ -83,7 +82,15 @@ NEW_CADDYFILE="neighbourhelp.me {
         reverse_proxy $MONITORING_IP:9090
     }
     handle {
-        reverse_proxy $ALB_DNS:3000
+        reverse_proxy $ALB_DNS:3000 {
+            header_up Host $ALB_DNS
+        }
+    }
+}
+
+neighbourhelp.me:5073 {
+    reverse_proxy $ALB_DNS:5073 {
+        header_up Host $ALB_DNS
     }
 }"
 

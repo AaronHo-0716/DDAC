@@ -472,7 +472,7 @@ resource "aws_eip_association" "caddy_eip_assoc" {
 resource "aws_instance" "caddy_nat_instance" {
   ami                  = data.aws_ami.ubuntu_2404.id
   instance_type        = "t3.micro"
-  subnet_id            = aws_subnet.public_dmz_2.id  # Move to 5b to avoid capacity issues in 5a
+  subnet_id            = aws_subnet.public_dmz_2.id # Move to 5b to avoid capacity issues in 5a
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.id
   key_name             = var.key_name
 
@@ -494,6 +494,7 @@ resource "aws_lb" "app_alb" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.app_sg.id]
   subnets            = [aws_subnet.private_app.id, aws_subnet.private_app_2.id]
+  idle_timeout       = 3600
 
   tags = { Name = "App-Internal-ALB" }
 }
@@ -508,9 +509,9 @@ resource "aws_lb_target_group" "frontend_tg" {
   health_check {
     path                = "/"
     interval            = 30
-    timeout             = 5
+    timeout             = 10
     healthy_threshold   = 2
-    unhealthy_threshold = 2
+    unhealthy_threshold = 3
     matcher             = "200-399"
   }
 }
@@ -533,8 +534,14 @@ resource "aws_lb_target_group" "backend_tg" {
   protocol = "HTTP"
   vpc_id   = aws_vpc.app_vpc.id
 
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400
+    enabled         = true
+  }
+
   health_check {
-    path                = "/api/health" # Or another valid health check endpoint if this fails
+    path                = "/health/live"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
@@ -583,10 +590,10 @@ resource "aws_autoscaling_group" "frontend_asg" {
   max_size                  = 3
   min_size                  = 1
   desired_capacity          = 1
-  vpc_zone_identifier       = [aws_subnet.private_app_2.id]  # Only use 5b for now due to capacity issues in 5a
+  vpc_zone_identifier       = [aws_subnet.private_app_2.id] # Only use 5b for now due to capacity issues in 5a
   target_group_arns         = [aws_lb_target_group.frontend_tg.arn]
   health_check_type         = "ELB"
-  health_check_grace_period = 300
+  health_check_grace_period = 600 # Increase to 10 minutes to allow for image pull and startup
 
   launch_template {
     id      = aws_launch_template.frontend_lt.id
@@ -636,10 +643,10 @@ resource "aws_autoscaling_group" "backend_asg" {
   max_size                  = 3
   min_size                  = 1
   desired_capacity          = 1
-  vpc_zone_identifier       = [aws_subnet.private_app_2.id]  # Only use 5b for now due to capacity issues in 5a
+  vpc_zone_identifier       = [aws_subnet.private_app_2.id] # Only use 5b for now due to capacity issues in 5a
   target_group_arns         = [aws_lb_target_group.backend_tg.arn]
   health_check_type         = "ELB"
-  health_check_grace_period = 300
+  health_check_grace_period = 600 # Increase to 10 minutes to allow for image pull and startup
 
   launch_template {
     id      = aws_launch_template.backend_lt.id

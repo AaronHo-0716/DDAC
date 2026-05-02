@@ -55,28 +55,71 @@ docker compose -f /opt/docker-compose.yml up -d
 
 # --- 6. Pull and run Backend application ---
 echo "Fetching credentials from SSM..."
-GH_PAT=$(aws ssm get-parameter --name /app/github_pat --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
-GH_USER=$(aws ssm get-parameter --name /app/github_username --query Parameter.Value --output text --region ap-southeast-5)
-DB_HOST=$(aws ssm get-parameter --name /app/db/host --query Parameter.Value --output text --region ap-southeast-5)
-DB_USER=$(aws ssm get-parameter --name /app/db/username --query Parameter.Value --output text --region ap-southeast-5)
-DB_PASS=$(aws ssm get-parameter --name /app/db_password --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
-DB_CONNECTION_STRING=$(aws ssm get-parameter --name /app/ConnectionStrings/DefaultConnection --with-decryption --query Parameter.Value --output text --region ap-southeast-5)
-REDIS_HOST=$(aws ssm get-parameter --name /app/redis_host --query Parameter.Value --output text --region ap-southeast-5)
-S3_BUCKET=$(aws ssm get-parameter --name /app/backend/s3_uploads_bucket --query Parameter.Value --output text --region ap-southeast-5)
+
+# Function to get SSM parameter with retry
+get_ssm_param() {
+    local param_name=$1
+    local max_retries=10
+    local retry=0
+    local result=""
+
+    while [ $retry -lt $max_retries ]; do
+        result=$(aws ssm get-parameter --name "$param_name" --with-decryption --query Parameter.Value --output text --region ap-southeast-5 2>&1)
+        if [[ ! "$result" == *"error"* ]] && [[ ! "$result" == *"ParameterNotFound"* ]]; then
+            echo "$result"
+            return 0
+        fi
+        echo "Attempt $retry: Waiting for parameter $param_name..."
+        retry=$((retry + 1))
+        sleep 10
+    done
+    echo "ERROR: Failed to get parameter $param_name after $max_retries attempts"
+    return 1
+}
+
+GH_PAT=$(get_ssm_param "/app/github_pat")
+echo "GH_PAT result: $GH_PAT"
+
+GH_USER=$(get_ssm_param "/app/github_username")
+echo "GH_USER result: $GH_USER"
+
+if [[ "$GH_PAT" == *"ERROR"* ]] || [[ "$GH_USER" == *"ERROR"* ]]; then
+    echo "ERROR: Failed to get GitHub credentials from SSM"
+    exit 1
+fi
+
+DB_HOST=$(get_ssm_param "/app/db/host")
+echo "DB_HOST: $DB_HOST"
+
+DB_USER=$(get_ssm_param "/app/db/username")
+DB_PASS=$(get_ssm_param "/app/db_password")
+DB_CONNECTION_STRING=$(get_ssm_param "/app/ConnectionStrings/DefaultConnection")
+echo "DB_CONNECTION_STRING: $DB_CONNECTION_STRING"
+
+REDIS_HOST=$(get_ssm_param "/app/redis_host")
+S3_BUCKET=$(get_ssm_param "/app/backend/s3_uploads_bucket")
 
 echo "Logging into GHCR..."
-echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin
+echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin 2>&1
+if [ $? -ne 0 ]; then
+    echo "ERROR: Docker login failed"
+    exit 1
+fi
 
-BACKEND_IMAGE="ghcr.io/$GH_USER/project-backend:latest"
-MIGRATION_IMAGE="ghcr.io/$GH_USER/project-migration:latest"
+# Convert username to lowercase (Docker requires lowercase image names)
+GH_USER_LOWER=$(echo "$GH_USER" | tr '[:upper:]' '[:lower:]')
+echo "Using lowercase username: $GH_USER_LOWER"
+
+BACKEND_IMAGE="ghcr.io/$GH_USER_LOWER/project-backend:latest"
+MIGRATION_IMAGE="ghcr.io/$GH_USER_LOWER/project-migration:latest"
 
 echo "Pulling images..."
-docker pull $BACKEND_IMAGE
-docker pull $MIGRATION_IMAGE
+docker pull $BACKEND_IMAGE 2>&1
+docker pull $MIGRATION_IMAGE 2>&1
 
 echo "Running migrations..."
-docker run --rm --name migration -e PGHOST=$DB_HOST -e PGUSER=$DB_USER -e PGPASSWORD=$DB_PASS -e PGDATABASE=neighbourhelp_postgres $MIGRATION_IMAGE
-if [ $? -ne 0 ]; then echo "Migration failed!"; fi
+docker run --rm --name migration -e PGHOST=$DB_HOST -e PGUSER=$DB_USER -e PGPASSWORD=$DB_PASS -e PGDATABASE=neighbourhelp_postgres $MIGRATION_IMAGE 2>&1
+if [ $? -ne 0 ]; then echo "WARNING: Migration failed!"; fi
 
 echo "Starting Backend..."
 cat > /opt/docker-backend.yml << EOF
@@ -91,7 +134,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=$DB_CONNECTION_STRING
       - Redis__ConnectionString=$REDIS_HOST:6379
-      - AllowedOrigins=https://neighbourhelp.me,http://neighbourhelp.me
+      - AllowedOrigins=https://neighbourhelp.me,http://neighbourhelp.me,https://www.neighbourhelp.me,http://www.neighbourhelp.me
       - Jwt__Key=Your_Super_Secret_Fallback_Key_32_Chars_Long!
       - Jwt__Issuer=NeighborHelpApi
       - Jwt__Audience=NeighborHelpFrontend
@@ -102,4 +145,12 @@ services:
       - Storage__S3__MaxFileSizeMb=10
 EOF
 
-docker compose -f /opt/docker-backend.yml up -d
+docker compose -f /opt/docker-backend.yml up -d 2>&1
+sleep 10
+
+echo "Checking if backend is running..."
+docker ps
+docker logs backend 2>&1 || echo "No backend container logs yet"
+
+# Simple health check test
+curl -f http://localhost:5073/health/live || echo "WARNING: Backend health check failed"
