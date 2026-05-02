@@ -295,6 +295,14 @@ export function resolveStoredImageUrl(value?: string | null): string | undefined
     return value;
   }
 
+  if (value.startsWith("/api/storage/")) {
+    return value;
+  }
+
+  if (value.startsWith("api/storage/")) {
+    return `/${value}`;
+  }
+
   const objectKey = value.replace(/^\/+/, "");
   if (!objectKey) return undefined;
 

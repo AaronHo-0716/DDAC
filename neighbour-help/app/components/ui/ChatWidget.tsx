@@ -12,8 +12,8 @@ import {
 import {
   ConversationType,
   type ChatMessage,
+  type ChatParticipant,
   type Conversation,
-  UserRole,
 } from "@/app/types";
 import { useAuth } from "@/app/lib/context/AuthContext";
 import { messagesService, supportService } from "@/app/lib/api/messages";
@@ -27,15 +27,13 @@ interface ChatHubMessagePayload {
 }
 
 const getChatHubBaseUrl = () => {
-  if (typeof window !== "undefined") {
-    return window.location.origin;
-  }
-
-  return (
+  const envBase =
     process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-    "http://localhost:5073"
-  );
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+
+  if (envBase) return envBase;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "http://localhost:5073";
 };
 
 const CHAT_HUB_URL = `${getChatHubBaseUrl().replace(/\/+$/, "")}/api/chat-hub`;
@@ -99,19 +97,117 @@ function getConversationDisplay(
     (p) => p.userId !== currentUserId,
   );
   const otherUserName =
-    others.length > 0 ? others.map((p) => p.name).join(", ") : "Unknown user";
+    others.length > 0 ? others.map((p) => p.name).join(", ") : "";
   if (conversation.type === ConversationType.JobChat) {
     return {
-      title: otherUserName,
+      title: otherUserName || "Unknown user",
       subtitle: conversation.relatedJobTitle
         ? `Job: ${conversation.relatedJobTitle}`
         : "Job Chat",
     };
   }
   if (conversation.type === ConversationType.AdminSupport) {
-    return { title: "Admin Support", subtitle: otherUserName };
+    return {
+      title: "Admin Support",
+      subtitle: otherUserName || "Support",
+    };
   }
-  return { title: otherUserName, subtitle: undefined };
+  return { title: otherUserName || "Unknown user", subtitle: undefined };
+}
+
+type AvatarSize = "xs" | "sm" | "md";
+
+const AVATAR_SIZE_CLASSES: Record<AvatarSize, string> = {
+  xs: "w-6 h-6 text-[10px]",
+  sm: "w-8 h-8 text-[11px]",
+  md: "w-9 h-9 text-xs",
+};
+
+function getInitials(name: string) {
+  const cleaned = name.trim();
+  if (!cleaned) return "?";
+  const parts = cleaned.split(/\s+/);
+  const first = parts[0]?.[0] ?? "?";
+  const second = parts.length > 1 ? parts[1]?.[0] ?? "" : "";
+  return `${first}${second}`.toUpperCase();
+}
+
+type AvatarProps = {
+  name: string;
+  avatarUrl?: string;
+  size?: AvatarSize;
+  className?: string;
+};
+
+function Avatar({ name, avatarUrl, size = "sm", className = "" }: AvatarProps) {
+  const sizeClasses = AVATAR_SIZE_CLASSES[size];
+  const label = name.trim() || "Unknown user";
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={`${label} avatar`}
+        className={`${sizeClasses} rounded-full object-cover border border-[#E5E7EB] ${className}`}
+      />
+    );
+  }
+  return (
+    <div
+      role="img"
+      aria-label={`${label} avatar`}
+      className={`${sizeClasses} rounded-full bg-[#0B74FF] text-white flex items-center justify-center font-semibold uppercase border border-[#E5E7EB] ${className}`}
+    >
+      {getInitials(label)}
+    </div>
+  );
+}
+
+function AvatarStack({
+  participants,
+  size = "sm",
+  fallbackName = "Unknown user",
+}: {
+  participants: ChatParticipant[];
+  size?: AvatarSize;
+  fallbackName?: string;
+}) {
+  const items = participants.slice(0, 2);
+  if (items.length === 0) {
+    return <Avatar name={fallbackName} size={size} />;
+  }
+  if (items.length === 1) {
+    return (
+      <Avatar
+        name={items[0].name}
+        avatarUrl={items[0].avatarUrl}
+        size={size}
+      />
+    );
+  }
+  return (
+    <div className="flex items-center -space-x-2">
+      {items.map((participant, index) => (
+        <div
+          key={participant.userId || `${participant.name}-${index}`}
+          className={index === 0 ? "z-10" : "z-0"}
+        >
+          <Avatar
+            name={participant.name}
+            avatarUrl={participant.avatarUrl}
+            size={size}
+            className="ring-2 ring-white"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function getOtherParticipants(
+  conversation: Conversation,
+  currentUserId: string,
+) {
+  return conversation.participants.filter((p) => p.userId !== currentUserId);
 }
 
 export default function ChatWidget() {
@@ -150,6 +246,16 @@ export default function ChatWidget() {
     () => conversations.find((c) => c.id === activeConversationId) ?? null,
     [conversations, activeConversationId],
   );
+
+  const activeConversationOtherParticipants = useMemo(() => {
+    if (!activeConversation || !user?.id) return [];
+    return getOtherParticipants(activeConversation, user.id);
+  }, [activeConversation, user?.id]);
+
+  const activeParticipantLookup = useMemo(() => {
+    if (!activeConversation) return new Map<string, ChatParticipant>();
+    return new Map(activeConversation.participants.map((p) => [p.userId, p]));
+  }, [activeConversation]);
 
   const totalUnreadBadge = useMemo(() => {
     return conversations.reduce(
@@ -494,12 +600,25 @@ export default function ChatWidget() {
           <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               {activeConversationId ? (
-                <button
-                  onClick={() => setActiveConversationId(null)}
-                  className="w-8 h-8 rounded-lg hover:bg-[#F7F8FA] text-[#6B7280] flex items-center justify-center"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
+                <>
+                  <button
+                    onClick={() => setActiveConversationId(null)}
+                    className="w-8 h-8 rounded-lg hover:bg-[#F7F8FA] text-[#6B7280] flex items-center justify-center"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  {activeConversation && (
+                    <AvatarStack
+                      participants={activeConversationOtherParticipants}
+                      size="sm"
+                      fallbackName={
+                        activeConversation.type === ConversationType.AdminSupport
+                          ? "Support"
+                          : "Unknown user"
+                      }
+                    />
+                  )}
+                </>
               ) : (
                 <MessageCircle className="w-4 h-4 text-[#111827]" />
               )}
@@ -539,6 +658,10 @@ export default function ChatWidget() {
                       conversation,
                       user.id,
                     );
+                    const otherParticipants = getOtherParticipants(
+                      conversation,
+                      user.id,
+                    );
                     return (
                       <button
                         key={conversation.id}
@@ -546,21 +669,32 @@ export default function ChatWidget() {
                         className="w-full text-left px-4 py-3 hover:bg-[#F7F8FA] transition-colors"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-[#111827] truncate">
-                              {display.title}
-                            </p>
-                            {display.subtitle && (
-                              <p className="text-[11px] text-[#4B5563] truncate mt-0.5 font-medium">
-                                {display.subtitle}
+                          <div className="flex items-start gap-3 min-w-0">
+                            <AvatarStack
+                              participants={otherParticipants}
+                              size="sm"
+                              fallbackName={
+                                conversation.type === ConversationType.AdminSupport
+                                  ? "Support"
+                                  : "Unknown user"
+                              }
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-[#111827] truncate">
+                                {display.title}
                               </p>
-                            )}
-                            <p className="text-xs text-[#6B7280] truncate mt-0.5">
-                              {conversation.lastMessage?.type === "image"
-                                ? "[Image]"
-                                : (conversation.lastMessage?.content ??
-                                  "No messages yet")}
-                            </p>
+                              {display.subtitle && (
+                                <p className="text-[11px] text-[#4B5563] truncate mt-0.5 font-medium">
+                                  {display.subtitle}
+                                </p>
+                              )}
+                              <p className="text-xs text-[#6B7280] truncate mt-0.5">
+                                {conversation.lastMessage?.type === "image"
+                                  ? "[Image]"
+                                  : (conversation.lastMessage?.content ??
+                                    "No messages yet")}
+                              </p>
+                            </div>
                           </div>
                           <div className="flex flex-col items-end flex-shrink-0">
                             <span className="text-[10px] text-[#9CA3AF]">
@@ -586,11 +720,19 @@ export default function ChatWidget() {
                   {messages.map((message) => {
                     const mine = message.senderId === user.id;
                     const isImageMessage = message.type === "image";
+                    const sender = activeParticipantLookup.get(message.senderId);
                     return (
                       <div
                         key={message.id}
-                        className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                        className={`flex ${mine ? "justify-end" : "justify-start"} items-end gap-2`}
                       >
+                        {!mine && (
+                          <Avatar
+                            name={sender?.name ?? "Unknown user"}
+                            avatarUrl={sender?.avatarUrl}
+                            size="xs"
+                          />
+                        )}
                         <div
                           className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${mine ? "bg-[#0B74FF] text-white rounded-br-md" : "bg-white text-[#111827] rounded-bl-md"}`}
                         >

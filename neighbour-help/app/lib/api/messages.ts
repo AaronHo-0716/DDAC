@@ -22,6 +22,7 @@ interface RawParticipant {
   name?: string;
   role?: ChatParticipant["role"];
   avatarUrl?: string | null;
+  avatarurl?: string | null;
   averageRating?: number | null;
 }
 
@@ -75,7 +76,7 @@ const normalizeConversation = (data: RawConversation): Conversation => ({
     userId: p.userId ?? "",
     name: p.name ?? "Unknown user",
     role: p.role ?? "homeowner",
-    avatarUrl: p.avatarUrl || undefined,
+    avatarUrl: (p.avatarUrl ?? p.avatarurl) || undefined,
     averageRating: p.averageRating || undefined,
   })),
 });
