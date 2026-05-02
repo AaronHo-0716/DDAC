@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Bell, ChevronDown, Wrench, Menu, X } from "lucide-react";
 import { useAuth } from "@/app/lib/context/AuthContext";
+import { useNotifications } from "@/app/lib/context/NotificationContext";
 import NotificationsPanel from "@/app/components/ui/NotificationsPanel";
 import ThemeToggle from "@/app/components/ui/ThemeToggle";
-import { notificationsService } from "@/app/lib/api/notifications";
 
 const homeownerNavLinks = [
   { label: "My Jobs", href: "/my-jobs" },
@@ -35,8 +35,8 @@ export default function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const navLinks = user
     ? user.role === "handyman"
       ? handymanNavLinks
@@ -45,30 +45,6 @@ export default function Navbar() {
       : homeownerNavLinks
     : [];
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    const refreshUnread = async () => {
-      try {
-        const response = await notificationsService.getNotifications();
-        setUnreadCount(response.unreadCount);
-      } catch {
-        setUnreadCount(0);
-      }
-    };
-
-    void refreshUnread();
-    const listener = () => {
-      void refreshUnread();
-    };
-    window.addEventListener("nh_notifications_updated", listener);
-
-    return () => {
-      window.removeEventListener("nh_notifications_updated", listener);
-    };
-  }, [user]);
 
   const handleSignOut = useCallback(async () => {
     setDropdownOpen(false);
@@ -121,7 +97,9 @@ export default function Navbar() {
                 >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#0B74FF] rounded-full" />
+                    <span className="absolute top-0.5 right-0.5 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-[#0B74FF] text-[10px] font-semibold text-white flex items-center justify-center">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
                   )}
                 </button>
 

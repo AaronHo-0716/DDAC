@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
 import { AuthProvider } from "./lib/context/AuthContext";
+import { NotificationProvider } from "./lib/context/NotificationContext";
 import { ChatWidgetProvider } from "./lib/context/ChatWidgetContext";
 import { ThemeProvider } from "./lib/context/ThemeContext";
 import ChatWidget from "./components/ui/ChatWidget";
@@ -29,12 +30,14 @@ export default function RootLayout({
       <body className={`${geistSans.variable} antialiased min-h-screen flex flex-col`}>
         <ThemeProvider>
           <AuthProvider>
-            <ChatWidgetProvider>
-              <Navbar />
-              <main className="flex-1">{children}</main>
-              <Footer />
-              <ChatWidget />
-            </ChatWidgetProvider>
+            <NotificationProvider>
+              <ChatWidgetProvider>
+                <Navbar />
+                <main className="flex-1">{children}</main>
+                <Footer />
+                <ChatWidget />
+              </ChatWidgetProvider>
+            </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

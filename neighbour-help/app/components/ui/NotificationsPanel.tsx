@@ -1,40 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { X, DollarSign, CheckCircle, Truck, Star, Bell } from "lucide-react";
-import {
-  HubConnection,
-  HubConnectionBuilder,
-  LogLevel,
-  HttpTransportType,
-  HubConnectionState,
-} from "@microsoft/signalr";
 import type { Notification, NotificationEventType } from "@/app/types";
-import { notificationsService } from "@/app/lib/api/notifications";
-import { getAccessToken } from "@/app/lib/api/client";
-
-const getNotificationHubBaseUrl = () => {
-  if (typeof window !== "undefined") {
-    return window.location.origin;
-  }
-
-  return (
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-    "http://localhost:5073"
-  );
-};
-
-const NOTIF_HUB_URL = `${getNotificationHubBaseUrl().replace(/\/+$/, "")}/api/notification-hub`;
-
-if (typeof window !== "undefined") {
-  console.log("[NotificationsPanel] SignalR Hub URL:", NOTIF_HUB_URL);
-  console.log("[NotificationsPanel] Environment:", {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
-  });
-}
+import { useNotifications } from "@/app/lib/context/NotificationContext";
 
 const NOTIF_CONFIG: Record<
   NotificationEventType,
@@ -89,183 +59,22 @@ export default function NotificationsPanel({
   onClose,
 }: NotificationsPanelProps) {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [fetching, setFetching] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    notifications,
+    unreadCount,
+    loading: fetching,
+    loaded,
+    error,
+    loadNotifications,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications();
 
-  const connectionRef = useRef<HubConnection | null>(null);
-
-  const load = useCallback(async () => {
-    setFetching(true);
-    try {
-      const response = await notificationsService.getNotifications();
-      setNotifications(response.notifications || []);
-    } catch {
-      setError("Failed to load notifications.");
-    } finally {
-      setFetching(false);
+  useEffect(() => {
+    if (!loaded) {
+      void loadNotifications();
     }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    const token = getAccessToken();
-    if (!token) return;
-
-    let isSubscribed = true;
-
-    const connection = new HubConnectionBuilder()
-      .withUrl(NOTIF_HUB_URL, {
-        accessTokenFactory: () => token,
-        transport: HttpTransportType.WebSockets,
-        skipNegotiation: true, // Use WebSocket directly, no HTTP negotiation
-      })
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning) // Show warnings and errors
-      .build();
-
-    connection.on(
-      "ReceiveNotification",
-      (
-        incoming: Partial<{
-          id: string;
-          type: Notification["type"];
-          message: string;
-          isRead: boolean;
-          createdAtUtc: string;
-          relatedJobId: string;
-        }>,
-      ) => {
-        if (!isSubscribed) return;
-        const newNotif: Notification = {
-          id: incoming.id ?? crypto.randomUUID(),
-          type: incoming.type ?? "system",
-          message: incoming.message ?? "",
-          read: incoming.isRead ?? false,
-          createdAt: incoming.createdAtUtc ?? new Date().toISOString(),
-          relatedJobId: incoming.relatedJobId,
-        };
-        setNotifications((prev) => [newNotif, ...prev]);
-      },
-    );
-
-    connection.on("NotificationMarkedRead", (id: string) => {
-      if (!isSubscribed) return;
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-      );
-    });
-
-    connection.on("AllNotificationsMarkedRead", () => {
-      if (!isSubscribed) return;
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    });
-
-    connectionRef.current = connection;
-
-    const startConnection = async () => {
-      try {
-        // Double check state before starting
-        if (
-          isSubscribed &&
-          connection.state === HubConnectionState.Disconnected
-        ) {
-          console.log(
-            "[NotificationsPanel] Connecting to SignalR hub...",
-            NOTIF_HUB_URL,
-          );
-          await connection.start();
-          console.log("[NotificationsPanel] SignalR connection established");
-        }
-      } catch (err) {
-        // If it was told to stop while starting, we ignore the error
-        if (isSubscribed) {
-          console.error("[NotificationsPanel] SignalR Connection Error:", err);
-
-          // Try to provide diagnostic info
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          if (errorMsg.includes("NetworkError") || errorMsg.includes("fetch")) {
-            console.error(
-              "[NotificationsPanel] Backend appears unreachable at:",
-              NOTIF_HUB_URL,
-            );
-            console.error(
-              "[NotificationsPanel] Please ensure backend is running on port 5073",
-            );
-          }
-          if (errorMsg.includes("negotiation")) {
-            console.error(
-              "[NotificationsPanel] Failed during CORS negotiation - check CORS policy",
-            );
-          }
-        }
-      }
-    };
-
-    void startConnection();
-
-    return () => {
-      isSubscribed = false;
-      const conn = connectionRef.current;
-      if (conn) {
-        // FIX: Prevent calling stop() while in 'Connecting' state
-        if (
-          conn.state !== HubConnectionState.Disconnected &&
-          conn.state !== HubConnectionState.Connecting
-        ) {
-          conn.stop().catch(() => {
-            /* ignore teardown errors */
-          });
-        } else if (conn.state === HubConnectionState.Connecting) {
-          // If still connecting, SignalR doesn't like stop().
-          // We just clear the reference and let it finish/timeout silently.
-        }
-        connectionRef.current = null;
-      }
-    };
-  }, []);
-
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications],
-  );
-
-  const markAsRead = useCallback(
-    (id: string) => {
-      const target = notifications.find((n) => n.id === id);
-      if (!target || target.read) return;
-
-      void (async () => {
-        try {
-          await notificationsService.markAsRead(id);
-          setNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-          );
-          window.dispatchEvent(new Event("nh_notifications_updated"));
-        } catch (err) {
-          setError("Failed to update notification.");
-        }
-      })();
-    },
-    [notifications],
-  );
-
-  const markAllAsRead = useCallback(() => {
-    if (notifications.every((n) => n.read)) return;
-
-    void (async () => {
-      try {
-        await notificationsService.markAllAsRead();
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-        window.dispatchEvent(new Event("nh_notifications_updated"));
-      } catch (err) {
-        setError("Failed to mark all read.");
-      }
-    })();
-  }, [notifications]);
+  }, [loadNotifications, loaded]);
 
   const handleViewAllNotifications = useCallback(() => {
     onClose();
@@ -321,11 +130,13 @@ export default function NotificationsPanel({
             </div>
           ) : (
             <div className="divide-y divide-[#F3F4F6]">
-              {notifications.map((notif) => {
+
+              {notifications.map((notif, index) => {
                 const cfg = NOTIF_CONFIG[notif.type] || NOTIF_CONFIG.system;
                 return (
                   <div
-                    key={notif.id}
+
+                    key={`${notif.id}-${index}`}
                     onClick={() => markAsRead(notif.id)}
                     className={`flex items-start gap-3 px-5 py-4 hover:bg-[#F7F8FA] transition-colors cursor-pointer ${!notif.read ? "bg-blue-50/40" : ""}`}
                   >
@@ -366,3 +177,4 @@ export default function NotificationsPanel({
     </>
   );
 }
+

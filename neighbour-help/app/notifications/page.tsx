@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { Bell, CheckCircle, ChevronLeft, DollarSign, Star, Truck } from "lucide-react";
 import type { Notification, NotificationEventType } from "@/app/types";
 import { useRequireRole } from "@/app/lib/hooks/useRequireRole";
-import { notificationsService } from "@/app/lib/api/notifications";
+import { useNotifications } from "@/app/lib/context/NotificationContext";
 
 const NOTIF_CONFIG: Record<
   NotificationEventType,
@@ -54,76 +54,23 @@ function timeAgo(iso: string) {
 
 export default function NotificationsPage() {
   const { authorized, loading } = useRequireRole(["homeowner", "handyman", "admin"]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [fetching, setFetching] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    notifications,
+    unreadCount,
+    loading: fetching,
+    loaded,
+    error,
+    loadNotifications,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications();
 
   useEffect(() => {
     if (!authorized) return;
-
-    let cancelled = false;
-
-    const load = async () => {
-      setFetching(true);
-      setError(null);
-      try {
-        const response = await notificationsService.getNotifications();
-        if (!cancelled) {
-          setNotifications(response.notifications);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load notifications.");
-        }
-      } finally {
-        if (!cancelled) {
-          setFetching(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authorized]);
-
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
-
-  const markAsRead = useCallback((id: string) => {
-    const target = notifications.find((n) => n.id === id);
-    if (!target || target.read) return;
-
-    void (async () => {
-      try {
-        await notificationsService.markAsRead(id);
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-        );
-        window.dispatchEvent(new Event("nh_notifications_updated"));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update notification.");
-      }
-    })();
-  }, [notifications]);
-
-  const markAllAsRead = useCallback(() => {
-    if (notifications.every((n) => n.read)) return;
-
-    void (async () => {
-      try {
-        await notificationsService.markAllAsRead();
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-        window.dispatchEvent(new Event("nh_notifications_updated"));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to mark all notifications as read.");
-      }
-    })();
-  }, [notifications]);
+    if (!loaded) {
+      void loadNotifications();
+    }
+  }, [authorized, loaded, loadNotifications]);
 
   if (loading || !authorized) {
     return null;
@@ -170,22 +117,21 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <div className="divide-y divide-[#F3F4F6]">
-              {notifications.map((notif) => {
-                const cfg = NOTIF_CONFIG[notif.type];
+              {notifications.map((notif, index) => {
+                const cfg = NOTIF_CONFIG[notif.type] || NOTIF_CONFIG["system"];
                 return (
                   <div
-                    key={notif.id}
+                    key={`${notif.id}-${index}`}
                     onClick={() => markAsRead(notif.id)}
                     className={`flex items-start gap-3 px-5 py-4 hover:bg-[#F7F8FA] transition-colors cursor-pointer ${
                       !notif.read ? "bg-blue-50/40" : ""
                     }`}
                   >
                     <div
-                      className={`w-9 h-9 ${cfg.bg} ${cfg.color} rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5`}
+                      className={`w-9 h-9 ${cfg?.bg || "bg-gray-100"} ${cfg?.color || "text-gray-700"} rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5`}
                     >
-                      {cfg.icon}
+                      {cfg?.icon || <Bell className="w-4 h-4" />}
                     </div>
-
                     <div className="flex-1 min-w-0">
                       <p
                         className={`text-sm leading-snug ${
@@ -210,3 +156,4 @@ export default function NotificationsPage() {
     </div>
   );
 }
+

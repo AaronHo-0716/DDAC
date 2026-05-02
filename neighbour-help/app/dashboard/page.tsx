@@ -14,13 +14,19 @@ import JobCard from "../components/ui/JobCard";
 import type { Job } from "../types";
 import { useRequireRole } from "../lib/hooks/useRequireRole";
 import { jobsService } from "../lib/api/jobs";
-import { notificationsService } from "../lib/api/notifications";
+import { useNotifications } from "../lib/context/NotificationContext";
 
 export default function DashboardPage() {
   const { authorized, loading } = useRequireRole("homeowner");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState<number | null>(null);
+  const {
+    notifications,
+    unreadCount,
+    loading: notificationsLoading,
+    loaded,
+    loadNotifications,
+  } = useNotifications();
 
   useEffect(() => {
     if (!authorized) return;
@@ -48,30 +54,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!authorized) return;
-
-    let ignore = false;
-
-    const fetchUnreadCount = async () => {
-      try {
-        const response = await notificationsService.getNotifications();
-        if (!ignore) setUnreadCount(response.unreadCount);
-      } catch {
-        if (!ignore) setUnreadCount(0);
-      }
-    };
-
-    const onNotificationsUpdated = () => {
-      void fetchUnreadCount();
-    };
-
-    void fetchUnreadCount();
-    window.addEventListener("nh_notifications_updated", onNotificationsUpdated);
-
-    return () => {
-      ignore = true;
-      window.removeEventListener("nh_notifications_updated", onNotificationsUpdated);
-    };
-  }, [authorized]);
+    if (!loaded) {
+      void loadNotifications();
+    }
+  }, [authorized, loaded, loadNotifications]);
 
   if (loading || !authorized) {
     return null;
