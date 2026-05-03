@@ -44,7 +44,7 @@ public class StorageController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to proxy storage object {Bucket}/{Key}", bucket, key);
-            return StatusCode(StatusCodes.Status500InternalServerError, , new { error = ex.Message, details = ex.ToString() });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message, details = ex.ToString() });
         }
     }
 }
