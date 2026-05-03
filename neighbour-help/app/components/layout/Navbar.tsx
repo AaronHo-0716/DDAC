@@ -23,10 +23,11 @@ const handymanNavLinks = [
 ];
 
 const adminNavLinks = [
-  { label: "Admin Dashboard", href: "/admin" },
+  { label: "Dashboard", href: "/admin" },
   { label: "Jobs", href: "/admin/jobs" },
   { label: "Payments", href: "/admin/payments" },
   { label: "Reports", href: "/admin/reports" },
+  { label: "Ratings", href: "/admin/ratings" },
   { label: "Bid Transactions", href: "/admin/transactions/bids" },
   { label: "Users", href: "/admin/users" },
 ];

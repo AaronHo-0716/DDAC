@@ -639,7 +639,7 @@ export const adminService = {
 
   async getHandymanRatings(page = 1, pageSize = 1000): Promise<AdminHandymanRatingItem[]> {
     const response = await apiClient.get<RawHandymanRatingListResponse>(
-      `/admin/ratings?page=${page}&pageSize=${pageSize}`
+      `/admin/handymen-ratings?page=${page}&pageSize=${pageSize}`
     );
     const rows = Array.isArray(response?.data) ? response.data : [];
     return rows.map((row) => toAdminHandymanRatingItem(row));
