@@ -58,6 +58,15 @@ export interface VerifyPasswordOtpResponse {
   resetToken?: string;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
 export interface AuthResponse {
   user: User;
   tokens: AuthTokens;
@@ -71,7 +80,8 @@ export interface UpdateProfileRequest {
 }
 
 export interface ChangePasswordRequest {
-  currentPassword: string;
+  otp: string;
+  oldPassword: string;
   newPassword: string;
 }
 

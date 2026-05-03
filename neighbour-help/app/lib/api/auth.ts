@@ -1,11 +1,13 @@
 import {
   AuthResponse,
   ChangePasswordRequest,
+  ForgotPasswordRequest,
   ForgotPasswordOtpRequest,
   ForgotPasswordOtpResponse,
   LoginRequest,
   LogoutRequest,
   RegisterRequest,
+  ResetPasswordRequest,
   UpdateProfileRequest,
   UpdateUserSettingsRequest,
   User,
@@ -177,13 +179,36 @@ export const authService = {
   },
 
   /**
-   * Password change endpoint is not available in the current backend API surface.
+   * POST /api/auth/change-password
+   * Requires OTP + current password; returns new tokens.
    */
   async changePassword(data: ChangePasswordRequest): Promise<void> {
-    void data;
-    throw new Error(
-      "Password change is not available yet. Current backend plan does not expose /api/account/change-password."
-    );
+    const response = await apiClient.post<AuthResponse>("/auth/change-password", data);
+    setTokens(response.tokens.accessToken, response.tokens.refreshToken);
+  },
+
+  /**
+   * POST /api/auth/otp/send
+   * Sends a one-time password to the email address.
+   */
+  async sendOtp(email: string): Promise<{ message?: string }> {
+    return apiClient.post<{ message?: string }>("/auth/otp/send", { email }, { authenticated: false });
+  },
+
+  /**
+   * POST /api/auth/forgot-password
+   * Sends a reset link to the email address.
+   */
+  async forgotPassword(data: ForgotPasswordRequest): Promise<void> {
+    await apiClient.post<unknown>("/auth/forgot-password", data, { authenticated: false });
+  },
+
+  /**
+   * POST /api/auth/reset-password
+   * Resets password with reset token.
+   */
+  async resetPassword(data: ResetPasswordRequest): Promise<void> {
+    await apiClient.post<unknown>("/auth/reset-password", data, { authenticated: false });
   },
 
   /**
