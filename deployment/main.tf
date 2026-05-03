@@ -723,6 +723,7 @@ resource "aws_db_instance" "postgres" {
 # --- S3 Bucket for User Uploads ---
 resource "aws_s3_bucket" "user_uploads" {
   bucket_prefix = "neighbourhelp-uploads-"
+  force_destroy = true
 }
 
 # Block public access
