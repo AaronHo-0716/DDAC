@@ -27,7 +27,14 @@ public abstract class BaseController : ControllerBase
 
     protected ObjectResult HandleError(HttpRequestException ex)
     {
+        HttpContext context = HttpContext;
         var statusCode = (int)(ex.StatusCode ?? HttpStatusCode.InternalServerError);
-        return StatusCode(statusCode, new { message = ex.Message });
+        return StatusCode(statusCode, new
+        {
+            code = statusCode,
+            title = "Request Error",
+            message = ex.Message,
+            instance = context.Request.Path
+        });
     }
 }
