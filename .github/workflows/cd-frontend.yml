@@ -72,12 +72,23 @@ jobs:
             --comment "Deploy frontend container" \
             --parameters 'commands=[
               "docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}",
-              "docker pull ${{ steps.meta-frontend.outputs.tags }}",
-              "docker stop frontend || true",
-              "docker rm frontend || true",
               "API_URL=$(aws ssm get-parameter --name /app/backend/api_url --query Parameter.Value --output text)",
               "echo \"Using API_URL=$API_URL\"",
-              "docker run -d --restart always --name frontend -p 3000:3000 -e API_URL=$API_URL ${{ steps.meta-frontend.outputs.tags }}",
+              "cat > /opt/docker-frontend.yml << EOF",
+              "services:",
+              "  frontend:",
+              "    image: ${{ steps.meta-frontend.outputs.tags }}",
+              "    container_name: frontend",
+              "    restart: always",
+              "    ports:",
+              "      - \"3000:3000\"",
+              "    environment:",
+              "      - API_URL=$API_URL",
+              "      - NODE_ENV=production",
+              "      - PORT=3000",
+              "EOF",
+              "docker compose -f /opt/docker-frontend.yml pull",
+              "docker compose -f /opt/docker-frontend.yml up -d",
               "sleep 10",
               "docker ps | grep frontend"
             ]' \

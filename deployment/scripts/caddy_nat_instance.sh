@@ -79,6 +79,12 @@ NEW_CADDYFILE="neighbourhelp.me {
             header_up X-Forwarded-Proto https
         }
     }
+    handle /api/storage/* {
+        reverse_proxy $ALB_DNS:5073 {
+            header_up Host $ALB_DNS
+            header_up X-Forwarded-Proto https
+        }
+    }
     handle /api/chat-hub* {
         reverse_proxy $ALB_DNS:5073 {
             header_up Host $ALB_DNS
