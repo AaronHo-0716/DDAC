@@ -101,7 +101,7 @@ jobs:
               "docker pull ${{ steps.meta-migration.outputs.tags }}",
               "DB_HOST=$(aws ssm get-parameter --name /app/db/host --query Parameter.Value --output text)",
               "DB_USER=$(aws ssm get-parameter --name /app/db/username --query Parameter.Value --output text)",
-              "DB_PASS=$(aws ssm get-parameter --name /app/db/password --with-decryption --query Parameter.Value --output text)",
+              "DB_PASS=$(aws ssm get-parameter --name /app/db_password --with-decryption --query Parameter.Value --output text)",
               "echo \"Running database migrations...\"",
               "docker run --rm --name migration -e PGHOST=$DB_HOST -e PGUSER=$DB_USER -e PGPASSWORD=$DB_PASS -e PGDATABASE=neighbourhelp_postgres ${{ steps.meta-migration.outputs.tags }}",
               "if [ $? -ne 0 ]; then echo \"Migration failed, aborting deployment.\"; exit 1; fi",
