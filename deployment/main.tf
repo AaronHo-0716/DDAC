@@ -534,12 +534,6 @@ resource "aws_lb_target_group" "backend_tg" {
   protocol = "HTTP"
   vpc_id   = aws_vpc.app_vpc.id
 
-  stickiness {
-    type            = "lb_cookie"
-    cookie_duration = 86400
-    enabled         = true
-  }
-
   health_check {
     path                = "/health/live"
     interval            = 30

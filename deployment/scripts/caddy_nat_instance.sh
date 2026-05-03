@@ -70,9 +70,25 @@ fi
 
 # Generate new Caddyfile
 NEW_CADDYFILE="neighbourhelp.me {
-    handle /api/* {
+    tls yanxun0716@gmail.com
+
+    handle /api/proxy/* {
+        uri replace /api/proxy /api
         reverse_proxy $ALB_DNS:5073 {
             header_up Host $ALB_DNS
+            header_up X-Forwarded-Proto https
+        }
+    }
+    handle /api/chat-hub* {
+        reverse_proxy $ALB_DNS:5073 {
+            header_up Host $ALB_DNS
+            header_up X-Forwarded-Proto https
+        }
+    }
+    handle /api/notification-hub* {
+        reverse_proxy $ALB_DNS:5073 {
+            header_up Host $ALB_DNS
+            header_up X-Forwarded-Proto https
         }
     }
     handle /grafana/* {
@@ -84,13 +100,8 @@ NEW_CADDYFILE="neighbourhelp.me {
     handle {
         reverse_proxy $ALB_DNS:3000 {
             header_up Host $ALB_DNS
+            header_up X-Forwarded-Proto https
         }
-    }
-}
-
-neighbourhelp.me:5073 {
-    reverse_proxy $ALB_DNS:5073 {
-        header_up Host $ALB_DNS
     }
 }"
 

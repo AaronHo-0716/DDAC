@@ -15,8 +15,8 @@ public class S3StorageOptions
     public string ServiceUrl { get; set; } = string.Empty;
     public string PublicBaseUrl { get; set; } = string.Empty;
     public bool ForcePathStyle { get; set; } = true;
-    public string AccessKey { get; set; } = "test";
-    public string SecretKey { get; set; } = "test";
+    public string AccessKey { get; set; } = string.Empty;
+    public string SecretKey { get; set; } = string.Empty;
     public bool AutoCreateBucket { get; set; } = true;
     public int MaxFileSizeMb { get; set; } = 10;
 }
