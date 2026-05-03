@@ -12,7 +12,7 @@ public interface IAuthService
     Task Logout(LogoutRequest request);
     Task<HandymanVerificationDto> CreateHandymanVerification();
     Task SendOtpAsync(string email, EmailPurpose purpose);
-    Task<string> ForgotPasswordAsync(string email);
+    Task ForgotPasswordAsync(string email);
     Task<AuthResponse> ResetPasswordAsync(ResetPasswordRequest req);
     Task<AuthResponse> ChangePasswordAsync(ChangePasswordRequest req);
 }

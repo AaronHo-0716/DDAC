@@ -106,7 +106,8 @@ public class AuthController(IAuthService authService) : BaseController
     {
         try 
         { 
-            return Ok(await authService.ForgotPasswordAsync(req.Email)); 
+            await authService.ForgotPasswordAsync(req.Email);
+            return NoContent();
         }
         catch (HttpRequestException ex) { return HandleError(ex); }
     }

@@ -162,11 +162,16 @@ public class AuthService(ServiceDependencies deps, IConfiguration config) : Base
         await Context.SaveChangesAsync();
     }
 
-    public async Task<string> ForgotPasswordAsync(string email)
+    public async Task ForgotPasswordAsync(string email)
     {
         var emailClean = email.ToLower().Trim();
-        var user = await Context.Users.FirstOrDefaultAsync(u => u.Email == emailClean) ??
-            throw new HttpRequestException("Unable to process password reset request. Please try again or contact support if the issue persists.", null, HttpStatusCode.Forbidden);
+        var user = await Context.Users.FirstOrDefaultAsync(u => u.Email == emailClean);
+
+        if (user == null)
+        {
+            Logger.LogInformation("Password reset requested for unknown email: {Email}", emailClean);
+            return;
+        }
 
         string resetToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         
@@ -190,7 +195,6 @@ public class AuthService(ServiceDependencies deps, IConfiguration config) : Base
             </div>");
 
         Logger.LogInformation("Password reset link sent to {Email}", user.Email);
-        return resetToken;
     }
 
     public async Task<AuthResponse> ResetPasswordAsync(ResetPasswordRequest req)

@@ -14,20 +14,17 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
 
   const normalizedEmail = email.trim().toLowerCase();
 
   const submitEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setMessage(null);
     setSubmitting(true);
 
     try {
       await authService.forgotPassword({ email: normalizedEmail });
       setStep("sent");
-      setMessage("If an account exists for this email, a reset link has been sent.");
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message || "Unable to send reset email.");
@@ -59,12 +56,6 @@ export default function ForgotPasswordPage() {
         {error && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
             {error}
-          </div>
-        )}
-
-        {message && (
-          <div className="mb-4 px-4 py-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700">
-            {message}
           </div>
         )}
 
@@ -105,7 +96,6 @@ export default function ForgotPasswordPage() {
               type="button"
               onClick={() => {
                 setStep("request");
-                setMessage(null);
               }}
               className="w-full text-sm text-[#0B74FF] hover:underline"
             >
