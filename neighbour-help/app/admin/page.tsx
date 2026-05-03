@@ -166,44 +166,6 @@ export default function AdminPage() {
               Daily operations, user moderation, and bid transaction control
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/admin/jobs"
-              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
-            >
-              Jobs
-            </Link>
-            <Link
-              href="/admin/payments"
-              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
-            >
-              Payments
-            </Link>
-            <Link
-              href="/admin/reports"
-              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
-            >
-              Reports
-            </Link>
-            <Link
-              href="/admin/ratings"
-              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
-            >
-              Ratings
-            </Link>
-            <Link
-              href="/admin/transactions/bids"
-              className="px-4 py-2 rounded-lg bg-white border border-[#E5E7EB] text-sm font-semibold text-[#111827] hover:bg-[#F7F8FA]"
-            >
-              Bid Transactions
-            </Link>
-            <Link
-              href="/admin/users"
-              className="px-4 py-2 rounded-lg bg-[#0B74FF] text-white text-sm font-semibold hover:bg-[#065ed1]"
-            >
-              Manage Users
-            </Link>
-          </div>
         </div>
 
         {error && (
