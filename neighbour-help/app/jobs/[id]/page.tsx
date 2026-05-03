@@ -222,6 +222,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const isPaymentPending = paymentProcessing && !isPaymentPaid;
   const canPayForCompletedJob = !!job && isOwner && job.status === "completed" && !isPaymentPaid && !isPaymentPending;
   const canRateHandyman = !!job && isOwner && job.status === "completed" && !!acceptedBid;
+  const canDeleteJob = !!job && canEdit && job.status !== "completed";
 
   useEffect(() => {
     if (!job?.id) return;
@@ -596,15 +597,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     <PrimaryButton size="sm" variant="secondary" onClick={() => setEditing(true)}>
                       <Pencil className="w-3.5 h-3.5" /> Edit
                     </PrimaryButton>
-                    <PrimaryButton
-                      size="sm"
-                      variant="outline"
-                      onClick={handleDelete}
-                      disabled={deleting}
-                      className="text-red-600 border-red-300 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Deleting..." : "Delete"}
-                    </PrimaryButton>
+                    {canDeleteJob && (
+                      <PrimaryButton
+                        size="sm"
+                        variant="outline"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Deleting..." : "Delete"}
+                      </PrimaryButton>
+                    )}
                   </div>
                 )}
               </div>
