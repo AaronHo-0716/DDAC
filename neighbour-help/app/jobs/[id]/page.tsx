@@ -757,15 +757,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       </div>
                     </div>
                   )}
-                  <p className="text-sm text-[#4B5563] mb-3">
-                    Use Stripe test card details on the checkout page:
-                  </p>
-                  <div className="rounded-lg border border-[#D1D5DB] bg-white p-3 mb-3 text-sm text-[#111827]">
-                    <p><strong>Card:</strong> 4242 4242 4242 4242</p>
-                    <p><strong>Expiry:</strong> Any future date (e.g. 12/34)</p>
-                    <p><strong>CVC:</strong> Any 3 digits (e.g. 123)</p>
-                    <p><strong>ZIP:</strong> Any 5 digits (e.g. 12345)</p>
-                  </div>
                   <div className="flex items-center gap-2">
                     <PrimaryButton
                       size="sm"
