@@ -7,7 +7,7 @@ using backend.Data.Seeders;
 using backend.Middleware;
 using backend.Models.Config;
 using backend.Services;
-using backend.Hubs; 
+using backend.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Threading.RateLimiting;
-using StackExchange.Redis; 
+using StackExchange.Redis;
 using System.IdentityModel.Tokens.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -54,7 +54,15 @@ builder.Services.AddDbContext<NeighbourHelpDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // SignalR Configuration with Redis Backplane + CORS for WebSocket handshakes
-var redisUrl = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
+var redisUrl = builder.Configuration["Redis:ConnectionString"];
+
+if (string.IsNullOrWhiteSpace(redisUrl) && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException("Redis:ConnectionString is required in non-development environments.");
+}
+
+redisUrl ??= "localhost:6379";
+
 builder.Services.AddSignalR(hubOptions =>
 {
     hubOptions.MaximumReceiveMessageSize = 1024 * 1024; // 1MB max message
@@ -89,7 +97,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && 
+                if (!string.IsNullOrEmpty(accessToken) &&
                    (path.StartsWithSegments("/api/chat-hub") || path.StartsWithSegments("/api/notification-hub")))
                 {
                     context.Token = accessToken;
@@ -250,8 +258,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 // 8. MIDDLEWARE PIPELINE
-app.UseMiddleware<GlobalExceptionMiddleware>(); 
-app.UseMiddleware<SecurityHeadersMiddleware>(); 
+app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseMiddleware<SecurityHeadersMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -259,18 +267,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseSerilogRequestLogging(); 
-app.UseCors("NextJsPolicy"); 
+app.UseSerilogRequestLogging();
+app.UseCors("NextJsPolicy");
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
-app.UseMiddleware<TokenValidationMiddleware>(); 
+app.UseMiddleware<TokenValidationMiddleware>();
 app.UseAuthorization();
 
 app.UseRateLimiter();
 
 // Hub & Controller Mapping
-app.MapHub<ChatHub>("/api/chat-hub"); 
+app.MapHub<ChatHub>("/api/chat-hub");
 app.MapHub<NotificationHub>("/api/notification-hub");
 
 // Health Check Endpoints
