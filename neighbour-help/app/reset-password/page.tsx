@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, KeyRound, ShieldCheck } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
@@ -12,7 +12,17 @@ const MIN_PASSWORD_LENGTH = 8;
 
 type Step = "form" | "success";
 
-export default function ResetPasswordPage() {
+function ResetPasswordFallback() {
+  return (
+    <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md bg-white rounded-2xl border border-[#E5E7EB] shadow-sm p-8">
+        <p className="text-sm text-[#6B7280]">Loading reset form...</p>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
   const email = searchParams.get("email") ?? "";
@@ -158,5 +168,13 @@ export default function ResetPasswordPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<ResetPasswordFallback />}>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
