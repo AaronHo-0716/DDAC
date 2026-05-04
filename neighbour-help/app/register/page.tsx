@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { UserPlus, Wrench, Home, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Wrench, Home, ArrowRight, Eye, EyeOff, ShieldCheck, RefreshCw } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import NotificationToast from "../components/ui/NotificationToast";
 import HandymanVerificationForms from "../components/ui/HandymanVerificationForms";
@@ -15,7 +15,7 @@ import type { UserRole } from "../types";
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { register, submitting } = useAuth();
+  const { register, submitting, verifyEmailOtp } = useAuth();
 
   const initialRole = useMemo<UserRole>(() => {
     const role = searchParams.get("role");
@@ -35,6 +35,13 @@ function RegisterForm() {
     selfieFile: null,
     idCardFile: null,
   });
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpInfo, setOtpInfo] = useState<string | null>(null);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<UserRole>(initialRole);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [resendingOtp, setResendingOtp] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
@@ -56,29 +63,17 @@ function RegisterForm() {
     }
 
     setError(null);
+    setOtpInfo(null);
+
+    const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const registeredUser = await register({ name, email, password, role });
-
-      if (role === "handyman") {
-        const verification = (registeredUser.verification ?? "").toLowerCase();
-
-        // Some backend builds create pending verification during register,
-        // others expect an explicit pending-verification call.
-        if (verification !== "pending") {
-          await authService.submitPendingVerification();
-        }
-
-        if (verificationFiles.selfieFile) {
-          await authService.uploadSelfieForVerification(verificationFiles.selfieFile);
-        }
-
-        if (verificationFiles.idCardFile) {
-          await authService.uploadIdentityCard(verificationFiles.idCardFile);
-        }
-      }
-
-      router.push(role === "handyman" ? "/handyman" : "/dashboard");
+      const responseMessage = await register({ name, email: normalizedEmail, password, role });
+      setPendingEmail(normalizedEmail);
+      setPendingRole(role);
+      setOtp("");
+      setOtpInfo(responseMessage);
+      setOtpStep(true);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);
@@ -89,6 +84,82 @@ function RegisterForm() {
       }
     }
   };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!pendingEmail) {
+      setError("Please restart the registration process.");
+      return;
+    }
+
+    const normalizedOtp = otp.trim();
+    if (normalizedOtp.length !== 6) {
+      setError("Enter the 6-digit verification code sent to your email.");
+      return;
+    }
+
+    if (pendingRole === "handyman" && !hasVerificationDocs) {
+      setError("Please upload your verification images before continuing.");
+      return;
+    }
+
+    setError(null);
+    setOtpInfo(null);
+    setVerifyingOtp(true);
+
+    try {
+      await verifyEmailOtp({ email: pendingEmail, otp: normalizedOtp });
+
+      if (pendingRole === "handyman") {
+        if (verificationFiles.selfieFile) {
+          await authService.uploadSelfieForVerification(verificationFiles.selfieFile);
+        }
+
+        if (verificationFiles.idCardFile) {
+          await authService.uploadIdentityCard(verificationFiles.idCardFile);
+        }
+      }
+
+      router.push(pendingRole === "handyman" ? "/handyman" : "/dashboard");
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Unable to verify the code. Please try again.");
+      }
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!pendingEmail || resendingOtp) return;
+
+    setResendingOtp(true);
+    setError(null);
+    setOtpInfo(null);
+
+    try {
+      const response = await authService.sendOtp(pendingEmail);
+      setOtpInfo(response.message ?? "A new verification code has been sent to your email.");
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Unable to resend the code. Please try again later.");
+      }
+    } finally {
+      setResendingOtp(false);
+    }
+  };
+
+  const otpTargetEmail = pendingEmail ?? email.trim();
+  const canVerifyOtp = otp.trim().length === 6;
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center px-4 py-10">
@@ -102,143 +173,207 @@ function RegisterForm() {
           </span>
         </div>
 
-        <h1 className="text-2xl font-bold text-[#111827] text-center mb-1">Create your account</h1>
+        <h1 className="text-2xl font-bold text-[#111827] text-center mb-1">
+          {otpStep ? "Verify your email" : "Create your account"}
+        </h1>
         <p className="text-sm text-[#6B7280] text-center mb-6">
-          Start posting jobs or offer handyman services in your area.
+          {otpStep
+            ? "Enter the 6-digit code we sent to your email to finish setting up your account."
+            : "Start posting jobs or offer handyman services in your area."}
         </p>
 
         {error && (
           <div className="mb-4">
             <NotificationToast
               variant="error"
-              title="Registration failed"
+              title={otpStep ? "Verification failed" : "Registration failed"}
               message={error}
               onClose={() => setError(null)}
             />
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[#111827] mb-1.5">Full Name</label>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Aisyah Rahman"
-              className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+        {otpInfo && (
+          <div className="mb-4">
+            <NotificationToast
+              variant="info"
+              title="Verification email sent"
+              message={otpInfo}
+              onClose={() => setOtpInfo(null)}
             />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[#111827] mb-1.5">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[#111827] mb-1.5">Role</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setRole("homeowner")}
-                className={`px-4 py-2.5 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                  role === "homeowner"
-                    ? "bg-blue-50 border-[#0B74FF] text-[#0B74FF]"
-                    : "bg-white border-[#E5E7EB] text-[#374151] hover:bg-[#F7F8FA]"
-                }`}
-              >
-                <Home className="w-4 h-4" /> Homeowner
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole("handyman")}
-                className={`px-4 py-2.5 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                  role === "handyman"
-                    ? "bg-blue-50 border-[#0B74FF] text-[#0B74FF]"
-                    : "bg-white border-[#E5E7EB] text-[#374151] hover:bg-[#F7F8FA]"
-                }`}
-              >
-                <Wrench className="w-4 h-4" /> Handyman
-              </button>
+        )}
+        {otpStep ? (
+          <form onSubmit={handleVerifyOtp} className="space-y-4">
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3 text-sm text-[#374151]">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#0B74FF]" />
+                <span>
+                  Code sent to <span className="font-semibold">{otpTargetEmail || "your email"}</span>
+                </span>
+              </div>
             </div>
-          </div>
 
-          {role === "handyman" && (
             <div>
-              <HandymanVerificationForms
-                mode="signup"
-                onFilesChange={setHasVerificationDocs}
-                onFilesSelected={setVerificationFiles}
+              <label className="block text-sm font-medium text-[#111827] mb-1.5">Verification code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="6-digit code"
+                className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-sm tracking-[0.35em] text-center focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
               />
             </div>
-          )}
 
-          <div>
-            <label className="block text-sm font-medium text-[#111827] mb-1.5">Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 8 characters"
-                className="w-full px-4 py-2.5 pr-11 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
-              />
+            <div className="flex items-center justify-between text-sm">
               <button
                 type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280]"
+                onClick={handleResendOtp}
+                disabled={resendingOtp}
+                className="inline-flex items-center gap-2 text-[#0B74FF] font-semibold hover:underline disabled:opacity-50"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <RefreshCw className={"w-4 h-4"} />
+                {resendingOtp ? "Resending..." : "Resend code"}
               </button>
+              <span className="text-[#6B7280]">Code expires in 15 minutes.</span>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-[#111827] mb-1.5">Confirm Password</label>
-            <div className="relative">
+            <PrimaryButton type="submit" size="lg" fullWidth disabled={!canVerifyOtp || verifyingOtp}>
+              {verifyingOtp ? (
+                "Verifying..."
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" /> Verify & Continue <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </PrimaryButton>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[#111827] mb-1.5">Full Name</label>
               <input
-                type={showConfirmPassword ? "text" : "password"}
                 required
-                minLength={8}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repeat your password"
-                className={`w-full px-4 py-2.5 pr-11 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF] ${
-                  passwordMismatch ? "border-red-300" : "border-[#E5E7EB]"
-                }`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Aisyah Rahman"
+                className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
               />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280]"
-              >
-                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
             </div>
-            {passwordMismatch && (
-              <p className="text-xs text-red-600 mt-1">Passwords do not match.</p>
-            )}
-          </div>
 
-          <PrimaryButton type="submit" size="lg" fullWidth disabled={!canSubmit || submitting}>
-            {submitting ? (
-              "Creating account..."
-            ) : (
-              <>
-                <UserPlus className="w-4 h-4" /> Create Account <ArrowRight className="w-4 h-4" />
-              </>
+            <div>
+              <label className="block text-sm font-medium text-[#111827] mb-1.5">Email</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#111827] mb-1.5">Role</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRole("homeowner")}
+                  className={`px-4 py-2.5 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                    role === "homeowner"
+                      ? "bg-blue-50 border-[#0B74FF] text-[#0B74FF]"
+                      : "bg-white border-[#E5E7EB] text-[#374151] hover:bg-[#F7F8FA]"
+                  }`}
+                >
+                  <Home className="w-4 h-4" /> Homeowner
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("handyman")}
+                  className={`px-4 py-2.5 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                    role === "handyman"
+                      ? "bg-blue-50 border-[#0B74FF] text-[#0B74FF]"
+                      : "bg-white border-[#E5E7EB] text-[#374151] hover:bg-[#F7F8FA]"
+                  }`}
+                >
+                  <Wrench className="w-4 h-4" /> Handyman
+                </button>
+              </div>
+            </div>
+
+            {role === "handyman" && (
+              <div>
+                <HandymanVerificationForms
+                  mode="signup"
+                  onFilesChange={setHasVerificationDocs}
+                  onFilesSelected={setVerificationFiles}
+                />
+              </div>
             )}
-          </PrimaryButton>
-        </form>
+
+            <div>
+              <label className="block text-sm font-medium text-[#111827] mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Minimum 8 characters"
+                  className="w-full px-4 py-2.5 pr-11 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280]"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#111827] mb-1.5">Confirm Password</label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat your password"
+                  className={`w-full px-4 py-2.5 pr-11 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B74FF] ${
+                    passwordMismatch ? "border-red-300" : "border-[#E5E7EB]"
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280]"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {passwordMismatch && (
+                <p className="text-xs text-red-600 mt-1">Passwords do not match.</p>
+              )}
+            </div>
+
+            <PrimaryButton type="submit" size="lg" fullWidth disabled={!canSubmit || submitting}>
+              {submitting ? (
+                "Creating account..."
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4" /> Create Account <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </PrimaryButton>
+          </form>
+        )}
 
         <p className="text-sm text-[#6B7280] text-center mt-6">
           Already have an account?{" "}

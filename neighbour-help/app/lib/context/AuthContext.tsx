@@ -7,7 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { User, LoginRequest, RegisterRequest } from "@/app/types";
+import { User, LoginRequest, RegisterRequest, VerifyEmailOtpRequest } from "@/app/types";
 import { authService } from "@/app/lib/api/auth";
 import {
   clearTokens,
@@ -26,8 +26,10 @@ interface AuthContextValue {
   submitting: boolean;
   /** Login with email + password */
   login: (credentials: LoginRequest) => Promise<User>;
-  /** Register a new account */
-  register: (data: RegisterRequest) => Promise<User>;
+  /** Register a new account and send email OTP */
+  register: (data: RegisterRequest) => Promise<string>;
+  /** Verify email OTP and establish session */
+  verifyEmailOtp: (data: VerifyEmailOtpRequest) => Promise<User>;
   /** Clear session */
   logout: () => Promise<void>;
   /** Re-fetch current user from backend and update context state */
@@ -78,7 +80,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (data: RegisterRequest) => {
     setSubmitting(true);
     try {
-      const { user } = await authService.register(data);
+      const response = await authService.register(data);
+      return response.message;
+    } finally {
+      setSubmitting(false);
+    }
+  }, []);
+
+  const verifyEmailOtp = useCallback(async (data: VerifyEmailOtpRequest) => {
+    setSubmitting(true);
+    try {
+      const { user } = await authService.verifyEmailOtp(data);
       setUser(user);
       return user;
     } finally {
@@ -124,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         submitting,
         login,
         register,
+        verifyEmailOtp,
         logout,
         refreshUser,
       }}

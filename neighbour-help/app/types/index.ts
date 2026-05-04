@@ -33,6 +33,15 @@ export interface RegisterRequest {
   role: UserRole;
 }
 
+export interface RegisterResponse {
+  message: string;
+}
+
+export interface VerifyEmailOtpRequest {
+  email: string;
+  otp: string;
+}
+
 export interface LogoutRequest {
   refreshToken?: string | null;
 }

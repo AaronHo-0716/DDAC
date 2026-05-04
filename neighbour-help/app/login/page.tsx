@@ -3,26 +3,109 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Wrench, ArrowRight, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, Wrench, ArrowRight, Mail, Lock, ShieldCheck, RefreshCw } from "lucide-react";
 import PrimaryButton from "../components/ui/PrimaryButton";
 import { useAuth } from "../lib/context/AuthContext";
 import { ApiClientError } from "../lib/api/client";
+import { authService } from "../lib/api/auth";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, submitting } = useAuth();
+  const { login, submitting, verifyEmailOtp } = useAuth();
 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpInfo, setOtpInfo] = useState<string | null>(null);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [resendingOtp, setResendingOtp] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setOtpInfo(null);
     try {
       const user = await login({ email, password });
+      const next = searchParams.get("next");
+      if (next && next.startsWith("/")) {
+        router.push(next);
+        return;
+      }
+
+      if (user.role === "handyman") {
+        router.push("/handyman");
+      } else if (user.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.message);
+        const needsVerification = /email not verified|verification code/i.test(err.message);
+        setOtpStep(needsVerification);
+      } else if (err instanceof Error) {
+        setError(err.message);
+        setOtpStep(false);
+      } else {
+        setError("Something went wrong. Please try again.");
+        setOtpStep(false);
+      }
+    }
+  };
+
+  const handleSendOtp = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Enter your email address to receive a verification code.");
+      return;
+    }
+
+    setResendingOtp(true);
+    setError(null);
+    setOtpInfo(null);
+
+    try {
+      const response = await authService.sendOtp(normalizedEmail);
+      setOtpInfo(response.message ?? "Verification code sent to your email.");
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Unable to send the verification code. Please try again.");
+      }
+    } finally {
+      setResendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Enter your email address to verify your account.");
+      return;
+    }
+
+    const normalizedOtp = otp.trim();
+    if (normalizedOtp.length !== 6) {
+      setError("Enter the 6-digit verification code sent to your email.");
+      return;
+    }
+
+    setVerifyingOtp(true);
+    setError(null);
+    setOtpInfo(null);
+
+    try {
+      const user = await verifyEmailOtp({ email: normalizedEmail, otp: normalizedOtp });
       const next = searchParams.get("next");
       if (next && next.startsWith("/")) {
         router.push(next);
@@ -42,10 +125,14 @@ function LoginForm() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError("Unable to verify the code. Please try again.");
       }
+    } finally {
+      setVerifyingOtp(false);
     }
   };
+
+  const canVerifyOtp = otp.trim().length === 6;
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex flex-col items-center justify-center px-4 py-12">
@@ -162,6 +249,67 @@ function LoginForm() {
             )}
           </PrimaryButton>
         </form>
+
+        {otpStep && (
+          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5">
+                <ShieldCheck className="w-4 h-4 text-[#0B74FF]" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#111827]">Verify your email</p>
+                <p className="text-xs text-[#6B7280] mt-1">
+                  We can resend a verification code to finish your sign in.
+                </p>
+              </div>
+            </div>
+
+            {otpInfo && (
+              <div className="mt-3 rounded-xl bg-white border border-[#E5E7EB] px-3 py-2 text-xs text-[#374151]">
+                {otpInfo}
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyOtp} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[#111827] mb-1">Verification code</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="6-digit code"
+                  className="w-full px-3 py-2 border border-[#E5E7EB] rounded-xl text-sm tracking-[0.3em] text-center focus:outline-none focus:ring-2 focus:ring-[#0B74FF]"
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={resendingOtp}
+                  className="inline-flex items-center gap-2 text-[#0B74FF] font-semibold hover:underline disabled:opacity-50"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  {resendingOtp ? "Sending..." : otpInfo ? "Resend code" : "Send code"}
+                </button>
+                <span className="text-[#6B7280]">Code expires in 15 minutes.</span>
+              </div>
+
+              <PrimaryButton type="submit" fullWidth size="md" disabled={!canVerifyOtp || verifyingOtp}>
+                {verifyingOtp ? (
+                  "Verifying..."
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" /> Verify & Continue
+                  </>
+                )}
+              </PrimaryButton>
+            </form>
+          </div>
+        )}
 
         {/* Sign up link */}
         <p className="text-center text-sm text-[#6B7280] mt-6">

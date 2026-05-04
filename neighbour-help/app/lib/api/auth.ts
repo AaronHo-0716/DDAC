@@ -7,11 +7,13 @@ import {
   LoginRequest,
   LogoutRequest,
   RegisterRequest,
+  RegisterResponse,
   ResetPasswordRequest,
   UpdateProfileRequest,
   UpdateUserSettingsRequest,
   User,
   UserSettings,
+  VerifyEmailOtpRequest,
   VerifyPasswordOtpRequest,
   VerifyPasswordOtpResponse,
 } from "@/app/types";
@@ -106,11 +108,29 @@ export const authService = {
 
   /**
    * POST /api/auth/register
-   * Creates a new account and returns tokens.
+   * Creates a new account and sends an email OTP for verification.
    */
-  async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>(
+  async register(data: RegisterRequest): Promise<RegisterResponse> {
+    const response = await apiClient.post<RegisterResponse | string>(
       "/auth/register",
+      data,
+      { authenticated: false, headers: { Accept: "application/json" } }
+    );
+    const message = typeof response === "string" ? response : response.message;
+    return {
+      message:
+        message ??
+        "Registration initiated. Please check your email for the verification code.",
+    };
+  },
+
+  /**
+   * POST /api/auth/otp/verify-email
+   * Verifies the email OTP and returns tokens.
+   */
+  async verifyEmailOtp(data: VerifyEmailOtpRequest): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>(
+      "/auth/otp/verify-email",
       data,
       { authenticated: false }
     );
