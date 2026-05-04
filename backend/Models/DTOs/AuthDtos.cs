@@ -33,6 +33,7 @@ public record AuthResponse(
 //     DateTime? BlockedAt
 // );
 
+public record VerifyOtpRequest(string Email, string Otp);
 public record LoginRequest(string Email, string Password);
 public record RegisterRequest(string Name, string Email, string Password, string Role);
 public record RefreshRequest(string RefreshToken);

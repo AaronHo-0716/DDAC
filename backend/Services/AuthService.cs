@@ -32,11 +32,18 @@ public class AuthService(ServiceDependencies deps, IConfiguration config) : Base
             throw new HttpRequestException("Access denied. The account is blocked.", null, HttpStatusCode.Forbidden);
         }
 
+        if (!user.Email_Verified)
+        {
+            Logger.LogInformation("Unverified email {Email} attempted login.", user.Email);
+            throw new HttpRequestException("Email not verified. Please check your inbox for the verification code.", null, HttpStatusCode.Unauthorized);
+        }
+
         return await GenerateAuthResponse(user);
     }
 
-    public async Task<AuthResponse> Register(RegisterRequest request)
+    public async Task<string> Register(RegisterRequest request)
     {
+        // 1. Validations
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Name))
             throw new HttpRequestException("Email and Name are required.", null, HttpStatusCode.BadRequest);
 
@@ -44,38 +51,49 @@ public class AuthService(ServiceDependencies deps, IConfiguration config) : Base
             throw new HttpRequestException("Invalid email format.", null, HttpStatusCode.BadRequest);
 
         var emailLower = request.Email.ToLower().Trim();
-        if (await Context.Users.AnyAsync(u => u.Email == emailLower))
-            throw new HttpRequestException("A user with this email already exists.", null, HttpStatusCode.Conflict);
-
+        var existingUser = await Context.Users.FirstOrDefaultAsync(u => u.Email == emailLower);
+        if (existingUser != null) throw new HttpRequestException("A user with this email already exists.", null, HttpStatusCode.Conflict);
+        
         if (!Enum.TryParse<UserRole>(request.Role, true, out var roleEnum) || roleEnum == UserRole.Admin)
             throw new HttpRequestException("Invalid role selected.", null, HttpStatusCode.BadRequest);
 
-        var newUser = new User
+        var user = existingUser ?? new User { Id = Guid.NewGuid(), Email = emailLower };
+        
+        user.Name = request.Name.Trim();
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+        user.Role = roleEnum.ToDbString();
+        user.TokenVersion = 1;
+        user.IsActive = true;
+        user.Email_Verified = false;
+
+        if (existingUser == null) Context.Users.Add(user);
+
+        await Context.SaveChangesAsync();
+        
+        await SendOtpAsync(user.Email, EmailPurpose.EmailVerification);
+
+        return "Registration initiated. Please check your email for the 6-digit verification code.";
+    }
+
+    public async Task<AuthResponse> VerifyEmailOtpAsync(VerifyOtpRequest req)
+    {
+        var user = await ValidateOtpInternal(req.Email, req.Otp);
+
+        user.Email_Verified = true;
+        
+        if (user.Role == UserRole.Handyman.ToDbString())
         {
-            Id = Guid.NewGuid(),
-            Name = request.Name.Trim(),
-            Email = emailLower,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Role = roleEnum.ToDbString(),
-            IsActive = true,
-            TokenVersion = 1,
-            Email_Verified = false
-        };
-
-        Context.Users.Add(newUser);
-
-        if (roleEnum == UserRole.Handyman)
-        {
-            await SaveHandymanVerificationToDb(newUser);
-
+            await SaveHandymanVerificationToDb(user);
             await CreateNotifications(
                 NotificationType.NewHandymanRegistration, 
-                $"New handyman registration: {newUser.Name} requires verification."
+                $"New handyman registration: {user.Name} requires verification."
             );
         }
 
+        ClearOtp(user);
         await Context.SaveChangesAsync();
-        return await GenerateAuthResponse(newUser);
+
+        return await GenerateAuthResponse(user);
     }
 
     public async Task<HandymanVerificationDto> CreateHandymanVerification()
@@ -255,8 +273,8 @@ public class AuthService(ServiceDependencies deps, IConfiguration config) : Base
         await Context.SaveChangesAsync();
 
         // Subject logic using Enum
-        string subject = (purpose == EmailPurpose.PasswordReset) 
-            ? "Reset Your Password" 
+        string subject = (purpose == EmailPurpose.Others) 
+            ? "Your One-Time Password (OTP)" 
             : "Verify Your Email";
         
         await Email.SendEmailAsync(user.Email, subject, 

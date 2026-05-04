@@ -4,7 +4,7 @@ public enum UserRole { Handyman, Homeowner, Admin }
 
 public enum VerificationStatus { Pending, Approved, Rejected }
 
-public enum EmailPurpose { EmailVerification, PasswordReset }
+public enum EmailPurpose { EmailVerification, Others }
 
 public static class AuthConstants
 {

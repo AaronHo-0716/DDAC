@@ -13,7 +13,7 @@ public class AuthController(IAuthService authService) : BaseController
 {
     [HttpPost("register")]
     [EnableRateLimiting("auth_policy")]
-    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         try {
             return Ok(await authService.Register(request));
@@ -77,6 +77,16 @@ public class AuthController(IAuthService authService) : BaseController
         catch (HttpRequestException ex) {
             return HandleError(ex);
         }
+    }
+
+    [HttpPost("otp/verify-email")]
+    public async Task<ActionResult<AuthResponse>> VerifyEmail([FromBody] VerifyOtpRequest req)
+    {
+        try 
+        {
+            return Ok(await authService.VerifyEmailOtpAsync(req));
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
     [HttpPost("otp/send")]
