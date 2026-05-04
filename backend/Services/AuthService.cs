@@ -35,7 +35,7 @@ public class AuthService(ServiceDependencies deps, IConfiguration config) : Base
         if (!user.Email_Verified)
         {
             Logger.LogInformation("Unverified email {Email} attempted login.", user.Email);
-            throw new HttpRequestException("Email not verified. Please check your inbox for the verification code.", null, HttpStatusCode.Unauthorized);
+            throw new HttpRequestException("Access denied. The account is not verified", null, HttpStatusCode.Unauthorized);
         }
 
         return await GenerateAuthResponse(user);
