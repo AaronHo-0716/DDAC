@@ -46,8 +46,13 @@ function LoginForm() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);
-        const needsVerification = /email not verified|verification code/i.test(err.message);
+        const needsVerification = /email not verified|account is not verified|verification code/i.test(
+          err.message
+        );
         setOtpStep(needsVerification);
+        if (needsVerification) {
+          await handleSendOtp();
+        }
       } else if (err instanceof Error) {
         setError(err.message);
         setOtpStep(false);
