@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, type BlobResponse } from "./client";
 import { uploadsService } from "./uploads";
 
 interface RawCheckoutSessionResponse {
@@ -153,6 +153,10 @@ export const paymentsService = {
     return apiClient.get<PaymentTransactionsResponse>(
       `/payments/transactions?page=${page}&pageSize=${pageSize}`,
     );
+  },
+
+  async getReceiptPdf(paymentId: string): Promise<BlobResponse> {
+    return apiClient.getBlob(`/payments/${paymentId}/receipt`);
   },
 
   async createCheckoutSession(jobId: string): Promise<CheckoutSessionResponse> {

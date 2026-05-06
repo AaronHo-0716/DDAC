@@ -20,6 +20,19 @@ public class PaymentController(IPaymentService paymentService) : BaseController
     }
 
     [Authorize(Roles = "admin,homeowner")]
+    [HttpGet("{paymentId}/receipt")]
+    public async Task<IActionResult> GetReceipt(Guid paymentId)
+    {
+        try
+        {
+            var receipt = await paymentService.GetPaymentReceiptAsync(paymentId);
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{receipt.FileName}\"";
+            return File(receipt.Content, "application/pdf");
+        }
+        catch (HttpRequestException ex) { return HandleError(ex); }
+    }
+
+    [Authorize(Roles = "admin,homeowner")]
     [HttpPost("jobs/{jobId}/checkout-session")]
     public async Task<ActionResult<CreateCheckoutSessionResponse>> CreateCheckoutSession(Guid jobId)
     {

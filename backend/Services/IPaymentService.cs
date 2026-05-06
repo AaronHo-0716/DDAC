@@ -8,5 +8,6 @@ public interface IPaymentService
     Task ConfirmCheckoutSessionAsync(Guid jobId, string sessionId);
     Task HandleWebhookAsync(string requestBody, string? signatureHeader);
     Task<PaymentTransactionsResponse> GetPaymentTransactionsAsync(int page, int pageSize);
+    Task<PaymentReceiptFile> GetPaymentReceiptAsync(Guid paymentId);
     Task<AdminPaymentStatsDto> GetAdminPaymentStatsAsync();
 }

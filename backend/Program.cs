@@ -17,8 +17,11 @@ using Serilog;
 using System.Threading.RateLimiting;
 using StackExchange.Redis;
 using System.IdentityModel.Tokens.Jwt;
+using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+
+QuestPDF.Settings.License = LicenseType.Community;
 
 // 1. LOGGING (Serilog)
 Log.Logger = new LoggerConfiguration()
@@ -219,6 +222,7 @@ builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<ISupportMessageService, SupportMessageService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddSingleton<IPaymentReceiptPdfService, PaymentReceiptPdfService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IHandymanBankService, HandymanBankService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();

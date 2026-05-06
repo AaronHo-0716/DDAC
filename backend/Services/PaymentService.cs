@@ -12,9 +12,11 @@ using Stripe.Checkout;
 
 namespace backend.Services;
 
-public class PaymentService(ServiceDependencies deps, IOptions<StripeOptions> stripeOptions) : BaseService(deps), IPaymentService
+public class PaymentService(ServiceDependencies deps, IOptions<StripeOptions> stripeOptions, IPaymentReceiptPdfService receiptPdfService)
+    : BaseService(deps), IPaymentService
 {
     private readonly StripeOptions _stripeOptions = stripeOptions.Value;
+    private readonly IPaymentReceiptPdfService _receiptPdfService = receiptPdfService;
 
     public async Task<PaymentTransactionsResponse> GetPaymentTransactionsAsync(int page, int pageSize)
     {
@@ -581,6 +583,74 @@ public class PaymentService(ServiceDependencies deps, IOptions<StripeOptions> st
             PendingWithdrawalRequests: pendingWithdrawalRequests,
             PendingPaymentsForWithdrawal: pendingPaymentsForWithdrawal
         );
+    }
+
+    public async Task<PaymentReceiptFile> GetPaymentReceiptAsync(Guid paymentId)
+    {
+        var userId = await GetCurrentUserIdAsync();
+        var role = GetCurrentUserRole();
+
+        var payment = await Context.Payments
+            .AsNoTracking()
+            .Include(p => p.Job)
+            .Include(p => p.Homeowner_User)
+            .Include(p => p.Handyman_User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId)
+            ?? throw new HttpRequestException("Payment not found.", null, HttpStatusCode.NotFound);
+
+        if (role == UserRole.Homeowner.ToDbString())
+        {
+            if (payment.Homeowner_User_Id != userId)
+                throw new HttpRequestException("You are not allowed to access this receipt.", null, HttpStatusCode.Forbidden);
+        }
+        else if (role != UserRole.Admin.ToDbString())
+        {
+            throw new HttpRequestException("Only homeowners and admins can access receipts.", null, HttpStatusCode.Forbidden);
+        }
+
+        if (!string.Equals(payment.Status, "paid", StringComparison.OrdinalIgnoreCase))
+            throw new HttpRequestException("Receipt is available only for paid payments.", null, HttpStatusCode.BadRequest);
+
+        var paidAtUtc = payment.Updated_At_Utc == default ? payment.Created_At_Utc : payment.Updated_At_Utc;
+        var receiptNumber = BuildReceiptNumber(payment, paidAtUtc);
+        var currency = string.IsNullOrWhiteSpace(_stripeOptions.Currency) ? "MYR" : _stripeOptions.Currency.ToUpperInvariant();
+
+        var model = new PaymentReceiptModel(
+            ReceiptNumber: receiptNumber,
+            PaidAtUtc: paidAtUtc,
+            JobTitle: payment.Job?.Title ?? "Unknown job",
+            JobId: payment.Job_Id,
+            PaymentId: payment.Id,
+            HomeownerName: payment.Homeowner_User?.Name ?? "Unknown homeowner",
+            HomeownerEmail: payment.Homeowner_User?.Email ?? "unknown@neighborhelp.test",
+            HandymanName: payment.Handyman_User?.Name ?? "Unknown handyman",
+            HandymanEmail: payment.Handyman_User?.Email ?? "unknown@neighborhelp.test",
+            BidAmount: payment.Bid_Amount,
+            SstAmount: payment.Sst_Amount,
+            HomeownerPlatformFee: payment.Homeowner_Platform_Fee,
+            HandymanPlatformFee: payment.Handyman_Platform_Fee,
+            HomeownerTotal: payment.Homeowner_Total,
+            HandymanCredit: payment.Handyman_Credit,
+            Currency: currency,
+            StripeSessionId: payment.Stripe_Session_Id,
+            StripePaymentIntentId: payment.Stripe_Payment_Intent_Id,
+            CompanyName: "NeighbourHelp Services",
+            CompanyAddress: "123 Jalan Jiran, Kuala Lumpur 50000, Malaysia",
+            CompanyTaxId: "Tax ID: NH-000-123456",
+            CompanyEmail: "billing@neighborhelp.test",
+            CompanyPhone: "+60 3-1234 5678"
+        );
+
+        var pdfBytes = _receiptPdfService.Generate(model);
+        var fileName = $"neighbourhelp-receipt-{receiptNumber}.pdf";
+        return new PaymentReceiptFile(pdfBytes, fileName);
+    }
+
+    private static string BuildReceiptNumber(Payment payment, DateTime paidAtUtc)
+    {
+        var dateStamp = paidAtUtc.ToString("yyyyMMdd");
+        var suffix = payment.Id.ToString("N")[..8].ToUpperInvariant();
+        return $"NH-{dateStamp}-{suffix}";
     }
 
     private record PaymentFeeBreakdown(

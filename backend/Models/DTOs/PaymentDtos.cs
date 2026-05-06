@@ -52,6 +52,11 @@ public record PaymentTransactionsResponse(
     int TotalCount
 );
 
+public record PaymentReceiptFile(
+    byte[] Content,
+    string FileName
+);
+
 /// <summary>
 /// Handyman bank details for withdrawal requests
 /// </summary>

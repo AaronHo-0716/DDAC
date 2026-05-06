@@ -33,6 +33,11 @@ interface RefreshResponse {
   };
 }
 
+export interface BlobResponse {
+  blob: Blob;
+  fileName?: string;
+}
+
 let refreshInFlight: Promise<string | null> | null = null;
 
 // ─── Token helpers (localStorage — client-side only) ─────────────────────────
@@ -210,6 +215,90 @@ async function request<T>(
   return parseResponse<T>(response);
 }
 
+function getFileNameFromDisposition(disposition?: string | null): string | undefined {
+  if (!disposition) return undefined;
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+  const encodedName = match?.[1] ?? match?.[2];
+  if (!encodedName) return undefined;
+  try {
+    return decodeURIComponent(encodedName);
+  } catch {
+    return encodedName;
+  }
+}
+
+async function requestBlob(
+  path: string,
+  { authenticated = true, headers = {}, ...options }: RequestOptions = {},
+): Promise<BlobResponse> {
+  const url = `${API_BASE_URL}${path}`;
+
+  const resolvedHeaders: Record<string, string> = {
+    ...(headers as Record<string, string>),
+  };
+
+  const hasBody = options.body !== undefined && options.body !== null;
+  const isFormDataBody =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
+
+  if (hasBody && !isFormDataBody && !hasContentTypeHeader(resolvedHeaders)) {
+    resolvedHeaders["Content-Type"] = "application/json";
+  }
+
+  if (authenticated) {
+    const token = getAccessToken();
+    if (token) resolvedHeaders["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: resolvedHeaders,
+  });
+
+  const shouldAttemptRefresh =
+    authenticated &&
+    response.status === 401 &&
+    typeof window !== "undefined" &&
+    path !== "/auth/refresh";
+
+  if (shouldAttemptRefresh) {
+    const newAccessToken = await refreshAccessToken();
+    if (newAccessToken) {
+      const retryHeaders = {
+        ...resolvedHeaders,
+        Authorization: `Bearer ${newAccessToken}`,
+      };
+
+      const retryResponse = await fetch(url, {
+        ...options,
+        headers: retryHeaders,
+      });
+
+      if (!retryResponse.ok) {
+        await parseResponse(retryResponse);
+      }
+
+      return {
+        blob: await retryResponse.blob(),
+        fileName: getFileNameFromDisposition(
+          retryResponse.headers.get("Content-Disposition"),
+        ),
+      };
+    }
+  }
+
+  if (!response.ok) {
+    await parseResponse(response);
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: getFileNameFromDisposition(
+      response.headers.get("Content-Disposition"),
+    ),
+  };
+}
+
 // ─── Convenience methods ──────────────────────────────────────────────────────
 
 export const apiClient = {
@@ -251,5 +340,9 @@ export const apiClient = {
 
   delete<T>(path: string, options?: RequestOptions): Promise<T> {
     return request<T>(path, { method: "DELETE", ...options });
+  },
+
+  getBlob(path: string, options?: RequestOptions): Promise<BlobResponse> {
+    return requestBlob(path, { method: "GET", ...options });
   },
 };

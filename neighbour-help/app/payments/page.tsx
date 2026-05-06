@@ -33,6 +33,8 @@ export default function HomeownerPaymentsPage() {
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!authorized) return;
@@ -66,6 +68,33 @@ export default function HomeownerPaymentsPage() {
     };
   }, [transactions]);
 
+  const handleOpenReceipt = async (paymentId: string) => {
+    setReceiptError(null);
+    setReceiptLoading((prev) => ({ ...prev, [paymentId]: true }));
+
+    try {
+      const response = await paymentsService.getReceiptPdf(paymentId);
+      const url = URL.createObjectURL(response.blob);
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = response.fileName ?? "neighbourhelp-receipt.pdf";
+        link.click();
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      if (err instanceof Error) {
+        setReceiptError(err.message);
+      } else {
+        setReceiptError("Unable to open the receipt. Please try again.");
+      }
+    } finally {
+      setReceiptLoading((prev) => ({ ...prev, [paymentId]: false }));
+    }
+  };
+
   if (loading || !authorized) return null;
 
   return (
@@ -84,6 +113,12 @@ export default function HomeownerPaymentsPage() {
         {error && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
+          </div>
+        )}
+
+        {receiptError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {receiptError}
           </div>
         )}
 
@@ -132,12 +167,25 @@ export default function HomeownerPaymentsPage() {
                     <td className="px-4 py-3 font-semibold text-[#111827]">{money(tx.homeownerTotal)}</td>
                     <td className="px-4 py-3 text-xs text-[#6B7280]">{fmtDate(tx.updatedAtUtc)}</td>
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/jobs/${tx.jobId}`}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-[#0B74FF] hover:underline"
-                      >
-                        Open job <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
+                      <div className="flex items-center gap-3 text-xs font-semibold text-[#0B74FF]">
+                        <Link
+                          href={`/jobs/${tx.jobId}`}
+                          className="inline-flex items-center gap-1 hover:underline"
+                        >
+                          Open job <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                        {tx.status === "paid" && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReceipt(tx.id)}
+                            disabled={receiptLoading[tx.id]}
+                            className="inline-flex items-center gap-1 hover:underline disabled:opacity-60"
+                          >
+                            {receiptLoading[tx.id] ? "Opening..." : "Receipt"}
+                            <ReceiptText className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
