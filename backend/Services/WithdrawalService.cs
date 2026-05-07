@@ -265,21 +265,21 @@ public class WithdrawalService(ServiceDependencies deps) : BaseService(deps), IW
         );
     }
 
-    private void AppendAdminAction(Guid adminId, string actionType, string targetType, Guid targetId, string reason)
-    {
-        var adminAction = new Admin_Action
-        {
-            Id = Guid.NewGuid(),
-            Admin_User_Id = adminId,
-            Action_Type = actionType,
-            Target_Type = targetType,
-            Target_Id = targetId,
-            Reason = reason,
-            Created_At_Utc = DateTime.UtcNow
-        };
-
-        Context.Admin_Actions.Add(adminAction);
-    }
+    // private void AppendAdminAction(Guid adminId, string actionType, string targetType, Guid targetId, string reason)
+    // {
+    //     var adminAction = new Admin_Action
+    //     {
+    //         Id = Guid.NewGuid(),
+    //         Admin_User_Id = adminId,
+    //         Action_Type = actionType,
+    //         Target_Type = targetType,
+    //         Target_Id = targetId,
+    //         Reason = reason,
+    //         Created_At_Utc = DateTime.UtcNow
+    //     };
+    //
+    //     Context.Admin_Actions.Add(adminAction);
+    // }
 
     private async Task<decimal> CalculateBalanceAfterAsync(Guid handymanId, decimal amount, string transactionType)
     {

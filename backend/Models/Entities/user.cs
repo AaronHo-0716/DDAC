@@ -30,7 +30,7 @@ public partial class User
     public DateTime? Otp_Expiry_Utc { get; set; }
 
     public virtual ICollection<User> Inverse_Blocked_By_User { get; set; } = new List<User>();
-    public virtual ICollection<Admin_Action> Admin_Actions { get; set; } = new List<Admin_Action>();
+    // public virtual ICollection<Admin_Action> Admin_Actions { get; set; } = new List<Admin_Action>();
     public virtual ICollection<Bid_Lock> Bid_Locks { get; set; } = new List<Bid_Lock>();
     public virtual ICollection<Bid_Transaction> Bid_Transaction_Event_By_Users { get; set; } = new List<Bid_Transaction>();
     public virtual ICollection<Bid_Transaction> Bid_Transaction_Handyman_Users { get; set; } = new List<Bid_Transaction>();

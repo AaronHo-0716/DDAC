@@ -158,11 +158,11 @@ public class AdminController(IAdminService adminService, IJobService jobService)
         catch (HttpRequestException ex) { return HandleError(ex); }
     }
 
-    [HttpGet("audit-log")]
-    [Obsolete("Use specific moderation logs where available.")]
-    public async Task<ActionResult<IEnumerable<AdminActionDto>>> GetAuditLogs()
-    {
-        try { return Ok(await adminService.GetAuditLogsAsync()); }
-        catch (HttpRequestException ex) { return HandleError(ex); }
-    }
+    // [HttpGet("audit-log")]
+    // [Obsolete("Use specific moderation logs where available.")]
+    // public async Task<ActionResult<IEnumerable<AdminActionDto>>> GetAuditLogs()
+    // {
+    //     try { return Ok(await adminService.GetAuditLogsAsync()); }
+    //     catch (HttpRequestException ex) { return HandleError(ex); }
+    // }
 }

@@ -521,11 +521,11 @@ public class AdminService(ServiceDependencies deps) : BaseService(deps), IAdminS
         };
     }
 
-    public async Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync()
-    {
-        return await Context.Admin_Actions
-            .OrderByDescending(a => a.Created_At_Utc)
-            .Select(a => new AdminActionDto(a.Id, a.Admin_User_Id, a.Action_Type, a.Target_Type, a.Target_Id, a.Reason, a.Created_At_Utc))
-            .ToListAsync();
-    }
+    // public async Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync()
+    // {
+    //     return await Context.Admin_Actions
+    //         .OrderByDescending(a => a.Created_At_Utc)
+    //         .Select(a => new AdminActionDto(a.Id, a.Admin_User_Id, a.Action_Type, a.Target_Type, a.Target_Id, a.Reason, a.Created_At_Utc))
+    //         .ToListAsync();
+    // }
 }

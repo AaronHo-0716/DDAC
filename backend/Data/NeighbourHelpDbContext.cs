@@ -12,7 +12,6 @@ public partial class NeighbourHelpDbContext : DbContext
     {
     }
 
-    public virtual DbSet<Admin_Action> Admin_Actions { get; set; }
     public virtual DbSet<Bid> Bids { get; set; }
     public virtual DbSet<Bid_Lock> Bid_Locks { get; set; }
     public virtual DbSet<Bid_Transaction> Bid_Transactions { get; set; }
@@ -210,20 +209,20 @@ public partial class NeighbourHelpDbContext : DbContext
         });
 
         // --- 9. ADMIN ACTION ---
-        modelBuilder.Entity<Admin_Action>(entity =>
-        {
-            entity.ToTable("admin_actions");
-            entity.HasKey(e => e.Id).HasName("admin_actions_pkey");
-            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
-            entity.Property(e => e.Admin_User_Id).HasColumnName("admin_user_id");
-            entity.Property(e => e.Action_Type).HasColumnName("action_type");
-            entity.Property(e => e.Target_Type).HasColumnName("target_type");
-            entity.Property(e => e.Target_Id).HasColumnName("target_id");
-            entity.Property(e => e.Reason).HasColumnName("reason");
-            entity.Property(e => e.Payload).HasColumnName("payload").HasColumnType("jsonb");
-            entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
-            entity.HasOne(d => d.Admin_User).WithMany(p => p.Admin_Actions).HasForeignKey(d => d.Admin_User_Id);
-        });
+        // modelBuilder.Entity<Admin_Action>(entity =>
+        // {
+        //     entity.ToTable("admin_actions");
+        //     entity.HasKey(e => e.Id).HasName("admin_actions_pkey");
+        //     entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+        //     entity.Property(e => e.Admin_User_Id).HasColumnName("admin_user_id");
+        //     entity.Property(e => e.Action_Type).HasColumnName("action_type");
+        //     entity.Property(e => e.Target_Type).HasColumnName("target_type");
+        //     entity.Property(e => e.Target_Id).HasColumnName("target_id");
+        //     entity.Property(e => e.Reason).HasColumnName("reason");
+        //     entity.Property(e => e.Payload).HasColumnName("payload").HasColumnType("jsonb");
+        //     entity.Property(e => e.Created_At_Utc).HasColumnName("created_at_utc");
+        //     entity.HasOne(d => d.Admin_User).WithMany(p => p.Admin_Actions).HasForeignKey(d => d.Admin_User_Id);
+        // });
 
         // --- 10. JOB IMAGE ---
         modelBuilder.Entity<Job_Image>(entity =>

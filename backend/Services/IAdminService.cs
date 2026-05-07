@@ -16,5 +16,5 @@ public interface IAdminService
     Task<IEnumerable<BidDto>> GetBidTransactionsAsync(string? eventType = null);
     Task<BidTransactionDto> GetBidTransactionByIdAsync(Guid id);
     Task HandleBidActionAsync(Guid bidId, string actionType, string reason);
-    Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync();
+    // Task<IEnumerable<AdminActionDto>> GetAuditLogsAsync();
 }
