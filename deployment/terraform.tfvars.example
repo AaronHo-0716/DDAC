@@ -1,0 +1,7 @@
+key_name          = "your_aws_key_name_for_ssh_access"
+db_password       = "your_db_password"
+instance_password = "your_instance_password"
+grafana_password  = "your_grafana_password"
+caddy_elastic_ip  = "your_caddy_elastic_ip"
+github_username   = "your_github_username"
+github_pat        = "your_github_pat"
