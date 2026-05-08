@@ -229,7 +229,7 @@ CREATE INDEX IF NOT EXISTS ix_bid_tx_job_created ON bid_transactions(job_id, cre
 CREATE INDEX IF NOT EXISTS ix_bid_tx_event_type_created ON bid_transactions(event_type, created_at_utc DESC);
 
 -- CREATE INDEX IF NOT EXISTS ix_admin_actions_actor_created ON admin_actions(admin_user_id, created_at_utc DESC);
-CREATE INDEX IF NOT EXISTS ix_admin_actions_target ON admin_actions(target_type, target_id, created_at_utc DESC);
+-- CREATE INDEX IF NOT EXISTS ix_admin_actions_target ON admin_actions(target_type, target_id, created_at_utc DESC);
 
 -- Main Chat Room
 CREATE TABLE IF NOT EXISTS conversations (
