@@ -22,14 +22,15 @@ public class TokenValidationMiddleware(RequestDelegate next)
                 var user = await dbContext.Users
                     .AsNoTracking()
                     .Where(u => u.Email == email.ToLower().Trim())
-                    .Select(u => new { u.IsActive, u.TokenVersion })
+                    .Select(u => new { u.IsActive, u.TokenVersion, u.Email_Verified })
                     .FirstOrDefaultAsync();
 
                 // 4. Validate user status and session integrity
                 // - User must exist in DB
                 // - User must not be blocked (IsActive)
                 // - JWT version must match current DB version (allows global logout/password resets)
-                if (user == null || !user.IsActive || user.TokenVersion != tokenVersion)
+                // - User must have verified email
+                if (user == null || !user.IsActive || user.TokenVersion != tokenVersion || !user.Email_Verified)
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     await context.Response.WriteAsJsonAsync(new 

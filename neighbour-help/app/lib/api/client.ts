@@ -53,8 +53,14 @@ export function setTokens(accessToken: string, refreshToken: string): void {
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  if (typeof window === "undefined") return;
+  
+  // Only clear and emit if there was actually something to clear
+  if (localStorage.getItem(TOKEN_KEY)) {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    window.dispatchEvent(new Event("nh_unauthorized"));
+  }
 }
 
 export function getRefreshToken(): string | null {
@@ -64,285 +70,148 @@ export function getRefreshToken(): string | null {
 
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
 
-interface RequestOptions extends RequestInit {
-  authenticated?: boolean;
-}
-
-function hasContentTypeHeader(headers: Record<string, string>): boolean {
-  return Object.keys(headers).some(
-    (header) => header.toLowerCase() === "content-type",
-  );
-}
-
 export class ApiClientError extends Error {
   statusCode: number;
-  errors?: Record<string, string[]>;
-
-  constructor(apiError: ApiError) {
-    super(apiError.message);
+  constructor(status: number, message: string) {
+    super(message);
     this.name = "ApiClientError";
-    this.statusCode = apiError.statusCode;
-    this.errors = apiError.errors;
+    this.statusCode = status;
   }
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
-  // 204 No Content – return void
   if (response.status === 204) return undefined as T;
-
   const rawText = await response.text();
-  let data: unknown = undefined;
+  let data: any = null;
 
-  if (rawText.length > 0) {
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      // Backend may return plain text/HTML for 5xx errors. Normalize as ApiClientError.
-      throw new ApiClientError({
-        statusCode: response.status,
-        message: rawText.length > 140 ? `${rawText.slice(0, 140)}...` : rawText,
-      });
-    }
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { message: rawText };
   }
 
   if (!response.ok) {
-    const apiError = data as Partial<ApiError> | undefined;
-    throw new ApiClientError({
-      statusCode: apiError?.statusCode ?? response.status,
-      message: apiError?.message ?? response.statusText ?? "Request failed",
-      errors: apiError?.errors,
-    });
+    throw new ApiClientError(response.status, data?.detail || data?.message || "Request failed");
   }
-
   return data as T;
 }
 
+// ─── Token Refresh Logic ─────────────────────────────────────────────────────
+
 async function refreshAccessToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
-
-  if (refreshInFlight) {
-    return refreshInFlight;
-  }
+  if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
     const refreshToken = getRefreshToken();
     if (!refreshToken) return null;
 
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refreshToken }),
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
 
-    if (!response.ok) {
-      clearTokens();
+      if (!response.ok) throw new Error("Refresh failed");
+
+      const data = (await response.json()) as RefreshResponse;
+      if (!data.tokens?.accessToken || !data.tokens?.refreshToken) throw new Error("Invalid tokens");
+
+      setTokens(data.tokens.accessToken, data.tokens.refreshToken);
+      return data.tokens.accessToken;
+    } catch {
+      clearTokens(); // 🛑 Stop the loop by clearing everything
       return null;
+    } finally {
+      refreshInFlight = null;
     }
-
-    const data = (await response.json()) as RefreshResponse;
-    const accessToken = data.tokens?.accessToken;
-    const newRefreshToken = data.tokens?.refreshToken;
-
-    if (!accessToken || !newRefreshToken) {
-      clearTokens();
-      return null;
-    }
-
-    setTokens(accessToken, newRefreshToken);
-    return accessToken;
   })();
 
-  try {
-    return await refreshInFlight;
-  } finally {
-    refreshInFlight = null;
-  }
+  return refreshInFlight;
 }
+
+// ─── Core fetch wrapper ───────────────────────────────────────────────────────
 
 async function request<T>(
   path: string,
-  { authenticated = true, headers = {}, ...options }: RequestOptions = {},
+  options: RequestInit & { authenticated?: boolean; _isRetry?: boolean } = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
+  const { authenticated = true, _isRetry = false, ...fetchOptions } = options;
+  const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
 
-  const resolvedHeaders: Record<string, string> = {
-    ...(headers as Record<string, string>),
-  };
-
-  const hasBody = options.body !== undefined && options.body !== null;
-  const isFormDataBody =
-    typeof FormData !== "undefined" && options.body instanceof FormData;
-
-  if (hasBody && !isFormDataBody && !hasContentTypeHeader(resolvedHeaders)) {
-    resolvedHeaders["Content-Type"] = "application/json";
+  const headers = new Headers(fetchOptions.headers);
+  headers.set("Accept", "application/json");
+  if (!(fetchOptions.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
   }
 
   if (authenticated) {
     const token = getAccessToken();
-    if (token) resolvedHeaders["Authorization"] = `Bearer ${token}`;
+    if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers: resolvedHeaders,
-  });
+  const response = await fetch(url, { ...fetchOptions, headers, cache: "no-store" });
 
-  const shouldAttemptRefresh =
-    authenticated &&
-    response.status === 401 &&
-    typeof window !== "undefined" &&
-    path !== "/auth/refresh";
-
-  if (shouldAttemptRefresh) {
-    const newAccessToken = await refreshAccessToken();
-    if (newAccessToken) {
-      const retryHeaders = {
-        ...resolvedHeaders,
-        Authorization: `Bearer ${newAccessToken}`,
-      };
-
-      const retryResponse = await fetch(url, {
-        ...options,
-        headers: retryHeaders,
-      });
-
-      return parseResponse<T>(retryResponse);
+  // 🔄 Handle 401 with Retry Logic
+  if (response.status === 401 && authenticated && !_isRetry && path !== "/auth/refresh") {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      // Retry exactly once with the new token
+      return request<T>(path, { ...options, _isRetry: true });
     }
+  }
+
+  // If we reach here and it's still 401, the user is definitely blocked or logged out
+  if (response.status === 401 && path !== "/auth/refresh") {
+    clearTokens();
   }
 
   return parseResponse<T>(response);
 }
 
-function getFileNameFromDisposition(disposition?: string | null): string | undefined {
-  if (!disposition) return undefined;
-  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
-  const encodedName = match?.[1] ?? match?.[2];
-  if (!encodedName) return undefined;
-  try {
-    return decodeURIComponent(encodedName);
-  } catch {
-    return encodedName;
-  }
-}
+// ─── Blob request (For File Downloads) ───────────────────────────────────────
 
 async function requestBlob(
   path: string,
-  { authenticated = true, headers = {}, ...options }: RequestOptions = {},
+  options: RequestInit & { authenticated?: boolean; _isRetry?: boolean } = {}
 ): Promise<BlobResponse> {
+  const { authenticated = true, _isRetry = false, ...fetchOptions } = options;
   const url = `${API_BASE_URL}${path}`;
 
-  const resolvedHeaders: Record<string, string> = {
-    ...(headers as Record<string, string>),
-  };
-
-  const hasBody = options.body !== undefined && options.body !== null;
-  const isFormDataBody =
-    typeof FormData !== "undefined" && options.body instanceof FormData;
-
-  if (hasBody && !isFormDataBody && !hasContentTypeHeader(resolvedHeaders)) {
-    resolvedHeaders["Content-Type"] = "application/json";
-  }
-
+  const headers = new Headers(fetchOptions.headers);
   if (authenticated) {
     const token = getAccessToken();
-    if (token) resolvedHeaders["Authorization"] = `Bearer ${token}`;
+    if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers: resolvedHeaders,
-  });
+  const response = await fetch(url, { ...fetchOptions, headers, cache: "no-store" });
 
-  const shouldAttemptRefresh =
-    authenticated &&
-    response.status === 401 &&
-    typeof window !== "undefined" &&
-    path !== "/auth/refresh";
-
-  if (shouldAttemptRefresh) {
-    const newAccessToken = await refreshAccessToken();
-    if (newAccessToken) {
-      const retryHeaders = {
-        ...resolvedHeaders,
-        Authorization: `Bearer ${newAccessToken}`,
-      };
-
-      const retryResponse = await fetch(url, {
-        ...options,
-        headers: retryHeaders,
-      });
-
-      if (!retryResponse.ok) {
-        await parseResponse(retryResponse);
-      }
-
-      return {
-        blob: await retryResponse.blob(),
-        fileName: getFileNameFromDisposition(
-          retryResponse.headers.get("Content-Disposition"),
-        ),
-      };
-    }
+  if (response.status === 401 && authenticated && !_isRetry && path !== "/auth/refresh") {
+    const newToken = await refreshAccessToken();
+    if (newToken) return requestBlob(path, { ...options, _isRetry: true });
   }
 
-  if (!response.ok) {
-    await parseResponse(response);
+  if (!response.ok) await parseResponse(response);
+
+  const disposition = response.headers.get("Content-Disposition");
+  let fileName = undefined;
+  if (disposition) {
+    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+    if (match?.[1]) fileName = match[1].replace(/['"]/g, "");
   }
 
-  return {
-    blob: await response.blob(),
-    fileName: getFileNameFromDisposition(
-      response.headers.get("Content-Disposition"),
-    ),
-  };
+  return { blob: await response.blob(), fileName };
 }
 
 // ─── Convenience methods ──────────────────────────────────────────────────────
 
 export const apiClient = {
-  get<T>(path: string, options?: RequestOptions): Promise<T> {
-    return request<T>(path, { method: "GET", ...options });
-  },
-
-  post<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
-    return request<T>(path, {
-      method: "POST",
-      body: JSON.stringify(body),
-      ...options,
-    });
-  },
-
-  postForm<T>(path: string, formData: FormData, options?: RequestOptions): Promise<T> {
-    return request<T>(path, {
-      method: "POST",
-      body: formData,
-      ...options,
-    });
-  },
-
-  put<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
-    return request<T>(path, {
-      method: "PUT",
-      body: JSON.stringify(body),
-      ...options,
-    });
-  },
-
-  patch<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
-    return request<T>(path, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-      ...options,
-    });
-  },
-
-  delete<T>(path: string, options?: RequestOptions): Promise<T> {
-    return request<T>(path, { method: "DELETE", ...options });
-  },
-
-  getBlob(path: string, options?: RequestOptions): Promise<BlobResponse> {
-    return requestBlob(path, { method: "GET", ...options });
-  },
+  get: <T>(p: string, o?: any) => request<T>(p, { method: "GET", ...o }),
+  post: <T>(p: string, b: any, o?: any) => request<T>(p, { method: "POST", body: JSON.stringify(b), ...o }),
+  postForm: <T>(p: string, f: FormData, o?: any) => request<T>(p, { method: "POST", body: f, ...o }),
+  put: <T>(p: string, b: any, o?: any) => request<T>(p, { method: "PUT", body: JSON.stringify(b), ...o }),
+  patch: <T>(p: string, b: any, o?: any) => request<T>(p, { method: "PATCH", body: JSON.stringify(b), ...o }),
+  delete: <T>(p: string, o?: any) => request<T>(p, { method: "DELETE", ...o }),
+  getBlob: (p: string, o?: any) => requestBlob(p, { method: "GET", ...o }),
 };
