@@ -78,17 +78,17 @@ Some planned v1 modules are partially implemented and still in progress. Use `V1
 
 ## Getting Started (High Level)
 
-1. Frontend
-- Go to `neighbour-help/`
-- Install dependencies and run the Next.js development server
+1. Prerequisites
+- Make sure you have Node.js, Docker and .NET 8 SDK installed
+- Make sure you have a Stripe account and API keys, follow the instructions inside .env.example
 
 2. Backend
 - Go to `backend/`
-- Configure connection strings and JWT settings
-- Run the ASP.NET Core API
+- Run `docker compose up -d --build` to start the backend services and initialize the database
 
-3. Database
-- Initialize PostgreSQL schema using `neighbour-help/sql/init.sql`
+3. Frontend
+- Go to `neighbour-help/`
+- Run `npm install` to install dependencies and `npm run dev` to start the development server
 
 4. Infrastructure (optional)
 - Review `deployment/` for environment provisioning assets
