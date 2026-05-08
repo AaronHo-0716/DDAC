@@ -1,8 +1,8 @@
 # NeighborHelp (DDAC)
 
-NeighborHelp is a community service marketplace that connects homeowners with nearby handymen for household maintenance and repair jobs. The platform supports job posting, bidding, notifications, and moderation workflows, with a Next.js frontend and an ASP.NET Core backend.
+NeighborHelp is a professional community service marketplace designed to connect homeowners with verified local handymen. Built with a focus on security, real-time communication, and a robust financial ledger, the platform provides a seamless workflow for household maintenance and repair jobs.
 
-## Project Purpose
+## 🎯 Project Purpose
 
 The goal of NeighborHelp is to provide a secure and structured workflow for:
 - Homeowners to post jobs and receive handyman bids
@@ -10,91 +10,110 @@ The goal of NeighborHelp is to provide a secure and structured workflow for:
 - Admins to moderate users and bidding activity
 
 The system is designed around strong backend authority for business rules, role permissions, and auditability.
+NeighborHelp aims to solve the trust gap in local service hiring by providing:
+- **Verified Identity**: A strict handyman verification workflow.
+- **Secure Payments**: An intermediary payment system that protects both parties.
+- **Real-Time Coordination**: Instant messaging and notifications for immediate updates.
+- **Backend Authority**: Centralized business logic that enforces role permissions and data integrity.
 
-## Repository Structure
+---
 
-- `backend/`: ASP.NET Core (.NET 8) Web API, authentication, domain models, DB context, and API host
-- `neighbour-help/`: Next.js frontend application and local SQL initialization script
-- `deployment/`: infrastructure-as-code assets for cloud deployment
-- `V1_USE_CASE_CHECKLIST.md`: checklist for v1 feature verification during development/testing
+## ✨ Key Features
 
-## Core Functionalities (V1 Scope)
+### 🔐 Security & Identity
+*   **OTP-Based Authentication**: Secure registration and password reset using 6-digit email codes.
+*   **Live Session Guard**: Middleware-level token validation that instantly revokes access for blocked users or after password changes.
+*   **Role-Based Access**: Specialized views and permissions for Homeowners, Handymen, and Administrators.
 
-### Authentication and Access Control
-- User registration and login
-- JWT-based authentication and profile retrieval
-- Role-based authorization model: homeowner, handyman, admin
-- Refresh and logout flows (implementation maturity may vary by module)
+### 🛠️ Job & Bid Management
+*   **Job Lifecycle**: Complete flow from open bidding to "In-Progress" and "Completed" states.
+*   **Image Support**: High-performance media handling using AWS S3 (LocalStack) with time-limited pre-signed URLs.
 
-### Job Lifecycle
-- Homeowner job creation and management
-- Job browsing and detail viewing for eligible users
-- Emergency job flag support
+### 💬 Real-Time Messaging
+*   **SignalR Integration**: Instant 1-on-1 job chats and admin support tickets.
+*   **Intelligent Inbox**: Real-time unread counts and message snippets synced across devices via Redis.
+*   **Support Queue**: Shared ticket system where admins can broadcast and "take" user support requests.
 
-### Bid Lifecycle
-- Handyman bid submission for open jobs
-- Homeowner bid review and decision (accept/reject)
-- Invariant goal: only one accepted bid per job
+### 💳 Financial Ecosystem
+*   **Intermediary Payments**: Stripe-integrated checkout supporting Cards, FPX, and E-Wallets.
+*   **Platform Commissions**: Automated calculation of platform fees and handyman earnings.
+*   **Virtual Wallet**: Handymen track earnings and request payouts to their bank accounts through a secure approval workflow.
 
-### Notifications
-- Notification events for important bid and job transitions
-- Read/unread notification state management
+---
 
-### Admin and Moderation
-- User oversight and account control (block/unblock)
-- Handyman verification workflows
-- Bid moderation actions such as flag/lock/force-reject
-- Audit trail expectations for admin actions
+## 🏗️ Repository Structure
 
-### Data and Persistence
-- Relational schema designed for users, jobs, bids, notifications, refresh tokens, and moderation logs
-- PostgreSQL-oriented schema and enums available in `neighbour-help/sql/init.sql`
+```text
+├── .github/                # GitHub configuration (workflows, templates, CI/CD pipelines)
+├── backend.Test/           # Backend testing suite (currently incomplete)
+├── backend/                # ASP.NET Core 8 Web API (C#)
+│   ├── Controllers/        # REST API Endpoints (Inheriting BaseController)
+│   ├── Services/           # Business Logic (Suitcase Dependency Pattern)
+│   ├── Hubs/               # SignalR WebSocket Hubs
+│   ├── Middleware/         # Security, Exception, and Token validation guards
+│   ├── Models/             # EF Core Entities and DTOs
+│   ├── Data/               # DbContext and SQL Seeders
+│   ├── sql/                # Database migrations and init scripts
+│   └── docker-compose.yml  # Full-stack orchestration (API, DB, Redis, LocalStack, Mailpit)
+├── deployment/             # infrastructure-as-code assets for cloud deployment
+│   ├── compose/            # Docker compose files that are used for running the apps inside each instance.
+│   ├── grafana/            # Grafana related configs​
+│   ├── scripts/            # User data scripts that will setup or install software during an EC2 instance's first start up​
+├── neighbour-help/         # Next.js 15 Frontend (TypeScript)
+│   ├── app/                # App Router (Pages & Components)
+│   └── lib/                # API Clients, Contexts, and SignalR Hooks
+```
 
-## Architecture Overview
+---
 
-NeighborHelp follows a 3-tier model:
-1. Presentation tier: Next.js frontend
-2. Application tier: ASP.NET Core API
-3. Data tier: PostgreSQL
+## 🚀 Getting Started
 
-Key principle: business-critical decisions and workflow transitions must be enforced by the backend, not the frontend.
+### Prerequisites
+- Docker & Docker Compose
+- Node.js (for frontend local development)
+- .NET 8 SDK
 
-## Tech Stack
+### 1. Backend & Infrastructure
+The easiest way to run the entire infrastructure is via Docker:
+```bash
+cd backend
+docker-compose up -d
+```
 
-- Frontend: Next.js + TypeScript
-- Backend: ASP.NET Core (.NET 8), C#
-- Data access: Entity Framework Core
-- Database: PostgreSQL (target), with environment-specific configuration
-- Authentication: JWT and token-based session flow
+### 2. Frontend Development
+```bash
+cd neighbour-help
+npm install
+npm run dev -- -H 0.0.0.0
+```
+*Note: Using `-H 0.0.0.0` allows you to test the app on your smartphone using your laptop's IP.*
 
-## Current Development Status
+### 3. Stripe Integration (Local Testing)
+To receive payment updates locally, run the Stripe CLI:
+```bash
+stripe listen --forward-to http://localhost:5073/api/payments/webhook
+```
 
-The repository contains foundational backend and frontend work, including:
-- Frontend app structure and pages
-- Backend auth endpoints and DB model scaffolding
-- PostgreSQL initialization script with core tables and indexes
+---
 
-Some planned v1 modules are partially implemented and still in progress. Use `V1_USE_CASE_CHECKLIST.md` to track feature completion and verification.
+## 🛠️ Tech Stack
 
-## Getting Started (High Level)
+- **Frontend**: Next.js, TypeScript, Tailwind CSS, SignalR Browser Client.
+- **Backend**: ASP.NET Core 8, Entity Framework Core, LINQ.
+- **Database**: PostgreSQL 16.
+- **Real-Time**: SignalR + Redis Backplane.
+- **Cloud/Storage**: AWS SDK (S3), LocalStack (Mock S3).
+- **Payments**: Stripe API & Webhooks.
+- **Testing**: Mailpit (Mock SMTP), Serilog (Structured Logging).
 
-1. Prerequisites
-- Make sure you have Node.js, Docker and .NET 8 SDK installed
-- Make sure you have a Stripe account and API keys, follow the instructions inside .env.example
+---
 
-2. Backend
-- Go to `backend/`
-- Run `docker compose up -d --build` to start the backend services and initialize the database
+## 🛡️ Architecture Highlights
 
-3. Frontend
-- Go to `neighbour-help/`
-- Run `npm install` to install dependencies and `npm run dev` to start the development server
+- **Base Architecture**: Centralized error handling and user context retrieval through `BaseController` and `BaseService`.
+- **Database Triggers**: Critical logic (like unread counts and financial math) is enforced at the database level for 100% reliability.
+- **Suitcase Pattern**: Services use a `ServiceDependencies` aggregate to keep constructors clean and maintainable.
+- **Standalone Frontend**: Optimized Next.js deployment using the standalone output for minimal Docker image size.
 
-4. Infrastructure (optional)
-- Review `deployment/` for environment provisioning assets
-
-## Documentation Notes
-
-- This README provides project-level orientation.
-- For implementation tracking, use `V1_USE_CASE_CHECKLIST.md`.
-- For backend scope and rules, refer to `backend/BACKEND_IMPLEMENTATION_PLAN.md`.
+---
+**NeighborHelp** — *Building stronger communities, one fix at a time.*
