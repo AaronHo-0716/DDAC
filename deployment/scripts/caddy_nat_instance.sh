@@ -91,6 +91,12 @@ NEW_CADDYFILE="neighbourhelp.me {
             header_up X-Forwarded-Proto https
         }
     }
+    handle /api/payments/webhook {
+        reverse_proxy $ALB_DNS:5073 {
+            header_up Host $ALB_DNS
+            header_up X-Forwarded-Proto https
+        }
+    }
     handle /api/notification-hub* {
         reverse_proxy $ALB_DNS:5073 {
             header_up Host $ALB_DNS
@@ -102,6 +108,9 @@ NEW_CADDYFILE="neighbourhelp.me {
     }
     handle /prometheus/* {
         reverse_proxy $MONITORING_IP:9090
+    }
+    handle /mailpit/* {
+        reverse_proxy $MONITORING_IP:8025
     }
     handle {
         reverse_proxy $ALB_DNS:3000 {

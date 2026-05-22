@@ -65,6 +65,36 @@ variable "github_username" {
   type        = string
 }
 
+variable "stripe_secret_key" {
+  description = "Stripe API secret key"
+  type        = string
+  sensitive   = true
+}
+
+variable "stripe_webhook_secret" {
+  description = "Stripe webhook signing secret"
+  type        = string
+  sensitive   = true
+}
+
+variable "stripe_currency" {
+  description = "Stripe currency code"
+  type        = string
+  default     = "myr"
+}
+
+variable "stripe_success_url_base" {
+  description = "Base URL used for Stripe checkout success redirects"
+  type        = string
+  default     = "https://neighbourhelp.me"
+}
+
+variable "stripe_cancel_url_base" {
+  description = "Base URL used for Stripe checkout cancel redirects"
+  type        = string
+  default     = "https://neighbourhelp.me"
+}
+
 provider "aws" {
   region = var.aws_region
 }
@@ -791,4 +821,40 @@ resource "aws_ssm_parameter" "redis_host" {
   name  = "/app/redis_host"
   type  = "String"
   value = aws_instance.redis_instance.private_ip
+}
+
+resource "aws_ssm_parameter" "mailpit_host" {
+  name  = "/app/mailpit_host"
+  type  = "String"
+  value = aws_instance.monitoring_instance.private_ip
+}
+
+resource "aws_ssm_parameter" "stripe_secret_key" {
+  name  = "/app/stripe/secret_key"
+  type  = "SecureString"
+  value = var.stripe_secret_key
+}
+
+resource "aws_ssm_parameter" "stripe_webhook_secret" {
+  name  = "/app/stripe/webhook_secret"
+  type  = "SecureString"
+  value = var.stripe_webhook_secret
+}
+
+resource "aws_ssm_parameter" "stripe_currency" {
+  name  = "/app/stripe/currency"
+  type  = "String"
+  value = var.stripe_currency
+}
+
+resource "aws_ssm_parameter" "stripe_success_url_base" {
+  name  = "/app/stripe/success_url_base"
+  type  = "String"
+  value = var.stripe_success_url_base
+}
+
+resource "aws_ssm_parameter" "stripe_cancel_url_base" {
+  name  = "/app/stripe/cancel_url_base"
+  type  = "String"
+  value = var.stripe_cancel_url_base
 }

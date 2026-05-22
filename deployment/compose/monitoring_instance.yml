@@ -47,6 +47,16 @@ services:
     command:
       - "--path.rootfs=/host"
 
+  mailpit:
+    image: axllent/mailpit
+    container_name: mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    environment:
+      - MP_WEBROOT=mailpit
+
 volumes:
   prometheus_data:
   grafana_data:

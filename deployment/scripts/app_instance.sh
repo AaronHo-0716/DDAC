@@ -98,6 +98,12 @@ echo "DB_CONNECTION_STRING: $DB_CONNECTION_STRING"
 
 REDIS_HOST=$(get_ssm_param "/app/redis_host")
 S3_BUCKET=$(get_ssm_param "/app/backend/s3_uploads_bucket")
+MAILPIT_HOST=$(get_ssm_param "/app/mailpit_host")
+STRIPE_SECRET_KEY=$(get_ssm_param "/app/stripe/secret_key")
+STRIPE_WEBHOOK_SECRET=$(get_ssm_param "/app/stripe/webhook_secret")
+STRIPE_CURRENCY=$(get_ssm_param "/app/stripe/currency")
+STRIPE_SUCCESS_URL_BASE=$(get_ssm_param "/app/stripe/success_url_base")
+STRIPE_CANCEL_URL_BASE=$(get_ssm_param "/app/stripe/cancel_url_base")
 
 echo "Logging into GHCR..."
 echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin 2>&1
@@ -143,6 +149,15 @@ services:
       - Storage__S3__Region=ap-southeast-5
       - Storage__S3__AutoCreateBucket=true
       - Storage__S3__MaxFileSizeMb=10
+      - Email__Host=$MAILPIT_HOST
+      - Email__Port=1025
+      - Email__From=noreply@neighbourhelp.me
+      - SiteSettings__FrontendUrl=https://neighbourhelp.me
+      - Stripe__SecretKey=$STRIPE_SECRET_KEY
+      - Stripe__WebhookSecret=$STRIPE_WEBHOOK_SECRET
+      - Stripe__Currency=$STRIPE_CURRENCY
+      - Stripe__SuccessUrlBase=$STRIPE_SUCCESS_URL_BASE
+      - Stripe__CancelUrlBase=$STRIPE_CANCEL_URL_BASE
 EOF
 
 docker compose -f /opt/docker-backend.yml up -d 2>&1
