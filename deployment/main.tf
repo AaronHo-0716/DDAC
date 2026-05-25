@@ -1,9 +1,19 @@
 terraform {
+  required_version = ">= 1.10.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+  }
+
+  backend "s3" {
+    bucket       = "neighbourhelp-tfstate"
+    key          = "deployment/terraform.tfstate"
+    region       = "ap-southeast-5"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 
