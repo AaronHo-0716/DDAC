@@ -50,9 +50,11 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__meta_ec2_tag_Name]
         action: keep
-        regex: (App-Backend-Tier|App-Frontend-Tier|App-Caddy-NAT|App-Monitoring)
+        regex: (App-Backend-Tier|App-Frontend-Tier|App-Caddy-NAT|App-Monitoring|redis-instance)
       - source_labels: [__meta_ec2_private_ip]
         target_label: instance
+      - source_labels: [__meta_ec2_tag_Name]
+        target_label: nodename
 PROMETHEUS
 
 mkdir -p grafana/provisioning/datasources grafana/provisioning/dashboards grafana/dashboards
