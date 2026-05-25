@@ -69,11 +69,11 @@ get_ssm_param() {
             echo "$result"
             return 0
         fi
-        echo "Attempt $retry: Waiting for parameter $param_name..."
+        echo "Attempt $retry: Waiting for parameter $param_name..." >&2
         retry=$((retry + 1))
         sleep 10
     done
-    echo "ERROR: Failed to get parameter $param_name after $max_retries attempts"
+    echo "ERROR: Failed to get parameter $param_name after $max_retries attempts" >&2
     return 1
 }
 
