@@ -705,8 +705,11 @@ resource "aws_instance" "monitoring_instance" {
     docker_compose_content = templatefile("${path.module}/compose/monitoring_instance.yml", {
       var_grafana_password = var.grafana_password
     })
-    var_instance_password = var.instance_password
-    var_aws_region        = var.aws_region
+    grafana_datasource_yml         = file("${path.module}/grafana/provisioning/datasources/prometheus.yml")
+    grafana_dashboard_provider_yml = file("${path.module}/grafana/provisioning/dashboards/dashboards.yml")
+    grafana_dashboard_json         = jsonencode(jsondecode(file("${path.module}/grafana/dashboards/neighborhelp-monitoring.json")))
+    var_instance_password          = var.instance_password
+    var_aws_region                 = var.aws_region
   })
 
   tags = { Name = "App-Monitoring" }

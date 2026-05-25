@@ -55,6 +55,20 @@ scrape_configs:
         target_label: instance
 PROMETHEUS
 
+mkdir -p grafana/provisioning/datasources grafana/provisioning/dashboards grafana/dashboards
+
+cat > grafana/provisioning/datasources/prometheus.yml << 'DSYML'
+${grafana_datasource_yml}
+DSYML
+
+cat > grafana/provisioning/dashboards/dashboards.yml << 'DBYML'
+${grafana_dashboard_provider_yml}
+DBYML
+
+cat > grafana/dashboards/neighborhelp-monitoring.json << 'DBJSON'
+${grafana_dashboard_json}
+DBJSON
+
 cat > docker-compose.yml << 'COMPOSE'
 ${docker_compose_content}
 COMPOSE
